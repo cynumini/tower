@@ -15,6 +15,15 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
 
+    // raylib
+    const raylib = b.dependency("raylib", .{
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.linkLibrary(raylib.artifact("raylib"));
+    exe.linkLibC();
+
     b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
