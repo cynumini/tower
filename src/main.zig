@@ -4,10 +4,19 @@ const c = @cImport({
     @cInclude("raymath.h");
 });
 
+const Object = struct {
+    position: c.Vector2,
+    size: c.Vector2,
+    color: c.Color,
+};
+
+fn ySort(_: void, a: *Object, b: *Object) bool {
+    return a.position.y < b.position.y;
+}
+
 pub fn main() !void {
     var screen_width: i32 = 640;
     var screen_height: i32 = 360;
-    var player_position = c.Vector2Zero();
 
     c.InitWindow(screen_width, screen_height, "tower");
 
@@ -17,6 +26,11 @@ pub fn main() !void {
         .zoom = 1,
         .offset = .{ .x = 640 / 2, .y = 360 / 2 },
     };
+
+    var player = Object{ .position = c.Vector2Zero(), .size = .{ .x = 32, .y = 64 }, .color = c.BLUE };
+    var test_object = Object{ .position = c.Vector2Zero(), .size = .{ .x = 32, .y = 32 }, .color = c.GREEN };
+
+    var objects = [_]*Object{ &player, &test_object };
 
     while (!c.WindowShouldClose()) {
         // Update
@@ -32,16 +46,25 @@ pub fn main() !void {
             };
         }
         var player_move = c.Vector2Zero();
-        if (c.IsKeyDown(c.KEY_RIGHT)) player_move.x += 1;
-        if (c.IsKeyDown(c.KEY_LEFT)) player_move.x -= 1;
-        if (c.IsKeyDown(c.KEY_UP)) player_move.y -= 1;
-        if (c.IsKeyDown(c.KEY_DOWN)) player_move.y += 1;
+        if (c.IsKeyDown(c.KEY_D)) player_move.x += 1;
+        if (c.IsKeyDown(c.KEY_A)) player_move.x -= 1;
+        if (c.IsKeyDown(c.KEY_W)) player_move.y -= 1;
+        if (c.IsKeyDown(c.KEY_S)) player_move.y += 1;
+        if (c.IsKeyPressed(c.KEY_F)) {
+            if (c.Vector2Distance(player.position, test_object.position) <= 48) {
+                std.debug.print("You use test_object\n", .{});
+            }
+        }
 
         player_move = c.Vector2Scale(c.Vector2Normalize(player_move), 4);
-        player_move.y /= 2;
-        player_position = c.Vector2Add(player_position, player_move);
+        player.position = c.Vector2Add(player.position, player_move);
 
-        camera.target = player_position;
+        // camera.target = player.position;
+        // camera.target = c.Vector2Add(player.position, c.Vector2Scale(player.size, 0.5));
+        camera.target = player.position;
+        camera.target.y = camera.target.y - player.size.y / 2;
+
+        std.mem.sort(*Object, &objects, {}, ySort);
 
         // Draw
         c.BeginDrawing();
@@ -57,19 +80,19 @@ pub fn main() !void {
             20,
             c.LIGHTGRAY,
         );
-        c.DrawEllipse(
-            0,
-            0,
-            @divExact(640, 2),
-            @divExact(640, 4),
-            c.RED,
-        );
 
-        c.DrawRectangleV(
-            c.Vector2{ .x = player_position.x - 16, .y = player_position.y - 16 },
-            c.Vector2{ .x = 32, .y = 32 },
-            c.BLUE,
-        );
+        for (objects) |object| {
+            const position = c.Vector2{
+                .x = object.position.x - object.size.x / 2,
+                .y = object.position.y - object.size.y,
+            };
+            c.DrawRectangleV(
+                // c.Vector2Add(object.position, c.Vector2Scale(object.size, 0.5)),
+                position,
+                object.size,
+                object.color,
+            );
+        }
 
         c.EndMode2D();
         c.EndDrawing();
