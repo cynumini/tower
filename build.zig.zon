@@ -24,8 +24,8 @@
     // internet connectivity.
     .dependencies = .{
         .raylib = .{
-            .url = "git+https://github.com/raysan5/raylib?ref=master#c647d337034585251d3d76d32093ac88a4c4ab82",
-            .hash = "1220a86eda399cdbfae53b0a9cab081facecf998c24ee385d6b4aebd68d986200330",
+            .url = "git+https://github.com/raysan5/raylib#eb8a343e313967a51cb302ac9bb1206a05727d13",
+            .hash = "1220b737a1e473d52dad32ca40de0f6f7b5f9b92ceed81fce56f59017b99e66cb19f",
         },
     },
     .paths = .{
