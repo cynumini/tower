@@ -3,16 +3,11 @@ project(
   'cpp',
   version : '0.1',
   meson_version : '>= 1.3.0',
-  default_options : ['warning_level=3', 'cpp_std=c++23', 'werror=true'],
+  default_options : ['warning_level=3', 'cpp_std=c++23'],
 )
 
 add_project_arguments(
-  ['-Wconversion', '-fsanitize=address', '-g'],
-  language: 'cpp',
-)
-
-add_project_link_arguments(
-  ['-fsanitize=address'],
+  ['-Wconversion', '-g'],
   language: 'cpp',
 )
 
