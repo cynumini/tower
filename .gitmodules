@@ -1,3 +1,6 @@
 [submodule "subprojects/SDL"]
 	path = subprojects/SDL
 	url = https://github.com/libsdl-org/SDL.git
+[submodule "subprojects/SDL_image"]
+	path = subprojects/SDL_image
+	url = https://github.com/libsdl-org/SDL_image.git

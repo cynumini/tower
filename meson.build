@@ -7,30 +7,37 @@ project(
 )
 
 add_project_arguments(
-  ['-Wconversion'],
+  ['-Wconversion', '-fsanitize=address', '-g'],
+  language: 'cpp',
+)
+
+add_project_link_arguments(
+  ['-fsanitize=address'],
   language: 'cpp',
 )
 
 cmake = import('cmake')
 
-# glslc = find_program('glslc')
+glslc = find_program('glslc')
 
-# frag = custom_target('frag',
-#                      output : 'shader.spv.frag',
-#                      input : 'shader.glsl.frag',
-#                      command : [glslc, '@INPUT@', '-o', '@OUTPUT@'],
-#                      build_by_default: true)
+frag = custom_target('frag',
+                     output : 'shader.spv.frag',
+                     input : 'shader.glsl.frag',
+                     command : [glslc, '@INPUT@', '-o', '@OUTPUT@'],
+                     build_by_default: true)
 
-# vert = custom_target('vert',
-#                      output : 'shader.spv.vert',
-#                      input : 'shader.glsl.vert',
-#                      command : [glslc, '@INPUT@', '-o', '@OUTPUT@'],
-#                      build_by_default: true)
+vert = custom_target('vert',
+                     output : 'shader.spv.vert',
+                     input : 'shader.glsl.vert',
+                     command : [glslc, '@INPUT@', '-o', '@OUTPUT@'],
+                     build_by_default: true)
 
 sdl_proj = cmake.subproject('SDL')
+sdl_image_proj = cmake.subproject('SDL_image')
 
 dependencies = [
     sdl_proj.dependency('SDL3-shared'),
+    sdl_image_proj.dependency('SDL3_image-shared')
 ]
 
 sources = [
