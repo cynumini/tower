@@ -36,7 +36,7 @@ dependencies = [
 ]
 
 sources = [
-  'main.cpp',
+    'main.cpp',
 ]
 
 exe = executable(
