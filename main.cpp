@@ -20,12 +20,22 @@ using u8 = uint8_t;
         }                                                                                                                                                      \
     } while (false)
 
-union Vector2 {
-    struct {
-        float x;
-        float y;
-    };
-    float v[2];
+struct Vector2 {
+    float x;
+    float y;
+
+    Vector2(float x, float y) : x(x), y(y) {}
+
+    Vector2 operator+(const Vector2 &other) const { return {x + other.x, y + other.y}; }
+};
+
+struct Rectangle {
+    Vector2 position;
+    Vector2 size;
+
+    Rectangle() : position{0, 0}, size{0, 0} {}
+    Rectangle(float x, float y, float width, float height) : position({x, y}), size({width, height}) {}
+    Rectangle(Vector2 position, Vector2 size) : position(position), size(size) {}
 };
 
 struct Matrix4 {
@@ -62,17 +72,21 @@ struct UBO {
 
 struct Vertex {
     Vector2 position;
-    Vector2 uv;
 };
 
 struct Instance {
     Vector2 position;
+    Vector2 size;
+    Vector2 uv_min;
+    Vector2 uv_max;
 };
 
 constexpr size_t MAX_INSTANCES_LEN = 1024;
 
 struct Texture {
     SDL_GPUTexture *texture = nullptr;
+    int width = 0;
+    int height = 0;
 };
 
 struct Game {
@@ -84,6 +98,7 @@ struct Game {
     SDL_GPUBuffer *instance_buffer = nullptr;
     SDL_GPUBuffer *index_buffer = nullptr;
     std::vector<Instance> instances;
+    std::vector<size_t> instances_texture;
 
     bool should_close = false;
     std::vector<Texture> textures;
@@ -118,8 +133,10 @@ struct Game {
         };
         SDL_GPUVertexAttribute vertex_attributes[] = {
             {.location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Vertex, position)},
-            {.location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Vertex, uv)},
-            {.location = 2, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, position)},
+            {.location = 1, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, position)},
+            {.location = 2, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, size)},
+            {.location = 3, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv_min)},
+            {.location = 4, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv_max)},
         };
         create_info.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         create_info.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
@@ -130,6 +147,13 @@ struct Game {
         // target_info
         SDL_GPUColorTargetDescription color_target_descriptions{};
         color_target_descriptions.format = SDL_GetGPUSwapchainTextureFormat(device, window);
+        color_target_descriptions.blend_state.enable_blend = true;
+        color_target_descriptions.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+        color_target_descriptions.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        color_target_descriptions.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+        color_target_descriptions.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+        color_target_descriptions.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+        color_target_descriptions.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
         create_info.target_info.color_target_descriptions = &color_target_descriptions;
         create_info.target_info.num_color_targets = 1;
         // create
@@ -164,10 +188,10 @@ struct Game {
             0, 1, 2, 2, 1, 3,
         };
         Vertex vertices[] = {
-            {{{0, 0}}, {{0, 0}}},   // tl
-            {{{32, 0}}, {{1, 0}}},  // tr
-            {{{0, 32}}, {{0, 1}}},  // bl
-            {{{32, 32}}, {{1, 1}}}, // br
+            {{0.f, 0.f}},
+            {{1.f, 0.f}},
+            {{0.f, 1.f}},
+            {{1.f, 1.f}},
         };
         // create buffers
         SDL_GPUBufferCreateInfo buffer_create_info{};
@@ -231,7 +255,7 @@ struct Game {
         Texture texture{};
         auto command_buffer = SDL_AcquireGPUCommandBuffer(device);
         auto copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-        texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str(), nullptr, nullptr);
+        texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str(), &texture.width, &texture.height);
         SDL_ENSURE(texture.texture, "load gpu texture");
         SDL_EndGPUCopyPass(copy_pass);
         SDL_SubmitGPUCommandBuffer(command_buffer);
@@ -298,29 +322,67 @@ struct Game {
             binding.buffer = index_buffer;
             SDL_BindGPUIndexBuffer(render_pass, &binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(ubo));
-            SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
-            texture_sampler_bindings.texture = textures[0].texture;
-            texture_sampler_bindings.sampler = sampler;
-            SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_bindings, 1);
-            SDL_DrawGPUIndexedPrimitives(render_pass, 6, (u32)instances.size(), 0, 0, 0);
+
+            size_t last_texture = instances_texture[0];
+            size_t start = 0;
+            size_t end = 0;
+            auto drawCall = [this, &render_pass](size_t texture_index, size_t start, size_t end) {
+                SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
+                    texture_sampler_bindings.texture = textures[texture_index].texture;
+                    texture_sampler_bindings.sampler = sampler;
+                    SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_bindings, 1);
+                    SDL_DrawGPUIndexedPrimitives(render_pass, 6, (u32)(end-start), 0, 0, (u32)start);
+            };
+            for (size_t i = 0; i < instances_texture.size(); i++) {
+                if (instances_texture[i] == last_texture) {
+                    end++;
+                } else {
+                    drawCall(last_texture, start, end);
+                    start = i;
+                    end = i + 1;
+                    last_texture = instances_texture[i];
+                }
+            }
+            drawCall(last_texture, start, end);
+
             SDL_EndGPURenderPass(render_pass);
         }
 
         SDL_SubmitGPUCommandBuffer(command_buffer);
     }
 
-    void drawTexture(size_t texture, Vector2 position) { instances.push_back({position}); }
+    void drawTexture(size_t texture, Rectangle source, Rectangle dest) {
+        Vector2 uv_min = source.position;
+        Vector2 uv_max = source.position + source.size;
+        uv_min.x = uv_min.x / (float)textures[texture].width;
+        uv_min.y = uv_min.y / (float)textures[texture].height;
+        uv_max.x = uv_max.x / (float)textures[texture].width;
+        uv_max.y = uv_max.y / (float)textures[texture].height;
+        Instance instance = {
+            .position = dest.position,
+            .size = dest.size,
+            .uv_min = uv_min,
+            .uv_max = uv_max,
+        };
+
+        instances.push_back(instance);
+        instances_texture.push_back(texture);
+    }
 };
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     Game game;
 
     auto texture = game.loadTexture("texture.png");
+    auto texture_font = game.loadTexture("font.png");
 
     while (!game.shouldClose()) {
         game.begin();
-        game.drawTexture(texture, {.x = 0, .y = 0});
-        game.drawTexture(texture, {.x = 512, .y = 512});
+        game.drawTexture(texture_font, {0, 0, 8, 8}, {64, 0, 32, 32});
+        game.drawTexture(texture, {0, 0, 32, 32}, {0, 0, 32, 32});
+        game.drawTexture(texture, {32, 0, 32, 32}, {64, 0, 32, 32});
+
+        game.drawTexture(texture_font, {0, 0, 8, 8}, {64, 64, 64, 64});
         game.end();
     }
     return 0;
