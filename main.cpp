@@ -624,6 +624,7 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     }
     data[' '] = 2;
     data['!'] = 1;
+    data['\''] = 1;
     data[','] = 1;
     data['-'] = 4;
     data['.'] = 1;
@@ -693,6 +694,8 @@ struct World {
     usize texture;
     FixedArray<Object, MAX_OBJECTS> objects{};
     Vector2 camera_target{};
+    bool show_collision = false;
+    bool is_dialog = false;
 
     void addObject(const Object &object) { objects.add(object); }
 
@@ -703,6 +706,9 @@ struct World {
             switch (object.kind) {
             case Object::Player: {
                 auto &player = object;
+                camera_target = player.position;
+                if (is_dialog)
+                    continue;
                 constexpr float player_speed = 300;
                 Vector2 velocity = {};
                 velocity.y = (float)game.isKeyDown(SDL_SCANCODE_S) - (float)game.isKeyDown(SDL_SCANCODE_W);
@@ -734,7 +740,7 @@ struct World {
                         }
                     }
                 }
-                camera_target = player.position;
+
                 break;
             }
             case Object::Static: {
@@ -751,11 +757,12 @@ struct World {
             auto position = object.position - (object.center.scale(object.scale));
             auto size = Vector2{object.texture.size.x * object.scale.x, object.texture.size.y * object.scale.y};
             auto model_view = base_model_view * Matrix4::translation(-camera_target.x + SCREEN_WIDTH / 2, -camera_target.y + SCREEN_HEIGHT / 2, 0);
-            renderer.drawTexture(texture, object.texture, {position, size},
-                                model_view);
-            auto collision = object.collision.scale(object.scale);
-            collision.position += object.position;
-            renderer.drawRectangle(collision, model_view, {0, 0, 1, 0.5f});
+            renderer.drawTexture(texture, object.texture, {position, size}, model_view);
+            if (show_collision) {
+                auto collision = object.collision.scale(object.scale);
+                collision.position += object.position;
+                renderer.drawRectangle(collision, model_view, {0, 0, 1, 0.5f});
+            }
         }
     }
 };
@@ -769,6 +776,7 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     auto font_texture = renderer.loadTexture("font.png");
 
     World world(world_texture);
+    world.is_dialog = true;
 
     world.addObject(
         {.kind = Object::Player, .texture = {{96, 0}, {16, 32}}, .center = {8, 32}, .position = {640.f / 2.f, 360.f / 2.f}, .collision = {{-8, -4}, {16, 4}}});
@@ -796,6 +804,10 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         drawText(renderer, font_texture, {2, 2 * 2 + 10}, 10, text);
         sprintf(text, "x: %f, y: %f", world.camera_target.x, world.camera_target.y);
         drawText(renderer, font_texture, {2, 2 * 3 + 20}, 10, text);
+        if (world.is_dialog) {
+            renderer.drawRectangle({{0, SCREEN_HEIGHT / 3 * 2}, {SCREEN_WIDTH, SCREEN_HEIGHT / 3}}, base_model_view, BLACK);
+            drawText(renderer, font_texture, {8, SCREEN_HEIGHT / 3 * 2 + 8}, 10, "It's a tree!");
+        };
 
         renderer.end();
         game.endFrame();
