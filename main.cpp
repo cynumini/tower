@@ -685,9 +685,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
                          .scale = {3, 3},
                          .collision = {{-3, -3}, {6, 3}}});
     }
-    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{200, 200}, {32 * 3, 64 * 3}}});
-    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{900, 200}, {32 * 3, 64 * 3}}});
-    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{550, 500}, {32 * 3, 64 * 3}}});
 
     char text[256] = "";
 

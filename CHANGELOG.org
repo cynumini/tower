@@ -1,0 +1,4 @@
+* Changelog
+** 0.1.0 (2026-08-11)
+The player can walk through the forest. Each tree has collision.
+
