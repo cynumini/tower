@@ -96,8 +96,16 @@ struct Matrix4 {
         return m;
     }
 
+    static constexpr Matrix4 translation(float x, float y, float z) {
+        auto m = Matrix4::identity();
+        m.v[3][0] = x;
+        m.v[3][1] = y;
+        m.v[3][2] = z;
+        return m;
+    }
+
     static constexpr Matrix4 orthographic(float left, float right, float bottom, float top, float near, float far) {
-        Matrix4 m{};
+        auto m = Matrix4::identity();
         float rl = right - left;
         float tb = top - bottom;
         float fn = far - near;
@@ -107,8 +115,24 @@ struct Matrix4 {
         m.v[3][0] = -((right + left) / (rl));
         m.v[3][1] = -((top + bottom) / (tb));
         m.v[3][2] = -((far + near) / (fn));
-        m.v[3][3] = 1;
         return m;
+    }
+
+    using v4 = float[4];
+    constexpr v4 &operator[](usize i) { return v[i]; }
+    constexpr const v4 &operator[](usize i) const { return v[i]; }
+
+    constexpr Matrix4 operator*(const Matrix4 &b) const {
+        auto &a = *this;
+        Matrix4 result {};
+        for (usize col = 0; col < 4; col++) {
+            for (usize row = 0; row < 4; row++) {
+                for (usize i = 0; i < 4; i++) {
+                    result.v[col][row] += a[i][row] * b[col][i];
+                }
+            }
+        }
+        return result;
     }
 };
 
@@ -156,12 +180,10 @@ template <typename T, usize N> struct FixedArray {
     constexpr T *begin() { return data; }
     constexpr T *end() { return data + len; }
 
-    static bool _compar() {}
-
     void sort(bool (*compar)(const T &, const T &)) {
-        for (usize i = 1; i < len; i++) {
+        for (int i = 1; i < (int)len; i++) {
             T key = data[i];
-            usize j = i - 1;
+            int j = i - 1;
             while (j >= 0 and compar(data[j], key)) {
                 data[j + 1] = data[j];
                 j--;
@@ -177,6 +199,10 @@ template <typename T, usize N> struct FixedArray {
     }
 };
 
+struct UBO {
+    Matrix4 mvp = Matrix4::orthographic(0, 640, 360, 0, 0, 1);
+} ubo;
+
 struct Game {
     float dt{};
     float fps{};
@@ -188,6 +214,11 @@ struct Game {
 
     Array<bool, SDL_SCANCODE_COUNT> pressed = {};
     const bool *keyboard_state = nullptr;
+    bool fullscreen = false;
+
+    SDL_Window *window;
+
+    Game( SDL_Window *window) : window(window) {}
 
     bool shouldClose() { return should_close; }
 
@@ -206,8 +237,31 @@ struct Game {
             case SDL_EVENT_KEY_DOWN: {
                 if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
                     should_close = true;
+                } else if (event.key.scancode == SDL_SCANCODE_F11) {
+                    fullscreen = !fullscreen;
+                    SDL_SetWindowFullscreen(window, fullscreen);
                 }
                 pressed[event.key.scancode] = true;
+                break;
+            }
+            case SDL_EVENT_WINDOW_RESIZED: {
+                float width = (float)event.window.data1;
+                float height = (float)event.window.data2;
+                float x_offset = 0, y_offset = 0;
+                auto aspect_ratio = width/height;
+                if (16.0/9.0 > aspect_ratio) {
+                    auto scale = 640 / width;
+                    width *= scale;
+                    height *= scale;
+                    y_offset = (height - 360.f) / 2;
+
+                } else {
+                    auto scale = 360 / height;
+                    width *= scale;
+                    height *= scale;
+                    x_offset = (width - 640.f) / 2;
+                }
+                ubo.mvp =  Matrix4::orthographic(0, width, height, 0, 0, 1) * Matrix4::translation(x_offset, y_offset, 0);
                 break;
             }
             }
@@ -309,7 +363,7 @@ struct Renderer {
 
         SDL_ENSURE(SDL_Init(SDL_INIT_VIDEO), "initialize SDL");
 
-        this->window = SDL_CreateWindow("Tower", 1280, 720, 0);
+        this->window = SDL_CreateWindow("Tower", 640, 360, 0);
         SDL_ENSURE(window, "create window");
 
         this->device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
@@ -446,9 +500,7 @@ struct Renderer {
             SDL_BindGPUVertexBuffers(render_pass, 1, &binding, 1);
             binding.buffer = index_buffer;
             SDL_BindGPUIndexBuffer(render_pass, &binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            struct UBO {
-                Matrix4 mvp = Matrix4::orthographic(0, 1280, 720, 0, 0, 1);
-            } ubo;
+
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(ubo));
 
             usize last_texture = instances_texture[0];
@@ -509,10 +561,10 @@ struct String {
     const char *end() const { return data + len; }
 };
 
-static void unreachable(const char *string, usize line) {
-    printf("%s:%zu: unreachable\n", string, line);
-    abort();
-}
+// static void unreachable(const char *string, usize line) {
+//     printf("%s:%zu: unreachable\n", string, line);
+//     abort();
+// }
 
 constexpr static Array<u8, 128> defaultFontWidths() {
     Array<u8, 128> data{};
@@ -660,30 +712,22 @@ struct World {
 };
 
 int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
-    Game game;
+
     Renderer renderer;
+    Game game(renderer.window);
 
     auto world_texture = renderer.loadTexture("world.png");
     auto font_texture = renderer.loadTexture("font.png");
 
     World world(world_texture);
 
-    world.addObject({.kind = Object::Player,
-                     .texture = {{96, 0}, {16, 32}},
-                     .center = {8, 32},
-                     .position = {1280.f / 2.f, 720.f / 2.f},
-                     .scale = {3, 3},
-                     .collision = {{-8, -4}, {16, 4}}});
+    world.addObject(
+        {.kind = Object::Player, .texture = {{96, 0}, {16, 32}}, .center = {8, 32}, .position = {640.f / 2.f, 360.f / 2.f}, .collision = {{-8, -4}, {16, 4}}});
     srand((u32)time(0));
     for (usize i = 0; i < 50; i++) {
-        float x = random() % 1280;
-        float y = random() % 720;
-        world.addObject({.kind = Object::Static,
-                         .texture = {{64, 0}, {32, 64}},
-                         .center = {16, 64},
-                         .position = {x, y},
-                         .scale = {3, 3},
-                         .collision = {{-3, -3}, {6, 3}}});
+        float x = float(random() % 640);
+        float y = float(random() % 360);
+        world.addObject({.kind = Object::Static, .texture = {{64, 0}, {32, 64}}, .center = {16, 64}, .position = {x, y}, .collision = {{-3, -3}, {6, 3}}});
     }
 
     char text[256] = "";
@@ -694,8 +738,8 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         renderer.begin();
         world.draw(renderer);
         sprintf(text, "FPS: %f", game.fps);
-        drawText(renderer, font_texture, {8, 8}, 30, "Version 0.1.0");
-        drawText(renderer, font_texture, {8, 38}, 30, text);
+        drawText(renderer, font_texture, {2, 2}, 10, "Version 0.1.0");
+        drawText(renderer, font_texture, {2, 12}, 10, text);
         renderer.end();
         game.endFrame();
     }
