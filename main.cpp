@@ -2,6 +2,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <fstream>
 #include <string>
@@ -28,22 +29,28 @@ struct Vector2 {
     f32 x{};
     f32 y{};
 
-    void normalize() {
-        float length = sqrtf(this->x * this->x + this->y * this->y);
+    constexpr Vector2 normalize() const {
+        Vector2 result = *this;
+        float length = sqrtf(result.x * result.x + result.y * this->y);
         if (length != 0) {
-            this->x /= length;
-            this->y /= length;
+            result.x /= length;
+            result.y /= length;
         }
+        return result;
     }
 
     constexpr Vector2 operator*(float n) const { return {this->x * n, this->y * n}; }
-    constexpr Vector2 &operator+=(const Vector2 &other) {
+    constexpr Vector2 &operator+=(Vector2 other) {
         this->x += other.x;
         this->y += other.y;
         return *this;
     }
 
-    constexpr Vector2 add(Vector2 other) const { return {x + other.x, y + other.y}; }
+    constexpr Vector2 operator+(Vector2 other) const { return {x + other.x, y + other.y}; }
+    constexpr Vector2 operator-(Vector2 other) const { return {x - other.x, y - other.y}; }
+    constexpr Vector2 scale(Vector2 other) const { return {x * other.x, y * other.y}; }
+
+    void print() { printf("Vector2 {x = %f, y = %f}\n", this->x, this->y); }
 };
 
 struct Rectangle {
@@ -57,6 +64,24 @@ struct Rectangle {
             collision = true;
         return collision;
     }
+
+    Vector2 center() { return Vector2{position.x + size.x / 2, position.y + size.y / 2}; }
+
+    constexpr float x_min() const { return this->position.x; }
+    constexpr float y_min() const { return this->position.y; }
+    constexpr float x_max() const { return this->position.x + this->size.x; }
+    constexpr float y_max() const { return this->position.y + this->size.y; }
+
+    Vector2 overlapSize(Rectangle other) {
+        auto dx = fmin(this->x_max(), other.x_max()) - fmax(this->x_min(), other.x_min());
+        auto dy = fmin(this->y_max(), other.y_max()) - fmax(this->y_min(), other.y_min());
+        if (dx >= 0 and dy >= 0) {
+            return {dx, dy};
+        }
+        return {};
+    }
+
+    constexpr Rectangle scale(Vector2 other) const { return {this->position.scale(other), this->size.scale(other)}; }
 };
 
 struct Matrix4 {
@@ -562,8 +587,11 @@ static void drawText(Renderer &renderer, const usize texture_id, Vector2 positio
 struct Object {
     enum Kind { Player, Static };
     Kind kind;
-    Rectangle texture;
-    Rectangle rect;
+    Rectangle texture{};
+    Vector2 center{};
+    Vector2 position{};
+    Vector2 scale{1, 1};
+    Rectangle collision{};
 };
 
 struct World {
@@ -579,46 +607,34 @@ struct World {
         for (auto &object : objects) {
             switch (object.kind) {
             case Object::Player: {
+                auto &player = object;
                 constexpr float player_speed = 300;
                 Vector2 velocity = {};
                 velocity.y = (float)game.isKeyDown(SDL_SCANCODE_S) - (float)game.isKeyDown(SDL_SCANCODE_W);
                 velocity.x = (float)game.isKeyDown(SDL_SCANCODE_D) - (float)game.isKeyDown(SDL_SCANCODE_A);
-                velocity.normalize();
-
-                object.rect.position += velocity * 300.f * game.dt;
-                for (auto static_objects : objects) {
-                    if (static_objects.kind == Object::Static) {
-                        if (object.rect.checkCollision(static_objects.rect)) {
-                            struct Sides {
-                                float right;
-                                float left;
-                                float top;
-                                float bottom;
-                                Sides(Rectangle rect) {
-                                    this->left = rect.position.x;
-                                    this->top = rect.position.y;
-                                    this->right = rect.position.x + rect.size.x;
-                                    this->bottom = rect.position.y + rect.size.y;
-                                }
-
-                                bool isRightCollision(const Sides &other, Vector2 velocity) {
-                                    if (velocity.x == 0) return false;
-                                    return this->right > other.left and this->left < other.left;
-                                };
-                                bool isLeftCollision(const Sides &other) { return this->left<other.right and this->right> other.right; };
-                                bool isBottomCollision(const Sides &other) { return this->bottom > other.top and this->top < other.top; };
-                                bool isTopCollision(const Sides &other) { return this->top<other.bottom and this->bottom> other.bottom; };
-                            };
-                            auto p_sides = Sides(object.rect);
-                            auto so_sides = Sides(static_objects.rect);
-                            if (p_sides.isRightCollision(so_sides, velocity)) {
-                                object.rect.position.x = so_sides.left - object.rect.size.x;
-                            } else if (p_sides.isLeftCollision(so_sides)) {
-                                object.rect.position.x = so_sides.right;
-                            } else if (p_sides.isBottomCollision(so_sides)) {
-                                object.rect.position.y = so_sides.top - object.rect.size.y;
-                            } else if (p_sides.isTopCollision(so_sides)) {
-                                object.rect.position.y = so_sides.bottom;
+                velocity = velocity.normalize();
+                player.position += velocity * player_speed * game.dt;
+                auto world_player_collision = player.collision.scale(player.scale);
+                world_player_collision.position += player.position;
+                for (auto static_object : objects) {
+                    auto world_static_object_collision = static_object.collision.scale(static_object.scale);
+                    world_static_object_collision.position += static_object.position;
+                    if (static_object.kind == Object::Static and world_player_collision.checkCollision(world_static_object_collision)) {
+                        auto direction = world_player_collision.center() - world_static_object_collision.center();
+                        auto overlap_size = world_player_collision.overlapSize(world_static_object_collision);
+                        if (overlap_size.x < overlap_size.y) {
+                            auto x_offset = (player.center.x - (player.collision.position.x + player.center.x)) * player.scale.x;
+                            if (direction.x > 0) {
+                                player.position.x = world_static_object_collision.x_max() + x_offset;
+                            } else {
+                                player.position.x = world_static_object_collision.x_min() - world_player_collision.size.x + x_offset;
+                            }
+                        } else if (overlap_size.x > overlap_size.y) {
+                            auto y_offset = (player.center.y - (player.collision.position.y + player.center.y)) * player.scale.y;
+                            if (direction.y > 0) {
+                                player.position.y = world_static_object_collision.y_max() + y_offset;
+                            } else {
+                                player.position.y = world_static_object_collision.y_min() - world_player_collision.size.y + y_offset;
                             }
                         }
                     }
@@ -631,12 +647,14 @@ struct World {
             }
         }
 
-        objects.sort([](const Object &a, const Object &b) { return a.rect.position.y + a.rect.size.y > b.rect.position.y + b.rect.size.y; });
+        objects.sort([](const Object &a, const Object &b) { return a.position.y > b.position.y; });
     };
 
     void draw(Renderer &renderer) {
         for (auto object : objects) {
-            renderer.drawTexture(texture, object.texture, object.rect);
+            auto position = object.position - (object.center.scale(object.scale));
+            auto size = Vector2{object.texture.size.x * object.scale.x, object.texture.size.y * object.scale.y};
+            renderer.drawTexture(texture, object.texture, {position, size});
         }
     }
 };
@@ -650,10 +668,26 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
 
     World world(world_texture);
 
-    world.addObject({Object::Player, {{96, 0}, {16, 32}}, {{550, 250}, {16 * 3, 32 * 3}}});
-    world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{200, 200}, {32 * 3, 64 * 3}}});
-    world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{900, 200}, {32 * 3, 64 * 3}}});
-    world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{550, 500}, {32 * 3, 64 * 3}}});
+    world.addObject({.kind = Object::Player,
+                     .texture = {{96, 0}, {16, 32}},
+                     .center = {8, 32},
+                     .position = {1280.f / 2.f, 720.f / 2.f},
+                     .scale = {3, 3},
+                     .collision = {{-8, -4}, {16, 4}}});
+    srand((u32)time(0));
+    for (usize i = 0; i < 50; i++) {
+        float x = random() % 1280;
+        float y = random() % 720;
+        world.addObject({.kind = Object::Static,
+                         .texture = {{64, 0}, {32, 64}},
+                         .center = {16, 64},
+                         .position = {x, y},
+                         .scale = {3, 3},
+                         .collision = {{-3, -3}, {6, 3}}});
+    }
+    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{200, 200}, {32 * 3, 64 * 3}}});
+    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{900, 200}, {32 * 3, 64 * 3}}});
+    // world.addObject({Object::Static, {{64, 0}, {32, 64}}, {{550, 500}, {32 * 3, 64 * 3}}});
 
     char text[256] = "";
 
