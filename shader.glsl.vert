@@ -9,10 +9,16 @@ layout(location=1) in vec2 instancePosition;
 layout(location=2) in vec2 size;
 layout(location=3) in vec2 uvPosition;
 layout(location=4) in vec2 uvSize;
+layout(location=5) in vec4 inColor;
+layout(location=6) in int inUseTexture;
 
-layout(location=0) out vec2 out_uv;
+layout(location=0) out vec2 outUv;
+layout(location=1) out vec4 outColor;
+layout(location=2) out int outUseTexture;
 
 void main() {
     gl_Position = mvp * vec4(vertexPosition * size + instancePosition, 0, 1);
-    out_uv = uvPosition + vertexPosition * uvSize;
+    outUv = uvPosition + vertexPosition * uvSize;
+    outColor = inColor;
+    outUseTexture = inUseTexture;
 }

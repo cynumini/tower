@@ -23,7 +23,10 @@ using usize = size_t;
 static_assert(sizeof(f32) == 4);
 static_assert(sizeof(f64) == 8);
 
-inline constexpr usize MAX_OBJECTS = 128;
+constexpr static float SCREEN_WIDTH = 640;
+constexpr static float SCREEN_HEIGHT = 360;
+
+inline constexpr usize MAX_OBJECTS = 1024;
 
 struct Vector2 {
     f32 x{};
@@ -122,30 +125,49 @@ struct Matrix4 {
     constexpr v4 &operator[](usize i) { return v[i]; }
     constexpr const v4 &operator[](usize i) const { return v[i]; }
 
-    constexpr Matrix4 operator*(const Matrix4 &b) const {
-        auto &a = *this;
-        Matrix4 result {};
+    constexpr Matrix4 operator*(const Matrix4 &other) const {
+        Matrix4 result{};
         for (usize col = 0; col < 4; col++) {
             for (usize row = 0; row < 4; row++) {
                 for (usize i = 0; i < 4; i++) {
-                    result.v[col][row] += a[i][row] * b[col][i];
+                    result.v[col][row] += (*this)[i][row] * other[col][i];
                 }
             }
         }
         return result;
     }
+
+    constexpr bool operator==(const Matrix4 &other) const {
+        for (usize col = 0; col < 4; col++)
+            for (usize row = 0; row < 4; row++)
+                if (*this[col][row] != other[col][row])
+                    return false;
+        return true;
+    }
 };
 
-inline constexpr usize MAX_INSTANCES_LEN = 1024;
+inline constexpr usize MAX_INSTANCES_LEN = 2048;
 
 struct Vertex {
     Vector2 position{};
 };
 
+struct Color {
+    float r = 0;
+    float g = 0;
+    float b = 0;
+    float a = 0;
+};
+
+static constexpr Color WHITE = {1, 1, 1, 1};
+static constexpr Color BLACK = {0, 0, 0, 1};
+
 struct Instance {
     Vector2 position{};
     Vector2 size{};
     Rectangle uv{};
+    Color color = WHITE;
+    int use_texture = true;
 };
 
 struct Texture {
@@ -197,13 +219,14 @@ template <typename T, usize N> struct FixedArray {
         data[len] = value;
         len++;
     }
+
+    constexpr void clear() { len = 0; }
 };
 
-struct UBO {
-    Matrix4 mvp = Matrix4::orthographic(0, 640, 360, 0, 0, 1);
-} ubo;
+Matrix4 base_model_view = Matrix4::orthographic(0, SCREEN_WIDTH, SCREEN_HEIGHT, 0, 0, 1);
 
 struct Game {
+
     float dt{};
     float fps{};
 
@@ -218,7 +241,7 @@ struct Game {
 
     SDL_Window *window;
 
-    Game( SDL_Window *window) : window(window) {}
+    Game(SDL_Window *window) : window(window) {}
 
     bool shouldClose() { return should_close; }
 
@@ -248,20 +271,20 @@ struct Game {
                 float width = (float)event.window.data1;
                 float height = (float)event.window.data2;
                 float x_offset = 0, y_offset = 0;
-                auto aspect_ratio = width/height;
-                if (16.0/9.0 > aspect_ratio) {
-                    auto scale = 640 / width;
+                auto aspect_ratio = width / height;
+                if (16.0 / 9.0 > aspect_ratio) {
+                    auto scale = SCREEN_WIDTH / width;
                     width *= scale;
                     height *= scale;
-                    y_offset = (height - 360.f) / 2;
+                    y_offset = (height - SCREEN_HEIGHT) / 2;
 
                 } else {
-                    auto scale = 360 / height;
+                    auto scale = SCREEN_HEIGHT / height;
                     width *= scale;
                     height *= scale;
-                    x_offset = (width - 640.f) / 2;
+                    x_offset = (width - SCREEN_WIDTH) / 2;
                 }
-                ubo.mvp =  Matrix4::orthographic(0, width, height, 0, 0, 1) * Matrix4::translation(x_offset, y_offset, 0);
+                base_model_view = Matrix4::orthographic(0, width, height, 0, 0, 1) * Matrix4::translation(x_offset, y_offset, 0);
                 break;
             }
             }
@@ -283,6 +306,8 @@ struct Game {
     bool isKeyDown(SDL_Scancode key) { return keyboard_state[key]; }
 };
 
+constexpr usize MAX_TEXTURES_LEN = 128;
+
 struct Renderer {
     SDL_Window *window = nullptr;
     SDL_GPUDevice *device = nullptr;
@@ -293,8 +318,8 @@ struct Renderer {
     SDL_GPUBuffer *index_buffer = nullptr;
     std::vector<Instance> instances;
     std::vector<usize> instances_texture;
-
-    std::vector<Texture> textures;
+    FixedArray<Matrix4, MAX_INSTANCES_LEN> instances_model_view;
+    FixedArray<Texture, MAX_TEXTURES_LEN> textures;
 
     SDL_GPUShader *load_shader(const std::string &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers, u32 num_samplers) {
         std::ifstream file(filename, std::ios::binary);
@@ -330,6 +355,8 @@ struct Renderer {
             {.location = 2, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, size)},
             {.location = 3, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv)},
             {.location = 4, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv) + sizeof(Vector2)},
+            {.location = 5, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = offsetof(Instance, color)},
+            {.location = 6, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_INT, .offset = offsetof(Instance, use_texture)},
         };
         create_info.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         create_info.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
@@ -363,7 +390,7 @@ struct Renderer {
 
         SDL_ENSURE(SDL_Init(SDL_INIT_VIDEO), "initialize SDL");
 
-        this->window = SDL_CreateWindow("Tower", 640, 360, 0);
+        this->window = SDL_CreateWindow("Tower", (int)SCREEN_WIDTH, (int)SCREEN_HEIGHT, 0);
         SDL_ENSURE(window, "create window");
 
         this->device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, NULL);
@@ -425,13 +452,12 @@ struct Renderer {
         SDL_EndGPUCopyPass(copy_pass);
         SDL_SubmitGPUCommandBuffer(command_buffer);
         SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
-
         // SDL_SetGPUSwapchainParameters(device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_IMMEDIATE);
     }
 
     ~Renderer() {
-        for (auto texture : textures) {
-            SDL_ReleaseGPUTexture(device, texture.texture);
+        for (usize i = 0; i < textures.len; i++) {
+            SDL_ReleaseGPUTexture(device, textures[i].texture);
         }
         SDL_ReleaseGPUSampler(device, sampler);
         SDL_ReleaseGPUBuffer(device, instance_buffer);
@@ -452,13 +478,14 @@ struct Renderer {
         SDL_ENSURE(texture.texture, "load gpu texture");
         SDL_EndGPUCopyPass(copy_pass);
         SDL_SubmitGPUCommandBuffer(command_buffer);
-        textures.push_back(std::move(texture));
-        return textures.size() - 1;
+        textures.add(std::move(texture));
+        return textures.len - 1;
     };
 
     void begin() {
         instances.clear();
         instances_texture.clear();
+        instances_model_view.clear();
     }
 
     void end() {
@@ -488,7 +515,7 @@ struct Renderer {
         if (swapchain_texture) {
             SDL_GPUColorTargetInfo color_target_info{};
             color_target_info.texture = swapchain_texture;
-            color_target_info.clear_color = {1, 1, 1, 1};
+            color_target_info.clear_color = {0.5, 0.5, 0.5, 1};
             color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
             color_target_info.store_op = SDL_GPU_STOREOP_STORE;
             auto render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, nullptr);
@@ -501,12 +528,12 @@ struct Renderer {
             binding.buffer = index_buffer;
             SDL_BindGPUIndexBuffer(render_pass, &binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-            SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(ubo));
-
             usize last_texture = instances_texture[0];
+            auto last_model_view = instances_model_view[0];
             usize start = 0;
             usize end = 0;
-            auto drawCall = [this, &render_pass](usize texture_index, usize start, usize end) {
+            auto drawCall = [this, &render_pass, &command_buffer](usize texture_index, Matrix4 model_view, usize start, usize end) {
+                SDL_PushGPUVertexUniformData(command_buffer, 0, &model_view, sizeof(model_view));
                 SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
                 texture_sampler_bindings.texture = textures[texture_index].texture;
                 texture_sampler_bindings.sampler = sampler;
@@ -514,23 +541,37 @@ struct Renderer {
                 SDL_DrawGPUIndexedPrimitives(render_pass, 6, (u32)(end - start), 0, 0, (u32)start);
             };
             for (usize i = 0; i < instances_texture.size(); i++) {
-                if (instances_texture[i] == last_texture) {
+                bool is_same_texture = instances_texture[i] == last_texture;
+                if (is_same_texture and instances_model_view[i] == last_model_view) {
                     end++;
                 } else {
-                    drawCall(last_texture, start, end);
+                    drawCall(last_texture, last_model_view, start, end);
                     start = i;
                     end = i + 1;
                     last_texture = instances_texture[i];
+                    last_model_view = instances_model_view[i];
                 }
             }
-            drawCall(last_texture, start, end);
+            drawCall(last_texture, last_model_view, start, end);
             SDL_EndGPURenderPass(render_pass);
         }
 
         SDL_SubmitGPUCommandBuffer(command_buffer);
     }
 
-    void drawTexture(usize texture, Rectangle source, Rectangle dest) {
+    void drawRectangle(Rectangle dest, Matrix4 model_view, Color color) {
+        Instance instance{
+            .position = dest.position,
+            .size = dest.size,
+            .color = color,
+            .use_texture = false,
+        };
+        instances.push_back(instance);
+        instances_texture.push_back(0); // very bad, it's just use first texture, but shader ignore it in fact
+        instances_model_view.add(model_view);
+    }
+
+    void drawTexture(usize texture, Rectangle source, Rectangle dest, Matrix4 model_view) {
         Rectangle uv = source;
         uv.position.x /= (float)textures[texture].width;
         uv.position.y /= (float)textures[texture].height;
@@ -544,6 +585,7 @@ struct Renderer {
 
         instances.push_back(instance);
         instances_texture.push_back(texture);
+        instances_model_view.add(model_view);
     }
 };
 
@@ -571,7 +613,6 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     for (auto &value : data) {
         value = 8;
     }
-    data['!'] = 1;
     for (auto i = '0'; i <= '9'; i++) {
         data[usize(i)] = 4;
     }
@@ -584,6 +625,7 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     data[' '] = 2;
     data['!'] = 1;
     data[','] = 1;
+    data['-'] = 4;
     data['.'] = 1;
     data['0'] = 5;
     data['1'] = 3;
@@ -610,6 +652,7 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     data['v'] = 5;
     data['w'] = 5;
     data['x'] = 5;
+    data['y'] = 5;
     data['z'] = 3;
     return data;
 }
@@ -631,7 +674,7 @@ static void drawText(Renderer &renderer, const usize texture_id, Vector2 positio
         int x = c % 16;
         int y = c / 16;
         Vector2 char_position{.x = float(x) * font_height, .y = float(y) * font_height};
-        renderer.drawTexture(texture_id, {char_position, {font_width, font_height}}, {{offset, position.y}, {width, height}});
+        renderer.drawTexture(texture_id, {char_position, {font_width, font_height}}, {{offset, position.y}, {width, height}}, base_model_view);
         offset += width + space;
     }
 }
@@ -648,8 +691,8 @@ struct Object {
 
 struct World {
     usize texture;
-
     FixedArray<Object, MAX_OBJECTS> objects{};
+    Vector2 camera_target{};
 
     void addObject(const Object &object) { objects.add(object); }
 
@@ -691,6 +734,7 @@ struct World {
                         }
                     }
                 }
+                camera_target = player.position;
                 break;
             }
             case Object::Static: {
@@ -706,7 +750,12 @@ struct World {
         for (auto object : objects) {
             auto position = object.position - (object.center.scale(object.scale));
             auto size = Vector2{object.texture.size.x * object.scale.x, object.texture.size.y * object.scale.y};
-            renderer.drawTexture(texture, object.texture, {position, size});
+            auto model_view = base_model_view * Matrix4::translation(-camera_target.x + SCREEN_WIDTH / 2, -camera_target.y + SCREEN_HEIGHT / 2, 0);
+            renderer.drawTexture(texture, object.texture, {position, size},
+                                model_view);
+            auto collision = object.collision.scale(object.scale);
+            collision.position += object.position;
+            renderer.drawRectangle(collision, model_view, {0, 0, 1, 0.5f});
         }
     }
 };
@@ -724,9 +773,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     world.addObject(
         {.kind = Object::Player, .texture = {{96, 0}, {16, 32}}, .center = {8, 32}, .position = {640.f / 2.f, 360.f / 2.f}, .collision = {{-8, -4}, {16, 4}}});
     srand((u32)time(0));
-    for (usize i = 0; i < 50; i++) {
-        float x = float(random() % 640);
-        float y = float(random() % 360);
+    for (usize i = 0; i < 500; i++) {
+        auto max_x = SCREEN_WIDTH * 4;
+        auto max_y = SCREEN_HEIGHT * 4;
+        float x = float(random() % int(max_x));
+        float y = float(random() % int(max_y));
+        x -= max_x / 2;
+        y -= max_y / 2;
         world.addObject({.kind = Object::Static, .texture = {{64, 0}, {32, 64}}, .center = {16, 64}, .position = {x, y}, .collision = {{-3, -3}, {6, 3}}});
     }
 
@@ -737,9 +790,13 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         world.update(game);
         renderer.begin();
         world.draw(renderer);
+
+        drawText(renderer, font_texture, {2, 2}, 10, "Version 0.2.0");
         sprintf(text, "FPS: %f", game.fps);
-        drawText(renderer, font_texture, {2, 2}, 10, "Version 0.1.0");
-        drawText(renderer, font_texture, {2, 12}, 10, text);
+        drawText(renderer, font_texture, {2, 2 * 2 + 10}, 10, text);
+        sprintf(text, "x: %f, y: %f", world.camera_target.x, world.camera_target.y);
+        drawText(renderer, font_texture, {2, 2 * 3 + 20}, 10, text);
+
         renderer.end();
         game.endFrame();
     }
