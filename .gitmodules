@@ -4,3 +4,6 @@
 [submodule "subprojects/SDL_image"]
 	path = subprojects/SDL_image
 	url = https://github.com/libsdl-org/SDL_image.git
+[submodule "subprojects/imgui"]
+	path = imgui
+	url = https://github.com/ocornut/imgui.git
