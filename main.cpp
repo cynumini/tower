@@ -1,4 +1,3 @@
-#include "SDL3/SDL_scancode.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -161,7 +160,9 @@ struct Color {
 };
 
 static constexpr Color WHITE = {1, 1, 1, 1};
+static constexpr Color GRAY = {0.5, 0.5, 0.5, 1};
 static constexpr Color BLACK = {0, 0, 0, 1};
+static constexpr Color BLUE = {0, 0, 1, 1};
 
 struct Instance {
     Vector2 position{};
@@ -203,7 +204,7 @@ template <typename T, usize N> struct FixedArray {
     constexpr T *begin() { return data; }
     constexpr T *end() { return data + len; }
 
-    void sort(bool (*compar)(const T &, const T &)) {
+    template <typename F> void sort(F compar) {
         for (int i = 1; i < (int)len; i++) {
             T key = data[i];
             int j = i - 1;
@@ -215,10 +216,12 @@ template <typename T, usize N> struct FixedArray {
         }
     }
 
-    constexpr void add(const T &value) {
+    constexpr usize add(const T &value) {
         assert(len < N);
-        data[len] = value;
+        auto index = len;
+        data[index] = value;
         len++;
+        return index;
     }
 
     constexpr void clear() { len = 0; }
@@ -237,6 +240,7 @@ struct Game {
     u64 previous{};
 
     Array<bool, SDL_SCANCODE_COUNT> pressed = {};
+    Array<bool, SDL_SCANCODE_COUNT> pressed_repeat = {};
     const bool *keyboard_state = nullptr;
     bool fullscreen = false;
 
@@ -268,6 +272,7 @@ struct Game {
                 if (!event.key.repeat) {
                     pressed[event.key.scancode] = true;
                 }
+                pressed_repeat[event.key.scancode] = true;
                 break;
             }
             case SDL_EVENT_WINDOW_RESIZED: {
@@ -304,10 +309,14 @@ struct Game {
         }
     }
 
-    void endFrame() { pressed = {}; }
+    void endFrame() {
+        pressed = {};
+        pressed_repeat = {};
+    }
 
     bool isKeyDown(SDL_Scancode key) { return keyboard_state[key]; }
     bool isKeyPressed(SDL_Scancode key) { return pressed[key]; }
+    bool isKeyPressedRepeat(SDL_Scancode key) { return pressed_repeat[key]; }
 };
 
 constexpr usize MAX_TEXTURES_LEN = 128;
@@ -575,7 +584,7 @@ struct Renderer {
         instances_model_view.add(model_view);
     }
 
-    void drawTexture(usize texture, Rectangle source, Rectangle dest, Matrix4 model_view) {
+    void drawTexture(usize texture, Rectangle source, Rectangle dest, Matrix4 model_view, Color color = WHITE) {
         Rectangle uv = source;
         uv.position.x /= (float)textures[texture].width;
         uv.position.y /= (float)textures[texture].height;
@@ -585,6 +594,7 @@ struct Renderer {
             .position = dest.position,
             .size = dest.size,
             .uv = uv,
+            .color = color,
         };
 
         instances.push_back(instance);
@@ -629,7 +639,7 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     data[' '] = 2;
     data['!'] = 1;
     data['\''] = 1;
-    data[','] = 1;
+    data[','] = 2;
     data['-'] = 4;
     data['.'] = 1;
     data['0'] = 5;
@@ -639,9 +649,12 @@ constexpr static Array<u8, 128> defaultFontWidths() {
     data['8'] = 5;
     data['9'] = 5;
     data[':'] = 1;
+    data['A'] = 5;
+    data['D'] = 5;
     data['I'] = 3;
-    data['M'] = 5;
+    data['M'] = 7;
     data['N'] = 5;
+    data['P'] = 5;
     data['Q'] = 5;
     data['S'] = 5;
     data['T'] = 5;
@@ -685,14 +698,20 @@ static void drawText(Renderer &renderer, const usize texture_id, Vector2 positio
 }
 
 struct Object {
-    enum Kind { Player, Static };
-    Kind kind;
+    enum Kind { Zero, Player, Static, Enemy };
+    Kind kind{};
     Rectangle texture{};
     Vector2 center{};
     Vector2 position{};
     Vector2 scale{1, 1};
     Rectangle collision{};
     Rectangle interaction_arena{};
+    int hp = 100;
+    int mp = 100;
+    bool alive = true;
+    bool in_defence = false;
+    bool inactive = false;
+    u64 inactive_start = 0;
 
     Rectangle calcAbsolutePositionOfRelativeRectangle(const Rectangle &rect) const {
         auto result = rect.scale(this->scale);
@@ -702,26 +721,116 @@ struct Object {
 };
 
 struct World {
+    using ObjectId = usize;
     usize texture;
+    usize font_texture;
     FixedArray<Object, MAX_OBJECTS> objects{};
+    FixedArray<ObjectId, MAX_OBJECTS> render_order{};
     Vector2 camera_target{};
     bool show_collision = false;
     bool show_interaction_arena = false;
     bool is_dialog = false;
+    ObjectId player_id = 0;
+    ObjectId current_enemy_id = 0;
+    bool battle_mode = false;
+    bool pause = false;
+    int select = 0;
+    bool is_player_turn = true;
+    u64 ticks;
 
-    void addObject(const Object &object) { objects.add(object); }
+    void addObject(const Object &object) {
+        ObjectId id = objects.add(object);
+        render_order.add(id);
+        if (object.kind == Object::Player) {
+            player_id = id;
+        }
+    }
 
-    World(usize texture) : texture(texture) {}
+    Object &getObject(ObjectId id, bool is_empty_ok = true) {
+
+        assert(id != 0);
+        assert(id < objects.len);
+        return objects[id];
+    }
+
+    World(usize texture, usize font_texture) : texture(texture), font_texture(font_texture) { addObject({}); }
 
     void update(Game &game) {
-        for (auto &object : objects) {
+        ticks = SDL_GetTicks();
+        if (battle_mode) {
+            auto &player = getObject(player_id);
+            auto &enemy = getObject(current_enemy_id);
+            if (!is_player_turn) {
+                auto &player = getObject(player_id);
+                player.hp -= player.in_defence ? 1 : 10;
+                if (player.hp <= 0) {
+                    game.should_close = true;
+                }
+                player.in_defence = false;
+                is_player_turn = true;
+                return;
+            }
+            if (game.isKeyPressedRepeat(SDL_SCANCODE_A)) {
+                if (select == 0) {
+                    select = 3;
+                } else {
+                    select -= 1;
+                }
+            } else if (game.isKeyPressedRepeat(SDL_SCANCODE_D)) {
+                if (select == 3) {
+                    select = 0;
+                } else {
+                    select += 1;
+                }
+            } else if (game.isKeyPressedRepeat(SDL_SCANCODE_SPACE)) {
+                switch (select) {
+                case 0: {
+
+                    enemy.hp -= 25;
+                    if (enemy.hp <= 0) {
+                        enemy.alive = false;
+                        battle_mode = false;
+                        pause = false;
+                        return;
+                    } else {
+                        is_player_turn = false;
+                    }
+                    break;
+                }
+                case 1: {
+                    player.in_defence = true;
+                    is_player_turn = false;
+                    break;
+                }
+                case 2: {
+                    player.hp += 25;
+                    is_player_turn = false;
+                    break;
+                }
+                case 3: {
+                    battle_mode = false;
+                    pause = false;
+                    enemy.inactive = true;
+                    enemy.inactive_start = ticks;
+                    return;
+                    break;
+                }
+                }
+            }
+            return;
+        }
+        for (ObjectId object_id = 1; object_id < objects.len; object_id++) {
+            auto &object = getObject(object_id);
+            if (!object.alive)
+                continue;
             switch (object.kind) {
             case Object::Player: {
                 auto &player = object;
                 constexpr float player_speed = 300;
-                if (is_dialog) {
+                if (pause) {
                     if (game.isKeyPressed(SDL_SCANCODE_SPACE)) {
                         is_dialog = false;
+                        pause = false;
                     }
                     continue;
                 }
@@ -756,6 +865,7 @@ struct World {
                         auto world_static_object_interaction_arena = static_object.calcAbsolutePositionOfRelativeRectangle(static_object.interaction_arena);
                         if (static_object.kind == Object::Static and world_player_collision.checkCollision(world_static_object_interaction_arena)) {
                             is_dialog = true;
+                            pause = true;
                         }
                     }
                 }
@@ -766,18 +876,78 @@ struct World {
             case Object::Static: {
                 break;
             }
+            case Object::Enemy: {
+                Object &enemy = object;
+                if (enemy.inactive) {
+                    auto end = enemy.inactive_start + (1000 * 10);
+                    if (ticks > end) {
+                        enemy.inactive = false;
+                    }
+                }
+                if (battle_mode or enemy.inactive)
+                    continue;
+                Object &player = getObject(player_id);
+                auto world_enemy_interaction_arena = enemy.calcAbsolutePositionOfRelativeRectangle(enemy.interaction_arena);
+                auto player_collision = player.calcAbsolutePositionOfRelativeRectangle(player.collision);
+
+                if (world_enemy_interaction_arena.checkCollision(player_collision)) {
+                    current_enemy_id = object_id;
+                    battle_mode = true;
+                    pause = true;
+                    printf("Battle!\n");
+                }
+                break;
+            }
+            case Object::Zero: {
+                break;
+            }
             }
         }
 
-        objects.sort([](const Object &a, const Object &b) { return a.position.y > b.position.y; });
+        render_order.sort([this](const ObjectId &a_id, const ObjectId &b_id) {
+            if (a_id == 0 or b_id == 0)
+                return true;
+            auto &a = this->getObject(a_id);
+            auto &b = this->getObject(b_id);
+            return a.position.y > b.position.y;
+        });
     };
 
     void draw(Renderer &renderer) {
-        for (auto object : objects) {
+        if (battle_mode) {
+            constexpr float height = 28;
+            Color selection[4] = {BLACK, BLACK, BLACK, BLACK};
+            selection[select] = BLUE;
+            auto &player = getObject(player_id);
+            auto &enemy = getObject(current_enemy_id);
+            static char buffer[128];
+            sprintf(buffer, "HP: %d MP: %d", player.hp, player.mp);
+            drawText(renderer, font_texture, {128 - 18, 256 - 32 - 10}, 10, buffer);
+            renderer.drawTexture(texture, player.texture, {{128, 256 - 32}, {32, 64}}, base_model_view);
+            sprintf(buffer, "HP: %d MP: %d", enemy.hp, enemy.mp);
+            drawText(renderer, font_texture, {SCREEN_WIDTH - 128 - 18, 64 - 10}, 10, buffer);
+            renderer.drawTexture(texture, enemy.texture, {{SCREEN_WIDTH - 128, 64}, {32, 32}}, base_model_view);
+
+            renderer.drawRectangle({{4, SCREEN_HEIGHT - (height + 4)}, {74, height}}, base_model_view, selection[0]);
+            drawText(renderer, font_texture, {8, SCREEN_HEIGHT - 28}, 20, "ATTACK");
+            renderer.drawRectangle({{193 - 4, SCREEN_HEIGHT - (height + 4)}, {72, height}}, base_model_view, selection[1]);
+            drawText(renderer, font_texture, {193, SCREEN_HEIGHT - 28}, 20, "DEFEND");
+            renderer.drawRectangle({{382 - 4, SCREEN_HEIGHT - (height + 4)}, {56 + 8, height}}, base_model_view, selection[2]);
+            drawText(renderer, font_texture, {382, SCREEN_HEIGHT - 28}, 20, "ITEMS");
+            renderer.drawRectangle({{568 - 4, SCREEN_HEIGHT - (height + 4)}, {64 + 8, height}}, base_model_view, selection[3]);
+            drawText(renderer, font_texture, {568, SCREEN_HEIGHT - 28}, 20, "ESCAPE");
+            return;
+        }
+        for (auto id : render_order) {
+            if (id == 0)
+                continue;
+            auto &object = this->getObject(id);
+            if (!object.alive)
+                continue;
             auto position = object.position - (object.center.scale(object.scale));
             auto size = Vector2{object.texture.size.x * object.scale.x, object.texture.size.y * object.scale.y};
             auto model_view = base_model_view * Matrix4::translation(-camera_target.x + SCREEN_WIDTH / 2, -camera_target.y + SCREEN_HEIGHT / 2, 0);
-            renderer.drawTexture(texture, object.texture, {position, size}, model_view);
+            renderer.drawTexture(texture, object.texture, {position, size}, model_view, object.inactive ? GRAY : WHITE);
             if (show_collision) {
                 renderer.drawRectangle(object.calcAbsolutePositionOfRelativeRectangle(object.collision), model_view, {0, 0, 1, 0.5f});
             }
@@ -796,12 +966,35 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     auto world_texture = renderer.loadTexture("world.png");
     auto font_texture = renderer.loadTexture("font.png");
 
-    World world(world_texture);
+    World world(world_texture, font_texture);
+    world.show_interaction_arena = true;
 
-    world.addObject(
-        {.kind = Object::Player, .texture = {{96, 0}, {16, 32}}, .center = {8, 32}, .position = {640.f / 2.f, 360.f / 2.f}, .collision = {{-8, -4}, {16, 4}}});
+    world.addObject({
+        .kind = Object::Player,
+        .texture = {{96, 0}, {16, 32}},
+        .center = {8, 32},
+        .position = {640.f / 2.f, 360.f / 2.f},
+        .collision = {{-8, -4}, {16, 4}},
+    });
     srand((u32)time(0));
-    for (usize i = 0; i < 500; i++) {
+    for (usize i = 0; i < 10; i++) {
+        auto max_x = SCREEN_WIDTH * 4;
+        auto max_y = SCREEN_HEIGHT * 4;
+        float x = float(random() % int(max_x));
+        float y = float(random() % int(max_y));
+        x -= max_x / 2;
+        y -= max_y / 2;
+        world.addObject({
+            .kind = Object::Enemy,
+            .texture = {{112, 0}, {16, 16}},
+            .center = {8, 16},
+            .position = {x, y},
+            .collision = {{-4, -3}, {8, 3}},
+            .interaction_arena = {{-8, -16}, {16, 16}},
+        });
+    }
+
+    for (usize i = 0; i < 256; i++) {
         auto max_x = SCREEN_WIDTH * 4;
         auto max_y = SCREEN_HEIGHT * 4;
         float x = float(random() % int(max_x));
