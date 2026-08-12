@@ -1,3 +1,4 @@
+#include "SDL3/SDL_scancode.h"
 #include <assert.h>
 #include <math.h>
 #include <stdlib.h>
@@ -264,7 +265,9 @@ struct Game {
                     fullscreen = !fullscreen;
                     SDL_SetWindowFullscreen(window, fullscreen);
                 }
-                pressed[event.key.scancode] = true;
+                if (!event.key.repeat) {
+                    pressed[event.key.scancode] = true;
+                }
                 break;
             }
             case SDL_EVENT_WINDOW_RESIZED: {
@@ -304,6 +307,7 @@ struct Game {
     void endFrame() { pressed = {}; }
 
     bool isKeyDown(SDL_Scancode key) { return keyboard_state[key]; }
+    bool isKeyPressed(SDL_Scancode key) { return pressed[key]; }
 };
 
 constexpr usize MAX_TEXTURES_LEN = 128;
@@ -688,6 +692,13 @@ struct Object {
     Vector2 position{};
     Vector2 scale{1, 1};
     Rectangle collision{};
+    Rectangle interaction_arena{};
+
+    Rectangle calcAbsolutePositionOfRelativeRectangle(const Rectangle &rect) const {
+        auto result = rect.scale(this->scale);
+        result.position += this->position;
+        return result;
+    }
 };
 
 struct World {
@@ -695,6 +706,7 @@ struct World {
     FixedArray<Object, MAX_OBJECTS> objects{};
     Vector2 camera_target{};
     bool show_collision = false;
+    bool show_interaction_arena = false;
     bool is_dialog = false;
 
     void addObject(const Object &object) { objects.add(object); }
@@ -706,20 +718,21 @@ struct World {
             switch (object.kind) {
             case Object::Player: {
                 auto &player = object;
-                camera_target = player.position;
-                if (is_dialog)
-                    continue;
                 constexpr float player_speed = 300;
+                if (is_dialog) {
+                    if (game.isKeyPressed(SDL_SCANCODE_SPACE)) {
+                        is_dialog = false;
+                    }
+                    continue;
+                }
                 Vector2 velocity = {};
                 velocity.y = (float)game.isKeyDown(SDL_SCANCODE_S) - (float)game.isKeyDown(SDL_SCANCODE_W);
                 velocity.x = (float)game.isKeyDown(SDL_SCANCODE_D) - (float)game.isKeyDown(SDL_SCANCODE_A);
                 velocity = velocity.normalize();
                 player.position += velocity * player_speed * game.dt;
-                auto world_player_collision = player.collision.scale(player.scale);
-                world_player_collision.position += player.position;
+                auto world_player_collision = player.calcAbsolutePositionOfRelativeRectangle(player.collision);
                 for (auto static_object : objects) {
-                    auto world_static_object_collision = static_object.collision.scale(static_object.scale);
-                    world_static_object_collision.position += static_object.position;
+                    auto world_static_object_collision = static_object.calcAbsolutePositionOfRelativeRectangle(static_object.collision);
                     if (static_object.kind == Object::Static and world_player_collision.checkCollision(world_static_object_collision)) {
                         auto direction = world_player_collision.center() - world_static_object_collision.center();
                         auto overlap_size = world_player_collision.overlapSize(world_static_object_collision);
@@ -739,8 +752,15 @@ struct World {
                             }
                         }
                     }
+                    if (game.isKeyPressed(SDL_SCANCODE_SPACE)) {
+                        auto world_static_object_interaction_arena = static_object.calcAbsolutePositionOfRelativeRectangle(static_object.interaction_arena);
+                        if (static_object.kind == Object::Static and world_player_collision.checkCollision(world_static_object_interaction_arena)) {
+                            is_dialog = true;
+                        }
+                    }
                 }
 
+                camera_target = player.position;
                 break;
             }
             case Object::Static: {
@@ -759,9 +779,10 @@ struct World {
             auto model_view = base_model_view * Matrix4::translation(-camera_target.x + SCREEN_WIDTH / 2, -camera_target.y + SCREEN_HEIGHT / 2, 0);
             renderer.drawTexture(texture, object.texture, {position, size}, model_view);
             if (show_collision) {
-                auto collision = object.collision.scale(object.scale);
-                collision.position += object.position;
-                renderer.drawRectangle(collision, model_view, {0, 0, 1, 0.5f});
+                renderer.drawRectangle(object.calcAbsolutePositionOfRelativeRectangle(object.collision), model_view, {0, 0, 1, 0.5f});
+            }
+            if (show_interaction_arena) {
+                renderer.drawRectangle(object.calcAbsolutePositionOfRelativeRectangle(object.interaction_arena), model_view, {1, 0, 0, 0.5f});
             }
         }
     }
@@ -776,7 +797,6 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
     auto font_texture = renderer.loadTexture("font.png");
 
     World world(world_texture);
-    world.is_dialog = true;
 
     world.addObject(
         {.kind = Object::Player, .texture = {{96, 0}, {16, 32}}, .center = {8, 32}, .position = {640.f / 2.f, 360.f / 2.f}, .collision = {{-8, -4}, {16, 4}}});
@@ -788,7 +808,12 @@ int main([[maybe_unused]] int argc, [[maybe_unused]] char *argv[]) {
         float y = float(random() % int(max_y));
         x -= max_x / 2;
         y -= max_y / 2;
-        world.addObject({.kind = Object::Static, .texture = {{64, 0}, {32, 64}}, .center = {16, 64}, .position = {x, y}, .collision = {{-3, -3}, {6, 3}}});
+        world.addObject({.kind = Object::Static,
+                         .texture = {{64, 0}, {32, 64}},
+                         .center = {16, 64},
+                         .position = {x, y},
+                         .collision = {{-3, -3}, {6, 3}},
+                         .interaction_arena = {{-6, -6}, {12, 12}}});
     }
 
     char text[256] = "";
