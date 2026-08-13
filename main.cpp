@@ -5,7 +5,6 @@
 #include <time.h>
 
 #include <string>
-#include <vector>
 
 #include <SDL3/SDL.h>
 #define SDL_MAIN_USE_CALLBACKS
@@ -245,8 +244,8 @@ struct Renderer {
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *instance_buffer;
     SDL_GPUBuffer *index_buffer;
-    std::vector<Instance> instances;
-    std::vector<usize> instances_texture;
+    FixedArray<Instance, MAX_INSTANCES> instances;
+    FixedArray<usize, MAX_INSTANCES> instances_texture;
     FixedArray<Matrix4, MAX_INSTANCES> instances_model_view;
     FixedArray<Texture, MAX_TEXTURES_LEN> textures;
 
@@ -466,14 +465,14 @@ struct Renderer {
         auto command_buffer = SDL_AcquireGPUCommandBuffer(device);
         SDL_ENSURE(command_buffer, "acquire gpu command buffer");
 
-        if (instances.size() > 0) {
+        if (instances.len > 0) {
             SDL_GPUTransferBufferCreateInfo transfer_buffer_create_info{};
-            auto size = instances.size() * sizeof(Instance);
+            auto size = instances.len * sizeof(Instance);
             transfer_buffer_create_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
             transfer_buffer_create_info.size = (u32)size;
             auto transfer_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_buffer_create_info);
             auto transfer_memory = (char *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
-            memcpy(transfer_memory, instances.data(), size);
+            memcpy(transfer_memory, instances.data, size);
             SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
             auto copy_pass = SDL_BeginGPUCopyPass(command_buffer);
             SDL_GPUTransferBufferLocation transfer_buffer_location{};
@@ -510,7 +509,7 @@ struct Renderer {
 
             usize last_texture;
             Matrix4 last_model_view;
-            if (instances.size() > 0) {
+            if (instances.len > 0) {
                 last_texture = instances_texture[0];
                 last_model_view = instances_model_view[0];
             }
@@ -524,7 +523,7 @@ struct Renderer {
                 SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_bindings, 1);
                 SDL_DrawGPUIndexedPrimitives(render_pass, 6, (u32)(end - start), 0, 0, (u32)start);
             };
-            for (usize i = 0; i < instances_texture.size(); i++) {
+            for (usize i = 0; i < instances_texture.len; i++) {
                 bool is_same_texture = instances_texture[i] == last_texture;
                 if (is_same_texture and instances_model_view[i] == last_model_view) {
                     end++;
@@ -536,7 +535,7 @@ struct Renderer {
                     last_model_view = instances_model_view[i];
                 }
             }
-            if (start != 0 and end != 0) {
+            if (not (start == 0 and end == 0)) {
                 drawCall(last_texture, last_model_view, start, end);
             }
             ImGui_ImplSDLGPU3_RenderDrawData(draw_data, command_buffer, render_pass);
@@ -553,8 +552,8 @@ struct Renderer {
             .color = color,
             .use_texture = false,
         };
-        instances.push_back(instance);
-        instances_texture.push_back(0); // very bad, it's just use first texture, but shader ignore it in fact
+        instances.add(instance);
+        instances_texture.add(0); // very bad, it's just use first texture, but shader ignore it in fact
         instances_model_view.add(model_view);
     }
 
@@ -570,9 +569,8 @@ struct Renderer {
             .uv = uv,
             .color = color,
         };
-
-        instances.push_back(instance);
-        instances_texture.push_back(texture);
+        instances.add(instance);
+        instances_texture.add(texture);
         instances_model_view.add(model_view);
     }
 };
@@ -920,7 +918,7 @@ struct AppState {
 
         if (world->is_dialog) {
             renderer->drawRectangle({{0, SCREEN.y / 3 * 2}, {SCREEN.x, SCREEN.y / 3}}, base_model_view, BLACK);
-            drawText(*renderer, font_texture, {8, SCREEN.y / 3 * 2 + 8}, 10, "It's a tree!");
+            drawText(*renderer, font_texture, {8, SCREEN.y / 3 * 2 + 28}, 10, "It's a tree!");
         };
 
         renderer->end();
