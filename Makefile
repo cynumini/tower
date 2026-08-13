@@ -5,9 +5,9 @@ clean:
 	git clean -fdx
 
 compile: ./build
-	meson compile -C build
+	cmake --build build
 
 ./build:
-	meson setup build
+	cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
 
 .PHONY: clean run compile
