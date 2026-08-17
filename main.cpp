@@ -8,14 +8,6 @@
 
 #include "engine.hpp"
 
-[[noreturn]]
-static void unreachable(const char *string, usize line) {
-    printf("%s:%zu: unreachable\n", string, line);
-    abort();
-}
-
-#define UNREACHABLE() unreachable(__FILE__, __LINE__)
-
 static SDL_AppResult AppResultFromGameResult(GameResult game_result) {
     switch (game_result) {
     case GameResult::ongoing:
@@ -71,6 +63,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SD
     case SDL_EVENT_WINDOW_RESIZED: {
         f32 width = (f32)event->window.data1;
         f32 height = (f32)event->window.data2;
+        engine.renderer->updateCamera({width, height});
         f32 x_offset = 0, y_offset = 0;
         auto aspect_ratio = width / height;
         if (16.0 / 9.0 > aspect_ratio) {

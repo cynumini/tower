@@ -35,6 +35,12 @@ struct Vector2 {
     Vector2 normalize() const;
 };
 
+struct Vector3 {
+    f32 x = 0;
+    f32 y = 0;
+    f32 z = 0;
+};
+
 struct Rectangle {
     f32 x = 0;
     f32 y = 0;
@@ -120,6 +126,15 @@ struct Matrix4 {
         }
         return true;
     }
+
+    void print() {
+        for (usize col = 0; col < 4; col++) {
+            for (usize row = 0; row < 4; row++) {
+                printf("%f, ", v[col][row]);
+            }
+        }
+        printf("\n");
+    }
 };
 
 struct Color {
@@ -132,6 +147,8 @@ struct Color {
 constexpr Color BLACK = {0, 0, 0, 1};
 constexpr Color WHITE = {1, 1, 1, 1};
 constexpr Color GRAY = {0.5, 0.5, 0.5, 1};
+constexpr Color RED = {1, 0, 0, 1};
+constexpr Color GREEN = {0, 1, 0, 1};
 constexpr Color BLUE = {0, 0, 1, 1};
 
 template <typename T, usize N> struct Array {
@@ -248,6 +265,16 @@ struct String {
             abort();                                                                                                                                           \
         }                                                                                                                                                      \
     } while (false)
+
+[[noreturn]]
+void unreachable(const char *string, usize line);
+
+#define UNREACHABLE() unreachable(__FILE__, __LINE__)
+
+[[noreturn]]
+void todo(const char *string, usize line, const char *message);
+
+#define TODO(message) todo(__FILE__, __LINE__, message)
 
 namespace OS {
 /// Caller owns the memory

@@ -42,11 +42,15 @@ endfunction()
 
 compile_shader(shader.glsl.vert shader.spv.vert)
 compile_shader(shader.glsl.frag shader.spv.frag)
+compile_shader(shader3d.glsl.vert shader3d.spv.vert)
+compile_shader(shader3d.glsl.frag shader3d.spv.frag)
 
 add_custom_target(shaders
   DEPENDS
   "${CMAKE_CURRENT_BINARY_DIR}/shader.spv.vert"
   "${CMAKE_CURRENT_BINARY_DIR}/shader.spv.frag"
+  "${CMAKE_CURRENT_BINARY_DIR}/shader3d.spv.vert"
+  "${CMAKE_CURRENT_BINARY_DIR}/shader3d.spv.frag"
 )
 
 add_dependencies(tower-a shaders)
