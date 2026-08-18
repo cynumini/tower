@@ -22,7 +22,13 @@ static SDL_AppResult AppResultFromGameResult(GameResult game_result) {
 
 static Engine engine;
 
+CAllocator c_allocator;
+DebugAllocator *gpa;
+
 SDL_AppResult SDL_AppInit(void **, [[maybe_unused]] int argc, [[maybe_unused]] char **argv) {
+    gpa = mem::create<DebugAllocator>(c_allocator);
+    new (gpa) DebugAllocator(c_allocator);
+
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
     SDL_SetAppMetadata("Tower", "0.3.0", "cynumini.tower");
     SDL_ENSURE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD), "initialize SDL");
@@ -31,9 +37,10 @@ SDL_AppResult SDL_AppInit(void **, [[maybe_unused]] int argc, [[maybe_unused]] c
     engine.window = SDL_CreateWindow("Tower", int(SCREEN.x * scale_factor), int(SCREEN.y * scale_factor), SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     SDL_ENSURE(engine.window, "create window");
     engine.keyboard_state = SDL_GetKeyboardState(nullptr);
-    engine.renderer = new Renderer{engine.window, SCREEN, scale_factor};
+    engine.renderer = mem::create<Renderer>(*gpa);
+    new (engine.renderer)  Renderer(*gpa, engine.window, SCREEN, scale_factor);
 
-    return AppResultFromGameResult(gameInit(&engine));
+    return AppResultFromGameResult(gameInit(*gpa, engine));
 }
 
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SDL_Event *event) {
@@ -106,7 +113,11 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *app_state) {
 }
 
 void SDL_AppQuit(void *, [[maybe_unused]] SDL_AppResult result) {
+
     gameQuit();
-    delete engine.renderer;
+    engine.renderer->~Renderer();
+    gpa->free(engine.renderer);
+    gpa->DebugAllocator::~DebugAllocator();
+    c_allocator.free(gpa);
     SDL_DestroyWindow(engine.window);
 }

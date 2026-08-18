@@ -77,7 +77,7 @@ struct Renderer {
     Vector3 camera_position = {0, 0, 0};
     Vector2 screen;
 
-    Renderer(SDL_Window *window, Vector2 screen, f32 scale_factor);
+    Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale_factor);
 
     ~Renderer() {
         SDL_WaitForGPUIdle(device);

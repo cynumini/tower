@@ -1,7 +1,7 @@
 #include "renderer.hpp"
 
-static SDL_GPUShader *loadShader(SDL_GPUDevice *device, const String &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0, u32 num_samplers = 0) {
-    auto data = OS::readEntireFile(filename);
+static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const String &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0, u32 num_samplers = 0) {
+    auto data = OS::readEntireFile(gpa, filename);
     SDL_GPUShaderCreateInfo create_info{};
     create_info.code_size = data.len;
     create_info.code = data.rawptr;
@@ -11,15 +11,15 @@ static SDL_GPUShader *loadShader(SDL_GPUDevice *device, const String &filename, 
     create_info.num_samplers = num_samplers;
     create_info.num_uniform_buffers = num_uniform_buffers;
     auto shader = SDL_CreateGPUShader(device, &create_info);
-    data.deinit();
+    mem::free(gpa, data);
     return shader;
 };
 
-static SDL_GPUGraphicsPipeline *createPipeline2D(SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
+static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
     SDL_GPUGraphicsPipelineCreateInfo createinfo{};
 
-    createinfo.vertex_shader = loadShader(device, "./build/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1);
-    createinfo.fragment_shader = loadShader(device, "./build/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
+    createinfo.vertex_shader = loadShader(gpa, device, "./build/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1);
+    createinfo.fragment_shader = loadShader(gpa, device, "./build/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
 
     SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
         {.slot = 0, .pitch = sizeof(Vertex2D), .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0},
@@ -63,11 +63,11 @@ static SDL_GPUGraphicsPipeline *createPipeline2D(SDL_GPUDevice *device, SDL_GPUT
     return pipeline;
 }
 
-static SDL_GPUGraphicsPipeline *createPipeline3D(SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
+static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
     SDL_GPUGraphicsPipelineCreateInfo createinfo{};
 
-    createinfo.vertex_shader = loadShader(device, "./build/shader3d.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
-    createinfo.fragment_shader = loadShader(device, "./build/shader3d.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+    createinfo.vertex_shader = loadShader(gpa, device, "./build/shader3d.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
+    createinfo.fragment_shader = loadShader(gpa, device, "./build/shader3d.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
 
     SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
         {.slot = 0, .pitch = sizeof(Vertex3D), .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0},
@@ -112,7 +112,7 @@ static SDL_GPUGraphicsPipeline *createPipeline3D(SDL_GPUDevice *device, SDL_GPUT
     return pipeline;
 }
 
-Renderer::Renderer(SDL_Window *window, Vector2 screen, f32 scale_factor) : window(window) {
+Renderer::Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale_factor) : window(window) {
     base_model_view = Matrix4::orthographic(0, screen.x, screen.y, 0, 0, 1);
 
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
@@ -143,8 +143,8 @@ Renderer::Renderer(SDL_Window *window, Vector2 screen, f32 scale_factor) : windo
 
     updateCamera(screen);
 
-    pipeline2d = createPipeline2D(device, swapchain_texture_format);
-    pipeline3d = createPipeline3D(device, swapchain_texture_format);
+    pipeline2d = createPipeline2D(gpa, device, swapchain_texture_format);
+    pipeline3d = createPipeline3D(gpa, device, swapchain_texture_format);
 
     {
         SDL_GPUSamplerCreateInfo createinfo{};
@@ -400,6 +400,6 @@ static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTextur
 void Renderer::updateCamera(Vector2 screen_size) {
     f32 aspect_ratio = screen_size.x / screen_size.y;
     base_model_view3d = Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -10, 10);
-    base_model_view3d = base_model_view3d * Matrix4::translation(0, 0, 0);
+    base_model_view3d = base_model_view3d * Matrix4::translation(0, 0, 100);
     depth_texture = recreateDepthTexture(device, depth_texture, screen_size);
 }

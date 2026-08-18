@@ -242,20 +242,29 @@ template <typename T> struct Slice {
     Slice slice(usize start) { return {rawptr + start, len - start}; }
 
     Slice slice(usize start, usize end) { return {rawptr + start, end - start}; }
-    void deinit() { delete[] rawptr; }
 };
 
 struct String {
     const char *c_str;
     usize len = 0;
 
-    String(const char *c_str) : c_str(c_str) { len = strlen(c_str); }
+    String(const char *c_str, usize len) : c_str(c_str), len(len) {}
+    template <size_t N> String(const char (&c_str)[N]) : c_str(c_str), len(N - 1) {}
+    static String fromCStr(const char *str) { return {str, strlen(str)}; }
 
     String(Slice<u8> slice) : c_str((char *)slice.rawptr), len(slice.len) {}
 
     const char *begin() const { return c_str; }
 
     const char *end() const { return c_str + len; }
+};
+
+template <typename T> struct Optional {
+    bool has_value = false;
+    T payload;
+
+    Optional() : has_value(false) {}
+    Optional(T payload) : has_value(true), payload(payload) {}
 };
 
 #define SDL_ENSURE(check, message)                                                                                                                             \
@@ -276,7 +285,186 @@ void todo(const char *string, usize line, const char *message);
 
 #define TODO(message) todo(__FILE__, __LINE__, message)
 
+struct Location {
+    const char *file;
+    usize line;
+
+    static Location current(const char *file = __builtin_FILE(), usize line = __builtin_LINE()) { return {file, line}; }
+};
+
+struct Allocator {
+    virtual void *alloc(usize size, Location location = {}) = 0;
+    virtual void *realloc(void *ptr, usize size, Location location = {}) = 0;
+    virtual void free(void *ptr) = 0;
+};
+
+struct CAllocator : Allocator {
+    void *alloc(usize size, [[maybe_unused]] Location location = Location::current()) { return ::malloc(size); }
+    void *realloc(void *ptr, usize size, [[maybe_unused]] Location location = Location::current()) { return ::realloc(ptr, size); }
+    void free(void *ptr) { ::free(ptr); }
+};
+
+namespace mem {
+template <typename T> T *create(Allocator &gpa, Location location = Location::current()) { return (T *)gpa.alloc(sizeof(T), location); }
+template <typename T> Slice<T> alloc(Allocator &gpa, usize len, Location location = Location::current()) {
+    return {.rawptr = (T *)gpa.alloc(sizeof(T) * len, location), .len = len};
+}
+template <typename T> Slice<T> realloc(Allocator &gpa, Slice<T> old, usize len, Location location = Location::current()) {
+    return {.rawptr = (T *)gpa.realloc(old.rawptr, sizeof(T) * len, location), .len = len};
+}
+template <typename T> void free(Allocator &gpa, Slice<T> slice) { return gpa.free(slice.rawptr); }
+
+} // namespace mem
+
+template <typename T> struct DynamicArray {
+    Slice<T> data{};
+    usize len = 0;
+    usize capacity = 0;
+
+    T &operator[](usize i) {
+        assert(i < len);
+        return data[i];
+    }
+    const T &operator[](usize i) const {
+        assert(i < len);
+        return data[i];
+    }
+
+    T *begin() { return data.rawptr; }
+    T *end() { return data.rawptr + len; }
+
+    usize add(Allocator &gpa, const T &value, Location location = Location::current()) {
+        if (len == capacity) {
+            capacity = capacity == 0 ? 2 : capacity * 2;
+            data = mem::realloc<T>(gpa, data, capacity, location);
+        }
+        auto index = len;
+        data[index] = value;
+        len++;
+        return index;
+    }
+
+    T &last() {
+        assert(len > 0);
+        return data[len - 1];
+    }
+
+    void clear() { len = 0; }
+
+    void deinit(Allocator &gpa) { mem::free(gpa, data); }
+
+    template <typename F> void sort(F compar) {
+        for (usize i = 1; i < len; i++) {
+            T key = data[i];
+            auto j = (isize)i - 1;
+            while (j >= 0 and compar(data[j], key)) {
+                data[j + 1] = data[j];
+                j--;
+            }
+            data[j + 1] = key;
+        }
+    }
+};
+
+struct DebugAllocator : Allocator {
+    struct Record {
+        Location location;
+        void *ptr;
+        bool free;
+    };
+
+    Allocator &child_allocator;
+    DynamicArray<Record> records;
+
+    DebugAllocator(Allocator &child_allocator) : child_allocator(child_allocator) {};
+    ~DebugAllocator() {
+        for (auto record : records) {
+            if (record.free == false) {
+                printf("%s:%zu: allocation here\n", record.location.file, record.location.line);
+            }
+        }
+        records.deinit(child_allocator);
+    }
+
+    void *alloc(usize size, Location location = Location::current()) {
+        auto ptr = child_allocator.alloc(size, location);
+        records.add(child_allocator, {location, ptr, false});
+        return ptr;
+    }
+
+    void *realloc(void *ptr, usize size, Location location = Location::current()) {
+        auto new_ptr = child_allocator.realloc(ptr, size, location);
+        if (new_ptr != ptr) {
+            for (auto &record : records) {
+                if (record.ptr == ptr) {
+                    record.free = true;
+                }
+            }
+            records.add(child_allocator, {location, new_ptr, false});
+        } else {
+            for (auto &record : records) {
+                if (record.ptr == ptr) {
+                    record.location = location;
+                }
+            }
+        }
+        return new_ptr;
+    }
+
+    void free(void *ptr) {
+        for (auto &record : records) {
+            if (record.ptr == ptr) {
+                record.free = true;
+            }
+        }
+        return child_allocator.free(ptr);
+    }
+};
+
 namespace OS {
 /// Caller owns the memory
-Slice<u8> readEntireFile(const String &name);
+Slice<u8> readEntireFile(Allocator &gpa, const String &name, Location location = Location::current());
 } // namespace OS
+
+inline usize FNV1aHash(String string) {
+    constexpr usize fnv_prime = 1099511628211ull;
+    constexpr usize fnv_offset_basis = 14695981039346656037ull;
+    usize hash = fnv_offset_basis;
+    for (auto c : string) {
+        hash = hash xor (usize)c;
+        hash = hash * fnv_prime;
+    }
+    return hash;
+}
+
+struct CSV {
+    Slice<u8> buffer;
+    bool header = false;
+    usize position = 0;
+
+    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current()) : header(header) { buffer = OS::readEntireFile(gpa, name, location); }
+    void deinit(Allocator &gpa) { mem::free(gpa, buffer); }
+
+    // please deinit dynamic array
+    Optional<DynamicArray<String>> readline(Allocator &gpa) {
+        if (position >= buffer.len) {
+            return {};
+        }
+
+        DynamicArray<String> result;
+
+        for (usize start = position; position < buffer.len; position++) {
+            auto c = buffer[position];
+            if (c == ',' or c == '\n') {
+                result.add(gpa, {buffer.slice(start, position)});
+                start = position + 1;
+                if (c == '\n') {
+                    position++;
+                    break;
+                }
+            }
+        }
+
+        return {result};
+    }
+};

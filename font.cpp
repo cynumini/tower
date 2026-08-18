@@ -1,7 +1,7 @@
 #include "font.hpp"
 
-Font::Font(Renderer &renderer, const String &font_filename, const String &texture_filename, u8 font_size) {
-    auto font_data = OS::readEntireFile(font_filename);
+Font::Font(Allocator &gpa, Renderer &renderer, const String &font_filename, const String &texture_filename, u8 font_size) {
+    auto font_data = OS::readEntireFile(gpa, font_filename);
 
     for (auto &element : data) {
         element = font_size;
@@ -26,7 +26,7 @@ Font::Font(Renderer &renderer, const String &font_filename, const String &textur
         data[usize(character)] = width;
     }
 
-    font_data.deinit();
+    mem::free(gpa, font_data);
     texture_id = renderer.loadTexture(texture_filename);
 }
 

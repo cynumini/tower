@@ -30,7 +30,7 @@ struct Engine {
 
 enum class GameResult { ongoing, success, failure };
 
-GameResult gameInit(Engine *engine);
+GameResult gameInit(Allocator &gpa, Engine &engine);
 GameResult gameUpdate();
 void gameDraw();
 void gameQuit();

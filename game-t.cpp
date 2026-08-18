@@ -2,10 +2,10 @@
 
 static Renderer *renderer;
 
-GameResult gameInit(Engine *engine) {
+GameResult gameInit([[maybe_unused]]Allocator &gpa, Engine &engine) {
     using enum GameResult;
 
-    renderer = engine->renderer;
+    renderer = engine.renderer;
 
     return ongoing;
 }
@@ -15,8 +15,8 @@ GameResult gameUpdate() {
     return ongoing;
 }
 void gameDraw() {
-    renderer->drawPlane({-1, -1, 0}, {1, -1, 0}, {1, 1, 1}, {-1, 1, 1}, BLUE);
-    renderer->drawPlane({-1, -1, 1}, {1, -1, 1}, {1, 1, 0}, {-1, 1, 0}, RED);
+    renderer->drawPlane({-1, -1, 0}, {1, -1, 0}, {1, 1, 0}, {-1, 1, 0}, BLUE);
+    //renderer->drawPlane({-1, -1, -2}, {1, -1, -2}, {1, 1, -2}, {-1, 1, -2}, RED);
     // xrenderer->drawPlane({-1, -1, 12}, {1, -1, 12}, {1, 1, 1}, {-1, 1, 12} , BLUE);
 
     ImGui::Text("Hello, world %d", 123);

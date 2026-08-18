@@ -29,7 +29,7 @@ void todo(const char *string, usize line, const char *message) {
 }
 
 namespace OS {
-Slice<u8> readEntireFile(const String &name) {
+Slice<u8> readEntireFile(Allocator &gpa, const String &name, Location location) {
     auto stream = fopen(name.c_str, "r");
     assert(stream != nullptr);
     assert(fseek(stream, 0, SEEK_END) == 0);
@@ -37,9 +37,10 @@ Slice<u8> readEntireFile(const String &name) {
     assert(position != -1);
     auto n = (usize)position;
     assert(fseek(stream, 0, SEEK_SET) == 0);
-    auto data = new u8[n];
-    assert(fread(data, sizeof(u8), n, stream) == n);
+    auto data = mem::alloc<u8>(gpa, n, location);
+    assert(fread(data.rawptr, sizeof(u8), n, stream) == n);
     assert(fclose(stream) == 0);
-    return {data, n};
+    return data;
 }
 } // namespace OS
+
