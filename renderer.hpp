@@ -71,11 +71,16 @@ struct Renderer {
     Matrix4 base_model_view;
     Matrix4 base_model_view3d = Matrix4::identity();
 
-    static constexpr usize MAX_VERTICES_3D = 16;
+    static constexpr usize MAX_VERTICES_3D = 1 << 12;
     FixedArray<Vertex3D, MAX_VERTICES_3D> vertices3d;
 
     Vector3 camera_position = {0, 0, 0};
+    Vector3 camera_forward = {0, 0, 0};
+    f32 yaw = 0;
+    f32 pitch = 0;
+    f32 roll = 0;
     Vector2 screen;
+    f32 aspect_ratio;
 
     Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale_factor);
 
@@ -180,5 +185,22 @@ struct Renderer {
         drawTriangle3D(v1, v3, v4, color);
     }
 
-    void updateCamera(Vector2 screen_size);
+    void drawCube(Vector3 position) {
+        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, RED); // front
+        drawPlane({-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, GREEN); // back
+        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, BLUE); // bottom
+        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, CYAN); // top
+        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, MAGENTA); // left
+        drawPlane({0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, YELLOW); // right
+    }
+
+    void resize(Vector2 screen_size);
+
+    void setCameraForward(f32 pitch, f32 yaw);
 };

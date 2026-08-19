@@ -18,6 +18,8 @@ Vector2 Rectangle::overlapSize(const Rectangle &other) const {
     return {};
 }
 
+Vector3::Vector3(Vector4 v)  : x(v.x), y(v.y), z(v.z) {    }
+
 void unreachable(const char *string, usize line) {
     printf("%s:%zu: unreachable\n", string, line);
     abort();

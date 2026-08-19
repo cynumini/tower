@@ -70,7 +70,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SD
     case SDL_EVENT_WINDOW_RESIZED: {
         f32 width = (f32)event->window.data1;
         f32 height = (f32)event->window.data2;
-        engine.renderer->updateCamera({width, height});
+        engine.renderer->resize({width, height});
         f32 x_offset = 0, y_offset = 0;
         auto aspect_ratio = width / height;
         if (16.0 / 9.0 > aspect_ratio) {
@@ -99,13 +99,13 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *app_state) {
     if (engine.should_close)
         return SDL_APP_SUCCESS;
 
-    auto result = AppResultFromGameResult(gameUpdate());
+    auto result = AppResultFromGameResult(gameUpdate(engine));
     if (result != SDL_APP_CONTINUE) {
         return result;
     }
     engine.renderer->frameBegin();
 
-    gameDraw();
+    gameDraw(*engine.renderer);
     engine.renderer->frameEnd();
     engine.pressed = {};
     engine.pressed_repeat = {};

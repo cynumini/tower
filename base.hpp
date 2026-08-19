@@ -28,6 +28,7 @@ struct Vector2 {
     Vector2 operator+(Vector2 other) const { return {x + other.x, y + other.y}; }
     Vector2 operator-(Vector2 other) const { return {x - other.x, y - other.y}; }
     Vector2 operator*(f32 n) const { return {x * n, y * n}; }
+    Vector2 operator/(f32 n) const { return {x / n, y / n}; }
 
     void operator+=(Vector2 other) { x += other.x, y += other.y; }
     void operator/=(f32 value) { x /= value, y /= value; }
@@ -35,11 +36,38 @@ struct Vector2 {
     Vector2 normalize() const;
 };
 
+struct Vector4;
+
 struct Vector3 {
     f32 x = 0;
     f32 y = 0;
     f32 z = 0;
+
+    Vector3() = default;
+    Vector3(f32 x, f32 y, f32 z) : x(x), y(y), z(z) {}
+    Vector3(Vector4 v);
+
+    Vector3 operator*(f32 n) const { return {x * n, y * n, z * n}; }
+
+    void operator+=(Vector3 other) { x += other.x, y += other.y, z += other.z; }
 };
+
+struct Vector4 {
+    f32 x = 0;
+    f32 y = 0;
+    f32 z = 0;
+    f32 w = 0;
+
+    Vector4() {}
+    Vector4(f32 x, f32 y, f32 z, f32 w) : x(x), y(y), z(z), w(w) {}
+    Vector4(Vector2 v, f32 z, f32 w) : x(v.x), y(v.y), z(z), w(w) {}
+    Vector4(Vector3 v, f32 w) : x(v.x), y(v.y), z(v.z), w(w) {}
+
+    constexpr f32 &operator[](usize i) { return (&x)[i]; }
+    constexpr const f32 &operator[](usize i) const { return (&x)[i]; }
+};
+
+static inline f32 degToRad(f32 deg) { return f32(f64(deg) * M_PI / 180.0); }
 
 struct Rectangle {
     f32 x = 0;
@@ -96,9 +124,43 @@ struct Matrix4 {
         f32 rl = right - left;
         f32 tb = top - bottom;
         f32 fn = far - near;
-        auto m1 = Matrix4::scaling(2.f / rl, 2.f / tb, 2.f / fn);
-        auto m2 = Matrix4::translation(-((right + left) / rl), -((top + bottom) / tb), -((far + near) / fn));
+        auto m1 = Matrix4::scaling(2.f / rl, 2.f / tb, 1 / fn);
+        auto m2 = Matrix4::translation(-((right + left) / rl), -((top + bottom) / tb), -(near / fn));
         return m2 * m1;
+    }
+
+    constexpr static Matrix4 rotate(Vector3 axis, f32 angle) {
+        auto result = Matrix4::identity();
+
+        f32 x = axis.x, y = axis.y, z = axis.z;
+
+        f32 length_squared = x * x + y * y + z * z;
+
+        if ((length_squared != 1.0f) and (length_squared != 0.0f)) {
+            f32 ilength = 1.0f / sqrtf(length_squared);
+            x *= ilength;
+            y *= ilength;
+            z *= ilength;
+        }
+
+        auto rad = degToRad(angle);
+        f32 sin_result = sinf(rad);
+        f32 cos_result = cosf(rad);
+        f32 t = 1.0f - cos_result;
+
+        result[0][0] = x * x * t + cos_result;
+        result[0][1] = y * x * t + z * sin_result;
+        result[0][2] = z * x * t - y * sin_result;
+
+        result[1][0] = x * y * t - z * sin_result;
+        result[1][1] = y * y * t + cos_result;
+        result[1][2] = z * y * t + x * sin_result;
+
+        result[2][0] = x * z * t + y * sin_result;
+        result[2][1] = y * z * t - x * sin_result;
+        result[2][2] = z * z * t + cos_result;
+
+        return result;
     }
 
     constexpr f32 (&operator[](usize i))[4] { return v[i]; }
@@ -113,6 +175,18 @@ struct Matrix4 {
                 }
             }
         }
+        return result;
+    }
+
+    constexpr Vector4 operator*(const Vector4 &other) const {
+        Vector4 result{};
+
+        for (usize row = 0; row < 4; row++) {
+            for (usize col = 0; col < 4; col++) {
+                result[row] += v[col][row] * other[col];
+            }
+        }
+
         return result;
     }
 
@@ -147,8 +221,12 @@ struct Color {
 constexpr Color BLACK = {0, 0, 0, 1};
 constexpr Color WHITE = {1, 1, 1, 1};
 constexpr Color GRAY = {0.5, 0.5, 0.5, 1};
+
 constexpr Color RED = {1, 0, 0, 1};
+constexpr Color YELLOW = {1, 1, 0, 1};
+constexpr Color MAGENTA = {1, 0, 1, 1};
 constexpr Color GREEN = {0, 1, 0, 1};
+constexpr Color CYAN = {0, 1, 1, 1};
 constexpr Color BLUE = {0, 0, 1, 1};
 
 template <typename T, usize N> struct Array {
@@ -431,7 +509,7 @@ inline usize FNV1aHash(String string) {
     constexpr usize fnv_offset_basis = 14695981039346656037ull;
     usize hash = fnv_offset_basis;
     for (auto c : string) {
-        hash = hash xor (usize)c;
+        hash = hash xor (usize) c;
         hash = hash * fnv_prime;
     }
     return hash;
@@ -442,7 +520,9 @@ struct CSV {
     bool header = false;
     usize position = 0;
 
-    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current()) : header(header) { buffer = OS::readEntireFile(gpa, name, location); }
+    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current()) : header(header) {
+        buffer = OS::readEntireFile(gpa, name, location);
+    }
     void deinit(Allocator &gpa) { mem::free(gpa, buffer); }
 
     // please deinit dynamic array

@@ -34,10 +34,10 @@ GameResult gameInit(Allocator &gpa, [[maybe_unused]] Engine &engine) {
     String a("Good?");
     return GameResult::success;
 }
-GameResult gameUpdate() {
+GameResult gameUpdate(Engine &engine) {
     using enum GameResult;
 
     return ongoing;
 }
-void gameDraw() {}
+void gameDraw(Renderer &renderer) {};
 void gameQuit() {}

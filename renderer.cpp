@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
-static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const String &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0, u32 num_samplers = 0) {
+static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const String &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0,
+                                 u32 num_samplers = 0) {
     auto data = OS::readEntireFile(gpa, filename);
     SDL_GPUShaderCreateInfo create_info{};
     create_info.code_size = data.len;
@@ -141,7 +142,7 @@ Renderer::Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale
     init_info.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
     ImGui_ImplSDLGPU3_Init(&init_info);
 
-    updateCamera(screen);
+    resize(screen);
 
     pipeline2d = createPipeline2D(gpa, device, swapchain_texture_format);
     pipeline3d = createPipeline3D(gpa, device, swapchain_texture_format);
@@ -295,7 +296,9 @@ static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer, SDL_G
     binding.buffer = self.vertex3d_buffer;
     SDL_BindGPUVertexBuffers(render_pass, 0, &binding, 1);
 
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &self.base_model_view3d, sizeof(Matrix4));
+    auto final = self.base_model_view3d  * Matrix4::translation(-self.camera_position.x, -self.camera_position.y, -self.camera_position.z) * Matrix4::rotate({1, 0, 0}, -self.pitch) * Matrix4::rotate({0, 1, 0}, -self.yaw) * Matrix4::rotate({0, 0, 1}, -self.roll);
+
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
 
     // SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
     // texture_sampler_bindings.sampler = self.sampler;
@@ -397,9 +400,13 @@ static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTextur
     return SDL_CreateGPUTexture(device, &createinfo);
 }
 
-void Renderer::updateCamera(Vector2 screen_size) {
-    f32 aspect_ratio = screen_size.x / screen_size.y;
-    base_model_view3d = Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -10, 10);
-    base_model_view3d = base_model_view3d * Matrix4::translation(0, 0, 100);
+void Renderer::resize(Vector2 screen_size) {
+    screen = screen_size;
     depth_texture = recreateDepthTexture(device, depth_texture, screen_size);
+    aspect_ratio = screen_size.x / screen_size.y;
+    base_model_view3d = Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -100, 100);
+}
+
+void Renderer::setCameraForward(f32 pitch, f32 yaw) {
+    
 }
