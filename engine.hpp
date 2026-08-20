@@ -82,7 +82,7 @@ struct Engine {
 
 enum class GameResult { ongoing, success, failure };
 
-GameResult gameInit(Allocator &gpa, Engine &engine);
-GameResult gameUpdate(Engine &engine);
+GameResult gameInit(Allocator &gpa, Engine &engine, Renderer &renderer);
+GameResult gameUpdate(Engine &engine, Renderer &renderer);
 void gameDraw(Renderer &renderer);
 void gameQuit();

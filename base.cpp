@@ -32,7 +32,7 @@ void todo(const char *string, usize line, const char *message) {
 
 namespace OS {
 Slice<u8> readEntireFile(Allocator &gpa, const String &name, Location location) {
-    auto stream = fopen(name.c_str, "r");
+    auto stream = fopen(name.c_str.rawptr, "r");
     assert(stream != nullptr);
     assert(fseek(stream, 0, SEEK_END) == 0);
     auto position = ftell(stream);

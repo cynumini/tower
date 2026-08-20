@@ -296,7 +296,13 @@ static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer, SDL_G
     binding.buffer = self.vertex3d_buffer;
     SDL_BindGPUVertexBuffers(render_pass, 0, &binding, 1);
 
-    auto final = self.base_model_view3d  * Matrix4::translation(-self.camera_position.x, -self.camera_position.y, -self.camera_position.z) * Matrix4::rotate({1, 0, 0}, -self.pitch) * Matrix4::rotate({0, 1, 0}, -self.yaw) * Matrix4::rotate({0, 0, 1}, -self.roll);
+    self.view = Matrix4::translation(-self.camera_position.x,
+                                     -self.camera_position.y,
+                                     -self.camera_position.z)
+              * Matrix4::rotateXYZ({-self.camera_pitch, self.camera_yaw, self.camera_roll});
+
+    auto final = self.base_model_view3d * self.view;
+
 
     SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
 
@@ -405,8 +411,4 @@ void Renderer::resize(Vector2 screen_size) {
     depth_texture = recreateDepthTexture(device, depth_texture, screen_size);
     aspect_ratio = screen_size.x / screen_size.y;
     base_model_view3d = Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -100, 100);
-}
-
-void Renderer::setCameraForward(f32 pitch, f32 yaw) {
-    
 }

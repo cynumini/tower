@@ -25,6 +25,7 @@ struct Vector2 {
     f32 y = 0;
 
     Vector2 operator*(Vector2 other) const { return {x * other.x, y * other.y}; }
+    Vector2 operator/(Vector2 other) const { return {x / other.x, y / other.y}; }
     Vector2 operator+(Vector2 other) const { return {x + other.x, y + other.y}; }
     Vector2 operator-(Vector2 other) const { return {x - other.x, y - other.y}; }
     Vector2 operator*(f32 n) const { return {x * n, y * n}; }
@@ -68,6 +69,7 @@ struct Vector4 {
 };
 
 static inline f32 degToRad(f32 deg) { return f32(f64(deg) * M_PI / 180.0); }
+static inline f32 radToDeg(f32 rad) { return f32(f64(rad) / M_PI * 180.0); }
 
 struct Rectangle {
     f32 x = 0;
@@ -77,17 +79,23 @@ struct Rectangle {
 
     Rectangle() {}
     Rectangle(f32 x, f32 y, f32 w, f32 h) : x(x), y(y), w(w), h(h) {}
-    Rectangle(Vector2 position, Vector2 size) : x(position.x), y(position.y), w(size.x), h(size.y) {}
+    Rectangle(Vector2 position, Vector2 size)
+        : x(position.x), y(position.y), w(size.x), h(size.y) {}
     Rectangle operator+(Vector2 other) { return {x += other.x, y += other.y, w, h}; }
 
-    Rectangle scale(Vector2 other) const { return {x * other.x, y * other.y, w * other.x, h * other.y}; }
+    Rectangle scale(Vector2 other) const {
+        return {x * other.x, y * other.y, w * other.x, h * other.y};
+    }
     Vector2 center() const { return {x + w / 2, y + h / 2}; }
     Vector2 position() const { return {x, y}; };
     Vector2 size() const { return {w, h}; };
     f32 x_max() const { return x + w; }
     f32 y_max() const { return y + h; }
 
-    bool checkCollision(const Rectangle &other) const { return (x < other.x_max() and x_max() > other.x) and (y < other.y_max() and y_max() > other.y); }
+    bool checkCollision(const Rectangle &other) const {
+        return (x < other.x_max() and x_max() > other.x) and
+               (y < other.y_max() and y_max() > other.y);
+    }
 
     Vector2 overlapSize(const Rectangle &other) const;
 };
@@ -120,13 +128,22 @@ struct Matrix4 {
         return m;
     }
 
-    constexpr static Matrix4 orthographic(f32 left, f32 right, f32 bottom, f32 top, f32 near, f32 far) {
+    constexpr static Matrix4 orthographic(f32 left, f32 right, f32 bottom, f32 top, f32 near,
+                                          f32 far) {
         f32 rl = right - left;
         f32 tb = top - bottom;
         f32 fn = far - near;
         auto m1 = Matrix4::scaling(2.f / rl, 2.f / tb, 1 / fn);
-        auto m2 = Matrix4::translation(-((right + left) / rl), -((top + bottom) / tb), -(near / fn));
+        auto m2 =
+            Matrix4::translation(-((right + left) / rl), -((top + bottom) / tb), -(near / fn));
         return m2 * m1;
+    }
+
+    constexpr static Vector4 orthographicUnproject(Vector4 ndc, f32 left, f32 right, f32 bottom,
+                                                   f32 top, f32 near, f32 far) {
+        return {(ndc.x * (right - left) + (right + left)) * 0.5f,
+                (ndc.y * (top - bottom) + (top + bottom)) * 0.5f, ndc.z * (far - near) + near,
+                1.0f};
     }
 
     constexpr static Matrix4 rotate(Vector3 axis, f32 angle) {
@@ -143,9 +160,8 @@ struct Matrix4 {
             z *= ilength;
         }
 
-        auto rad = degToRad(angle);
-        f32 sin_result = sinf(rad);
-        f32 cos_result = cosf(rad);
+        f32 sin_result = sinf(angle);
+        f32 cos_result = cosf(angle);
         f32 t = 1.0f - cos_result;
 
         result[0][0] = x * x * t + cos_result;
@@ -159,6 +175,56 @@ struct Matrix4 {
         result[2][0] = x * z * t + y * sin_result;
         result[2][1] = y * z * t - x * sin_result;
         result[2][2] = z * z * t + cos_result;
+
+        return result;
+    }
+
+    static Matrix4 rotateXYZ(Vector3 angle) {
+        auto result = Matrix4::identity();
+
+        f32 cos_z = cosf(-angle.z);
+        f32 sin_z = sinf(-angle.z);
+        f32 cos_y = cosf(-angle.y);
+        f32 sin_y = sinf(-angle.y);
+        f32 cos_x = cosf(-angle.x);
+        f32 sin_x = sinf(-angle.x);
+
+        result[0][0] = cos_z * cos_y;
+        result[0][1] = (cos_z * sin_y * sin_x) - (sin_z * cos_x);
+        result[0][2] = (cos_z * sin_y * cos_x) + (sin_z * sin_x);
+
+        result[1][0] = sin_z * cos_y;
+        result[1][1] = (sin_z * sin_y * sin_x) + (cos_z * cos_x);
+        result[1][2] = (sin_z * sin_y * cos_x) - (cos_z * sin_x);
+
+        result[2][0] = -sin_y;
+        result[2][1] = cos_y * sin_x;
+        result[2][2] = cos_y * cos_x;
+
+        return result;
+    }
+
+    static Matrix4 rotateZYX(Vector3 angle) {
+        auto result = Matrix4::identity();
+
+        f32 cos_z = cosf(angle.z);
+        f32 sin_z = sinf(angle.z);
+        f32 cos_y = cosf(angle.y);
+        f32 sin_y = sinf(angle.y);
+        f32 cos_x = cosf(angle.x);
+        f32 sin_x = sinf(angle.x);
+
+        result[0][0] = cos_z * cos_y;
+        result[0][1] = cos_y * sin_z;
+        result[0][2] = -sin_y;
+
+        result[1][0] = (cos_z * sin_y * sin_x) - (cos_x * sin_z);
+        result[1][1] = (sin_z * sin_y * sin_x) + (cos_z * cos_x);
+        result[1][2] = cos_y * sin_x;
+
+        result[2][0] = (cos_z * cos_x * sin_y) + (sin_z * sin_x);
+        result[2][1] = (cos_x * sin_z * sin_y) - (cos_z * sin_x);
+        result[2][2] = cos_y * cos_x;
 
         return result;
     }
@@ -304,8 +370,11 @@ template <typename T, usize N> struct IndexedArray {
 };
 
 template <typename T> struct Slice {
-    T *rawptr;
-    usize len;
+    T *rawptr = nullptr;
+    usize len = 0;
+
+    Slice() {}
+    Slice(T *rawptr, usize len) : rawptr(rawptr), len(len) {}
 
     T &operator[](usize i) {
         assert(i < len);
@@ -322,19 +391,95 @@ template <typename T> struct Slice {
     Slice slice(usize start, usize end) { return {rawptr + start, end - start}; }
 };
 
+struct Location {
+    const char *file;
+    usize line;
+
+    static Location current(const char *file = __builtin_FILE(), usize line = __builtin_LINE()) {
+        return {file, line};
+    }
+};
+
+struct Allocator {
+    virtual void *alloc(usize size, Location location = {}) = 0;
+    virtual void *realloc(void *ptr, usize size, Location location = {}) = 0;
+    virtual void free(void *ptr) = 0;
+};
+
+namespace mem {
+template <typename T> T *create(Allocator &gpa, Location location = Location::current()) {
+    return (T *)gpa.alloc(sizeof(T), location);
+}
+template <typename T>
+Slice<T> alloc(Allocator &gpa, usize len, Location location = Location::current()) {
+    return {(T *)gpa.alloc(sizeof(T) * len, location), len};
+}
+template <typename T>
+Slice<T> realloc(Allocator &gpa, Slice<T> old, usize len, Location location = Location::current()) {
+    return {(T *)gpa.realloc(old.rawptr, sizeof(T) * len, location), len};
+}
+template <typename T> void free(Allocator &gpa, Slice<T> slice) { return gpa.free((void *)slice.rawptr); }
+
+} // namespace mem
+
 struct String {
-    const char *c_str;
-    usize len = 0;
+    // TODO: consider use slice
+    Slice<const char> c_str{};
 
-    String(const char *c_str, usize len) : c_str(c_str), len(len) {}
-    template <size_t N> String(const char (&c_str)[N]) : c_str(c_str), len(N - 1) {}
+    String() {};
+    String(Slice<u8> slice) : c_str((char *)slice.rawptr, slice.len) {}
+    String(Slice<const char> slice) : c_str(slice) {}
+    String(Slice<char> slice) : c_str(slice.rawptr, slice.len) {}
+    String(const char *c_str, usize len) : c_str({c_str, len}) {}
     static String fromCStr(const char *str) { return {str, strlen(str)}; }
+    template <size_t N> String(const char (&c_str)[N]) : c_str(c_str, N - 1) {}
 
-    String(Slice<u8> slice) : c_str((char *)slice.rawptr), len(slice.len) {}
+    bool operator==(String other) const { return strcmp(c_str.rawptr, other.c_str.rawptr) == 0; }
 
-    const char *begin() const { return c_str; }
+    const char *begin() const { return c_str.rawptr; }
+    const char *end() const { return c_str.rawptr + c_str.len; }
 
-    const char *end() const { return c_str + len; }
+    template <typename T> T parseNumber() {
+        f64 result = 0.0f;
+        f64 fraction = 0.1f;
+        bool decimal = false;
+        bool negative = false;
+
+        for (usize i = 0; i < this->c_str.len; i++) {
+            auto c = c_str[i];
+
+            if (c == '-') {
+                negative = true;
+                continue;
+            }
+
+            if (c == '.') {
+                decimal = true;
+                continue;
+            }
+
+            assert(c >= '0' and c <= '9');
+
+            f64 digit = (f64)(c - '0');
+
+            if (!decimal) {
+                result += result * 10 + digit;
+            } else {
+                result += digit * fraction;
+                fraction *= 0.1;
+            }
+        }
+
+        return (T)(negative ? -result : result);
+    }
+
+    String dupe(Allocator &gpa, Location location = Location::current()) {
+        auto data = mem::alloc<char>(gpa, c_str.len, location);
+        memcpy(data.rawptr, c_str.rawptr, c_str.len);
+        return data;
+    }
+
+    void deinit(Allocator &gpa) { mem::free(gpa, c_str); }
 };
 
 template <typename T> struct Optional {
@@ -345,12 +490,12 @@ template <typename T> struct Optional {
     Optional(T payload) : has_value(true), payload(payload) {}
 };
 
-#define SDL_ENSURE(check, message)                                                                                                                             \
-    do {                                                                                                                                                       \
-        if (!(check)) {                                                                                                                                        \
-            SDL_Log("Couldn't %s: %s", (message), SDL_GetError());                                                                                             \
-            abort();                                                                                                                                           \
-        }                                                                                                                                                      \
+#define SDL_ENSURE(check, message)                                                                 \
+    do {                                                                                           \
+        if (!(check)) {                                                                            \
+            SDL_Log("Couldn't %s: %s", (message), SDL_GetError());                                 \
+            abort();                                                                               \
+        }                                                                                          \
     } while (false)
 
 [[noreturn]]
@@ -363,36 +508,15 @@ void todo(const char *string, usize line, const char *message);
 
 #define TODO(message) todo(__FILE__, __LINE__, message)
 
-struct Location {
-    const char *file;
-    usize line;
-
-    static Location current(const char *file = __builtin_FILE(), usize line = __builtin_LINE()) { return {file, line}; }
-};
-
-struct Allocator {
-    virtual void *alloc(usize size, Location location = {}) = 0;
-    virtual void *realloc(void *ptr, usize size, Location location = {}) = 0;
-    virtual void free(void *ptr) = 0;
-};
-
 struct CAllocator : Allocator {
-    void *alloc(usize size, [[maybe_unused]] Location location = Location::current()) { return ::malloc(size); }
-    void *realloc(void *ptr, usize size, [[maybe_unused]] Location location = Location::current()) { return ::realloc(ptr, size); }
+    void *alloc(usize size, [[maybe_unused]] Location location = Location::current()) {
+        return ::malloc(size);
+    }
+    void *realloc(void *ptr, usize size, [[maybe_unused]] Location location = Location::current()) {
+        return ::realloc(ptr, size);
+    }
     void free(void *ptr) { ::free(ptr); }
 };
-
-namespace mem {
-template <typename T> T *create(Allocator &gpa, Location location = Location::current()) { return (T *)gpa.alloc(sizeof(T), location); }
-template <typename T> Slice<T> alloc(Allocator &gpa, usize len, Location location = Location::current()) {
-    return {.rawptr = (T *)gpa.alloc(sizeof(T) * len, location), .len = len};
-}
-template <typename T> Slice<T> realloc(Allocator &gpa, Slice<T> old, usize len, Location location = Location::current()) {
-    return {.rawptr = (T *)gpa.realloc(old.rawptr, sizeof(T) * len, location), .len = len};
-}
-template <typename T> void free(Allocator &gpa, Slice<T> slice) { return gpa.free(slice.rawptr); }
-
-} // namespace mem
 
 template <typename T> struct DynamicArray {
     Slice<T> data{};
@@ -501,10 +625,11 @@ struct DebugAllocator : Allocator {
 
 namespace OS {
 /// Caller owns the memory
-Slice<u8> readEntireFile(Allocator &gpa, const String &name, Location location = Location::current());
+Slice<u8> readEntireFile(Allocator &gpa, const String &name,
+                         Location location = Location::current());
 } // namespace OS
 
-inline usize FNV1aHash(String string) {
+inline usize FNV1aHash(const String &string) {
     constexpr usize fnv_prime = 1099511628211ull;
     constexpr usize fnv_offset_basis = 14695981039346656037ull;
     usize hash = fnv_offset_basis;
@@ -515,25 +640,75 @@ inline usize FNV1aHash(String string) {
     return hash;
 }
 
+template <typename T, usize N> struct HashMap {
+    struct Item {
+        String key;
+        T value;
+    };
+
+    Item data[N]{};
+    bool used[N]{};
+
+    // T &operator[](usize i) {
+    //     assert(i > 0);
+    //     return data[i];
+    // }
+
+    // const T &operator[](usize i) const {
+    //     assert(i > 0);
+    //     return data[i];
+    // }
+
+    // return true on update
+    bool put(const String &key, const T &value) {
+        auto hash = FNV1aHash(key) % N;
+        for (auto i = hash; i < N; i++) {
+            if (used[i]) {
+                if (data[i].key == key) {
+                    data[i].value = value;
+                    // update
+                    return true;
+                }
+            } else {
+                data[i] = {key, value};
+                used[i] = true;
+                // add
+                return false;
+            }
+        }
+        UNREACHABLE();
+    }
+};
+
 struct CSV {
     Slice<u8> buffer;
     bool header = false;
     usize position = 0;
 
-    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current()) : header(header) {
+    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current())
+        : header(header) {
         buffer = OS::readEntireFile(gpa, name, location);
     }
     void deinit(Allocator &gpa) { mem::free(gpa, buffer); }
 
     // please deinit dynamic array
     Optional<DynamicArray<String>> readline(Allocator &gpa) {
+        if (header) {
+            while (buffer[position] != '\n' and position < buffer.len) {
+                position += 1;
+            }
+            position += 1;
+            header = false;
+        }
+
         if (position >= buffer.len) {
             return {};
         }
 
         DynamicArray<String> result;
 
-        for (usize start = position; position < buffer.len; position++) {
+        usize start = position;
+        while (position < buffer.len) {
             auto c = buffer[position];
             if (c == ',' or c == '\n') {
                 result.add(gpa, {buffer.slice(start, position)});
@@ -543,6 +718,11 @@ struct CSV {
                     break;
                 }
             }
+            position++;
+        }
+
+        if (position == buffer.len and start < position) {
+            result.add(gpa, {buffer.slice(start, position)});
         }
 
         return {result};

@@ -40,7 +40,7 @@ SDL_AppResult SDL_AppInit(void **, [[maybe_unused]] int argc, [[maybe_unused]] c
     engine.renderer = mem::create<Renderer>(*gpa);
     new (engine.renderer)  Renderer(*gpa, engine.window, SCREEN, scale_factor);
 
-    return AppResultFromGameResult(gameInit(*gpa, engine));
+    return AppResultFromGameResult(gameInit(*gpa, engine, *engine.renderer));
 }
 
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SDL_Event *event) {
@@ -99,7 +99,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *app_state) {
     if (engine.should_close)
         return SDL_APP_SUCCESS;
 
-    auto result = AppResultFromGameResult(gameUpdate(engine));
+    auto result = AppResultFromGameResult(gameUpdate(engine, *engine.renderer));
     if (result != SDL_APP_CONTINUE) {
         return result;
     }

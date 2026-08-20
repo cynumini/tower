@@ -76,9 +76,11 @@ struct Renderer {
 
     Vector3 camera_position = {0, 0, 0};
     Vector3 camera_forward = {0, 0, 0};
-    f32 yaw = 0;
-    f32 pitch = 0;
-    f32 roll = 0;
+    Matrix4 view;
+    f32 camera_pitch = 0;
+    f32 camera_yaw = 0;
+
+    f32 camera_roll = 0;
     Vector2 screen;
     f32 aspect_ratio;
 
@@ -129,7 +131,7 @@ struct Renderer {
         {
             auto copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
-            texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str, &texture.width, &texture.height);
+            texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str.rawptr, &texture.width, &texture.height);
             SDL_ENSURE(texture.texture, "load gpu texture");
 
             SDL_EndGPUCopyPass(copy_pass);
@@ -202,5 +204,5 @@ struct Renderer {
 
     void resize(Vector2 screen_size);
 
-    void setCameraForward(f32 pitch, f32 yaw);
+    void updateView(Vector3 camera_position, f32 yaw, f32 pitch);
 };
