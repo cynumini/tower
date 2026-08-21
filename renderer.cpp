@@ -229,7 +229,7 @@ static SDL_GPUGraphicsPipeline *createPipeline3DLine(Allocator &gpa, SDL_GPUDevi
 
 Renderer::Renderer(Allocator &gpa, SDL_Window *window, glm::vec2 screen, f32 scale_factor)
     : window(window) {
-    base_model_view = Matrix4::orthographic(0, screen.x, screen.y, 0, 0, 1);
+    base_model_view = glm::ortho(0.f, screen.x, screen.y, 0.f);
 
     device =
         SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
@@ -455,13 +455,17 @@ static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
     binding.buffer = self.vertex3d_buffer;
     SDL_BindGPUVertexBuffers(render_pass, 0, &binding, 1);
 
-    self.view = Matrix4::rotateXYZ({-self.camera_pitch, -self.camera_yaw, self.camera_roll}) *
-                Matrix4::translation(-self.camera_position.x, -self.camera_position.y,
-                                     -self.camera_position.z);
+    glm::mat4 rotation(1.0f);
+
+    rotation = glm::rotate(rotation, -self.camera_pitch, glm::vec3(1, 0, 0));
+    rotation = glm::rotate(rotation, -self.camera_yaw, glm::vec3(0, 1, 0));
+    rotation = glm::rotate(rotation, self.camera_roll, glm::vec3(0, 0, 1));
+
+    self.view = rotation * glm::translate(glm::mat4(1.0f), -self.camera_position);
 
     auto final = self.projection * self.view;
 
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(glm::mat4));
 
     // SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
     // texture_sampler_bindings.sampler = self.sampler;
@@ -484,7 +488,7 @@ static void render3DLine(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
 
     auto final = self.projection * self.view;
 
-    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(glm::mat4));
 
     // SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
     // texture_sampler_bindings.sampler = self.sampler;
@@ -509,7 +513,7 @@ static void render2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
 
     u32 start = 0;
     for (auto batch : self.batches) {
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &batch.model_view, sizeof(Matrix4));
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &batch.model_view, sizeof(glm::mat4));
         SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
         if (batch.texture_id > 0) {
             texture_sampler_bindings.texture = self.textures[batch.texture_id].texture;
@@ -596,13 +600,12 @@ static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTextur
 void Renderer::updateProjection() {
     switch (projection_kind) {
     case Projection::perspective: {
-        projection = Matrix4::perspective(degToRad(45), aspect_ratio, 0.1f, 1000.0f);
+        projection = glm::perspective(glm::radians(45.0f), aspect_ratio, 0.1f, 1000.0f);
         break;
     }
     case Projection::orthographic: {
         projection =
-            Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -100, 100);
-        break;
+            glm::ortho(-10.0f * aspect_ratio, 10.0f * aspect_ratio, -10.0f, 10.0f, -100.0f, 100.0f);
     }
     }
 }

@@ -87,8 +87,9 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SD
             height *= scale;
             x_offset = (width - SCREEN.x) / 2;
         }
-        engine.renderer->base_model_view = Matrix4::orthographic(0, width, height, 0, 0, 1) *
-                                           Matrix4::translation(x_offset, y_offset, 0);
+        engine.renderer->base_model_view =
+            glm::ortho(0.f, width, height, 0.f) *
+            glm::translate(glm::mat4(1.f), {x_offset, y_offset, 0.f});
         break;
     }
     }

@@ -1,6 +1,6 @@
 #include "engine.hpp"
 
-Vector3 cursor_in_world = {0, 0, 0};
+glm::vec3 cursor_in_world = {0, 0, 0};
 
 constexpr u8 MAP_SIZE = 10;
 u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE]{};
@@ -36,27 +36,27 @@ GameResult gameInit(Allocator &gpa, [[maybe_unused]] Engine &engine, Renderer &r
     renderer.camera_position.x = -10;
     renderer.camera_position.y = 10;
     renderer.camera_position.z = -10;
-    renderer.camera_pitch = degToRad(30);
-    renderer.camera_yaw = degToRad(45);
+    renderer.camera_pitch = glm::radians(30.f);
+    renderer.camera_yaw = glm::radians(45.f);
     loadMap(gpa);
 
     return GameResult::ongoing;
 }
 
 GameResult gameUpdate(Allocator &gpa, Engine &engine, Renderer &renderer) {
-    // f32 camera_speed = engine.dt * 25;
+    f32 camera_speed = engine.dt * 25;
 
-    // f32 pitch_velocity = engine.isKeyDown(Key::num1) - engine.isKeyDown(Key::num2);
-    // f32 yaw_velocity = engine.isKeyDown(Key::num3) - engine.isKeyDown(Key::num4);
-    // f32 roll_velocity = engine.isKeyDown(Key::num5) - engine.isKeyDown(Key::num6);
-    // renderer.camera_pitch += degToRad(pitch_velocity * camera_speed);
-    // renderer.camera_yaw += degToRad(yaw_velocity * camera_speed);
-    // renderer.camera_roll += degToRad(roll_velocity * camera_speed);
+    f32 pitch_velocity = engine.isKeyDown(Key::num1) - engine.isKeyDown(Key::num2);
+    f32 yaw_velocity = engine.isKeyDown(Key::num3) - engine.isKeyDown(Key::num4);
+    f32 roll_velocity = engine.isKeyDown(Key::num5) - engine.isKeyDown(Key::num6);
+    renderer.camera_pitch += glm::radians(pitch_velocity * camera_speed);
+    renderer.camera_yaw += glm::radians(yaw_velocity * camera_speed);
+    renderer.camera_roll += glm::radians(roll_velocity * camera_speed);
 
-    // Vector3 camera_velocity = {f32(engine.isKeyDown(Key::right) - engine.isKeyDown(Key::left)),
-    //                            f32(engine.isKeyDown(Key::up) - engine.isKeyDown(Key::down)),
-    //                            f32(engine.isKeyDown(Key::w) - engine.isKeyDown(Key::s))};
-    // renderer.camera_position += camera_velocity * camera_speed;
+    glm::vec3 camera_velocity = {f32(engine.isKeyDown(Key::right) - engine.isKeyDown(Key::left)),
+                                 f32(engine.isKeyDown(Key::up) - engine.isKeyDown(Key::down)),
+                                 f32(engine.isKeyDown(Key::w) - engine.isKeyDown(Key::s))};
+    renderer.camera_position += camera_velocity * camera_speed;
 
     // auto screen_center = renderer.screen / 2.0f;
     // auto mouse_ndc = (engine.getMousePosition() - screen_center) / screen_center;
@@ -139,8 +139,8 @@ void gameDraw(Renderer &renderer) {
         using namespace ImGui;
         Text("Camera position x = %f, y = %f, z = %f", renderer.camera_position.x,
              renderer.camera_position.y, renderer.camera_position.z);
-        Text("Camera rotation pitch = %f, yaw = %f, roll = %f", radToDeg(renderer.camera_pitch),
-             radToDeg(renderer.camera_yaw), radToDeg(renderer.camera_roll));
+        Text("Camera rotation pitch = %f, yaw = %f, roll = %f", glm::degrees(renderer.camera_pitch),
+             glm::degrees(renderer.camera_yaw), glm::degrees(renderer.camera_roll));
         Text("Cursor x = %f, y = %f, z = %f", cursor_in_world.x, cursor_in_world.y,
              cursor_in_world.z);
         Text("Screen x = %f, y = %f", renderer.screen.x, renderer.screen.y);

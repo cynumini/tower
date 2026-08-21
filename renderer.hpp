@@ -24,7 +24,7 @@ struct Vertex2D {
 };
 
 struct Vertex3D {
-    Vector3 position;
+    glm::vec3 position;
     Color color;
 };
 
@@ -43,7 +43,7 @@ struct Instance {
 struct Batch {
     u32 end;
     Texture::Id texture_id;
-    Matrix4 model_view;
+    glm::mat4 model_view;
 };
 
 enum class Projection {
@@ -75,16 +75,16 @@ struct Renderer {
 
     FixedArray<Batch, MAX_INSTANCES> batches;
 
-    Matrix4 base_model_view;
-    Matrix4 projection = Matrix4::identity();
+    glm::mat4 base_model_view;
+    glm::mat4 projection = glm::mat4(1.0f);
 
     static constexpr usize MAX_VERTICES_3D = 2 << 10;
     FixedArray<Vertex3D, MAX_VERTICES_3D> vertices3d;
     static constexpr usize MAX_VERTICES_3D_LINE = 2;
     FixedArray<Vertex3D, MAX_VERTICES_3D_LINE> vertices3d_line;
 
-    Vector3 camera_position = {0, 0, 0};
-    Matrix4 view;
+    glm::vec3 camera_position = {0, 0, 0};
+    glm::mat4 view;
     f32 camera_pitch = 0;
     f32 camera_yaw = 0;
     f32 camera_roll = 0;
@@ -155,7 +155,7 @@ struct Renderer {
         return textures.add(texture);
     };
 
-    void draw(const Instance &instance, Texture::Id texture_id, Matrix4 model_view) {
+    void draw(const Instance &instance, Texture::Id texture_id, glm::mat4 model_view) {
         instances.add(instance);
         if (batches.len == 0) {
             batches.add({1, texture_id, model_view});
@@ -177,11 +177,11 @@ struct Renderer {
         }
     }
 
-    void drawRectangle(const Rectangle &dest, const Matrix4 &model_view, const Color &color) {
+    void drawRectangle(const Rectangle &dest, const glm::mat4 &model_view, const Color &color) {
         draw({.position = dest.position(), .size = dest.size(), .color = color}, 0, model_view);
     }
 
-    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, Matrix4 model_view,
+    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, glm::mat4 model_view,
                      Color color = WHITE) {
         Rectangle uv = source;
         uv.x /= (f32)textures[texture_id].width;
@@ -196,18 +196,18 @@ struct Renderer {
              texture_id, model_view);
     }
 
-    void drawTriangle3D(Vector3 v1, Vector3 v2, Vector3 v3, Color color) {
+    void drawTriangle3D(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, Color color) {
         vertices3d.add({v1, color});
         vertices3d.add({v2, color});
         vertices3d.add({v3, color});
     }
 
-    void drawPlane(Vector3 v1, Vector3 v2, Vector3 v3, Vector3 v4, Color color) {
+    void drawPlane(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, glm::vec3 v4, Color color) {
         drawTriangle3D(v1, v2, v3, color);
         drawTriangle3D(v1, v3, v4, color);
     }
 
-    void drawCube(Vector3 position) {
+    void drawCube(glm::vec3 position) {
         drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
                   {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
                   {0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
@@ -234,7 +234,7 @@ struct Renderer {
                   {0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, YELLOW); // right
     }
 
-    void drawLine(Vector3 start, Vector3 end) {
+    void drawLine(glm::vec3 start, glm::vec3 end) {
         vertices3d_line.add({start, RED});
         vertices3d_line.add({end, BLUE});
     }
