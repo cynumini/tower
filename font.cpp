@@ -30,7 +30,7 @@ Font::Font(Allocator &gpa, Renderer &renderer, const String &font_filename, cons
     texture_id = renderer.loadTexture(texture_filename);
 }
 
-void Font::drawText(Renderer &renderer, Vector2 position, f32 size, const String &string) {
+void Font::drawText(Renderer &renderer, glm::vec2 position, f32 size, const String &string) {
     constexpr f32 font_height = 10;
     f32 scale = size / font_height;
     f32 space = 1 * scale;
@@ -42,7 +42,7 @@ void Font::drawText(Renderer &renderer, Vector2 position, f32 size, const String
         f32 width = font_width * scale;
         int x = c % 16;
         int y = (c - 0x20) / 16;
-        Vector2 char_position{.x = f32(x) * font_height, .y = f32(y) * font_height};
+        glm::vec2 char_position(f32(x) * font_height, f32(y) * font_height);
         renderer.drawTexture(texture_id, {char_position.x, char_position.y, font_width, font_height}, {offset, position.y, width, height},
                              renderer.base_model_view);
         offset += width + space;

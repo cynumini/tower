@@ -1,15 +1,6 @@
 #include "base.hpp"
 
-Vector2 Vector2::normalize() const {
-    Vector2 result = {x, y};
-    f32 length = sqrtf(x * x + y * y);
-    if (length != 0) {
-        result /= length;
-    }
-    return result;
-}
-
-Vector2 Rectangle::overlapSize(const Rectangle &other) const {
+glm::vec2 Rectangle::overlapSize(const Rectangle &other) const {
     auto dx = fmin(x_max(), other.x_max()) - fmax(x, other.x);
     auto dy = fmin(y_max(), other.y_max()) - fmax(y, other.y);
     if (dx >= 0 and dy >= 0) {

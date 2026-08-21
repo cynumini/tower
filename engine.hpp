@@ -4,7 +4,7 @@
 
 #include "renderer.hpp"
 
-constexpr Vector2 SCREEN = {640, 360};
+constexpr glm::vec2 SCREEN = {640, 360};
 
 enum class Key : usize {
     a = 4,
@@ -44,11 +44,34 @@ enum class Key : usize {
     num8 = 37,
     num9 = 38,
     num0 = 39,
-    
+
+    escape = 41,
+    space = 44,
+
+    enter = 40,
+
+    f1 = 58,
+    f2 = 59,
+    f3 = 60,
+    f4 = 61,
+    f5 = 62,
+    f6 = 63,
+    f7 = 64,
+    f8 = 65,
+    f9 = 66,
+    f10 = 67,
+    f11 = 68,
+    f12 = 69,
+
+    del = 76,
+
     right = 79,
     left = 80,
     down = 81,
     up = 82,
+
+    lshift = 225,
+
 };
 
 struct Engine {
@@ -68,13 +91,11 @@ struct Engine {
 
     char text[256];
 
-    bool isKeyDown(Key key) {
-        return keyboard_state[static_cast<usize>(key)];
-    }
-    bool isKeyPressed(SDL_Scancode key) { return pressed[key]; }
+    bool isKeyDown(Key key) { return keyboard_state[static_cast<usize>(key)]; }
+    bool isKeyPressed(Key key) { return pressed[static_cast<usize>(key)]; }
     bool isKeyPressedRepeat(SDL_Scancode key) { return pressed_repeat[key]; }
-    Vector2 getMousePosition() {
-        Vector2 result;
+    glm::vec2 getMousePosition() {
+        glm::vec2 result;
         SDL_GetMouseState(&result.x, &result.y);
         return result;
     }
@@ -83,6 +104,6 @@ struct Engine {
 enum class GameResult { ongoing, success, failure };
 
 GameResult gameInit(Allocator &gpa, Engine &engine, Renderer &renderer);
-GameResult gameUpdate(Engine &engine, Renderer &renderer);
+GameResult gameUpdate(Allocator &gpa, Engine &engine, Renderer &renderer);
 void gameDraw(Renderer &renderer);
 void gameQuit();

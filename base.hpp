@@ -6,6 +6,9 @@
 
 #include <SDL3/SDL.h>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include <glm/glm.hpp>
+
 using f32 = float;
 using f64 = double;
 using s16 = int16_t;
@@ -20,23 +23,6 @@ using isize = ssize_t;
 static_assert(sizeof(f32) == 4);
 static_assert(sizeof(f64) == 8);
 
-struct Vector2 {
-    f32 x = 0;
-    f32 y = 0;
-
-    Vector2 operator*(Vector2 other) const { return {x * other.x, y * other.y}; }
-    Vector2 operator/(Vector2 other) const { return {x / other.x, y / other.y}; }
-    Vector2 operator+(Vector2 other) const { return {x + other.x, y + other.y}; }
-    Vector2 operator-(Vector2 other) const { return {x - other.x, y - other.y}; }
-    Vector2 operator*(f32 n) const { return {x * n, y * n}; }
-    Vector2 operator/(f32 n) const { return {x / n, y / n}; }
-
-    void operator+=(Vector2 other) { x += other.x, y += other.y; }
-    void operator/=(f32 value) { x /= value, y /= value; }
-
-    Vector2 normalize() const;
-};
-
 struct Vector4;
 
 struct Vector3 {
@@ -49,6 +35,7 @@ struct Vector3 {
     Vector3(Vector4 v);
 
     Vector3 operator*(f32 n) const { return {x * n, y * n, z * n}; }
+    Vector3 operator+(Vector3 other) const { return {x + other.x, y + other.y, z + other.z}; }
 
     void operator+=(Vector3 other) { x += other.x, y += other.y, z += other.z; }
 };
@@ -61,7 +48,7 @@ struct Vector4 {
 
     Vector4() {}
     Vector4(f32 x, f32 y, f32 z, f32 w) : x(x), y(y), z(z), w(w) {}
-    Vector4(Vector2 v, f32 z, f32 w) : x(v.x), y(v.y), z(z), w(w) {}
+    Vector4(glm::vec2 v, f32 z, f32 w) : x(v.x), y(v.y), z(z), w(w) {}
     Vector4(Vector3 v, f32 w) : x(v.x), y(v.y), z(v.z), w(w) {}
 
     constexpr f32 &operator[](usize i) { return (&x)[i]; }
@@ -79,16 +66,16 @@ struct Rectangle {
 
     Rectangle() {}
     Rectangle(f32 x, f32 y, f32 w, f32 h) : x(x), y(y), w(w), h(h) {}
-    Rectangle(Vector2 position, Vector2 size)
+    Rectangle(glm::vec2 position, glm::vec2 size)
         : x(position.x), y(position.y), w(size.x), h(size.y) {}
-    Rectangle operator+(Vector2 other) { return {x += other.x, y += other.y, w, h}; }
+    Rectangle operator+(glm::vec2 other) { return {x += other.x, y += other.y, w, h}; }
 
-    Rectangle scale(Vector2 other) const {
+    Rectangle scale(glm::vec2 other) const {
         return {x * other.x, y * other.y, w * other.x, h * other.y};
     }
-    Vector2 center() const { return {x + w / 2, y + h / 2}; }
-    Vector2 position() const { return {x, y}; };
-    Vector2 size() const { return {w, h}; };
+    glm::vec2 center() const { return {x + w / 2, y + h / 2}; }
+    glm::vec2 position() const { return {x, y}; };
+    glm::vec2 size() const { return {w, h}; };
     f32 x_max() const { return x + w; }
     f32 y_max() const { return y + h; }
 
@@ -97,7 +84,7 @@ struct Rectangle {
                (y < other.y_max() and y_max() > other.y);
     }
 
-    Vector2 overlapSize(const Rectangle &other) const;
+    glm::vec2 overlapSize(const Rectangle &other) const;
 };
 
 struct Matrix4 {
@@ -137,6 +124,33 @@ struct Matrix4 {
         auto m2 =
             Matrix4::translation(-((right + left) / rl), -((top + bottom) / tb), -(near / fn));
         return m2 * m1;
+    }
+
+    constexpr static Matrix4 perspective(f32 fov_y, f32 aspect, f32 near_plane, f32 far_plane) {
+        Matrix4 result = {};
+
+        f32 top = near_plane * tanf(fov_y * 0.5f);
+        f32 bottom = -top;
+        f32 right = top * aspect;
+        f32 left = -right;
+
+        // MatrixFrustum(-right, right, -top, top, near, far);
+        f32 rl = right - left;
+        f32 tb = top - bottom;
+        f32 fn = far_plane - near_plane;
+
+        result[0][0] = (near_plane * 2.0f) / rl;
+        result[1][1] = (near_plane * 2.0f) / tb;
+
+        result[2][0] = (right + left) / rl;
+        result[2][1] = (top + bottom) / tb;
+
+        result[2][2] = far_plane / fn;
+        result[2][3] = 1.0f;
+
+        result[3][2] = -(far_plane * near_plane) / fn;
+
+        return result;
     }
 
     constexpr static Vector4 orthographicUnproject(Vector4 ndc, f32 left, f32 right, f32 bottom,
@@ -275,6 +289,7 @@ struct Matrix4 {
         }
         printf("\n");
     }
+
 };
 
 struct Color {
@@ -418,12 +433,14 @@ template <typename T>
 Slice<T> realloc(Allocator &gpa, Slice<T> old, usize len, Location location = Location::current()) {
     return {(T *)gpa.realloc(old.rawptr, sizeof(T) * len, location), len};
 }
-template <typename T> void free(Allocator &gpa, Slice<T> slice) { return gpa.free((void *)slice.rawptr); }
+template <typename T> void free(Allocator &gpa, Slice<T> slice) {
+    return gpa.free((void *)slice.rawptr);
+}
 
 } // namespace mem
 
 struct String {
-    // TODO: consider use slice
+    // TODO: rename to data
     Slice<const char> c_str{};
 
     String() {};

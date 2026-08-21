@@ -3,6 +3,7 @@ project(tower)
 
 add_subdirectory(vendor/SDL)
 add_subdirectory(vendor/SDL_image)
+add_subdirectory(vendor/glm)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -21,6 +22,7 @@ add_executable(tower-a main.cpp game-a.cpp base.cpp renderer.cpp font.cpp)
 target_link_libraries(tower-a PRIVATE SDL3::SDL3)
 target_link_libraries(tower-a PRIVATE SDL3_image::SDL3_image)
 target_link_libraries(tower-a PRIVATE imgui)
+target_link_libraries(tower-a PRIVATE glm::glm)
 target_compile_features(tower-a PRIVATE cxx_std_23)
 target_compile_options(tower-a PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 
@@ -28,6 +30,7 @@ add_executable(tower-t main.cpp game-t.cpp base.cpp renderer.cpp font.cpp)
 target_link_libraries(tower-t PRIVATE SDL3::SDL3)
 target_link_libraries(tower-t PRIVATE SDL3_image::SDL3_image)
 target_link_libraries(tower-t PRIVATE imgui)
+target_link_libraries(tower-t PRIVATE glm::glm)
 target_compile_features(tower-t PRIVATE cxx_std_23)
 target_compile_options(tower-t PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 

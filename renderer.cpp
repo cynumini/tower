@@ -1,6 +1,7 @@
 #include "renderer.hpp"
 
-static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const String &filename, SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0,
+static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const String &filename,
+                                 SDL_GPUShaderStage stage, u32 num_uniform_buffers = 0,
                                  u32 num_samplers = 0) {
     auto data = OS::readEntireFile(gpa, filename);
     SDL_GPUShaderCreateInfo create_info{};
@@ -16,25 +17,55 @@ static SDL_GPUShader *loadShader(Allocator &gpa, SDL_GPUDevice *device, const St
     return shader;
 };
 
-static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
+static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *device,
+                                                 SDL_GPUTextureFormat texture_format) {
     SDL_GPUGraphicsPipelineCreateInfo createinfo{};
 
-    createinfo.vertex_shader = loadShader(gpa, device, "./build/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1);
-    createinfo.fragment_shader = loadShader(gpa, device, "./build/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
+    createinfo.vertex_shader =
+        loadShader(gpa, device, "./build/shader.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1);
+    createinfo.fragment_shader =
+        loadShader(gpa, device, "./build/shader.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
 
     SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-        {.slot = 0, .pitch = sizeof(Vertex2D), .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0},
-        {.slot = 1, .pitch = sizeof(Instance), .input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE, .instance_step_rate = 0},
+        {.slot = 0,
+         .pitch = sizeof(Vertex2D),
+         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+         .instance_step_rate = 0},
+        {.slot = 1,
+         .pitch = sizeof(Instance),
+         .input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE,
+         .instance_step_rate = 0},
     };
 
     SDL_GPUVertexAttribute vertex_attributes[] = {
-        {.location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Vertex2D, position)},
-        {.location = 1, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, position)},
-        {.location = 2, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, size)},
-        {.location = 3, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv)},
-        {.location = 4, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, .offset = offsetof(Instance, uv) + sizeof(Vector2)},
-        {.location = 5, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = offsetof(Instance, color)},
-        {.location = 6, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT, .offset = offsetof(Instance, flags)},
+        {.location = 0,
+         .buffer_slot = 0,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Vertex2D, position)},
+        {.location = 1,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Instance, position)},
+        {.location = 2,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Instance, size)},
+        {.location = 3,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Instance, uv)},
+        {.location = 4,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Instance, uv) + sizeof(glm::vec2)},
+        {.location = 5,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+         .offset = offsetof(Instance, color)},
+        {.location = 6,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT,
+         .offset = offsetof(Instance, flags)},
     };
 
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
@@ -47,11 +78,13 @@ static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *
     color_target_descriptions.blend_state.enable_blend = true;
 
     color_target_descriptions.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    color_target_descriptions.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.dst_color_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_target_descriptions.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
 
     color_target_descriptions.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    color_target_descriptions.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.dst_alpha_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_target_descriptions.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     createinfo.target_info.color_target_descriptions = &color_target_descriptions;
@@ -64,19 +97,31 @@ static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *
     return pipeline;
 }
 
-static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *device, SDL_GPUTextureFormat texture_format) {
+static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *device,
+                                                 SDL_GPUTextureFormat texture_format) {
     SDL_GPUGraphicsPipelineCreateInfo createinfo{};
 
-    createinfo.vertex_shader = loadShader(gpa, device, "./build/shader3d.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
-    createinfo.fragment_shader = loadShader(gpa, device, "./build/shader3d.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+    createinfo.vertex_shader =
+        loadShader(gpa, device, "./build/shader3d.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
+    createinfo.fragment_shader =
+        loadShader(gpa, device, "./build/shader3d.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
 
     SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-        {.slot = 0, .pitch = sizeof(Vertex3D), .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0},
+        {.slot = 0,
+         .pitch = sizeof(Vertex3D),
+         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+         .instance_step_rate = 0},
     };
 
     SDL_GPUVertexAttribute vertex_attributes[] = {
-        {.location = 0, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, .offset = offsetof(Vertex3D, position)},
-        {.location = 1, .buffer_slot = 0, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = offsetof(Vertex3D, color)},
+        {.location = 0,
+         .buffer_slot = 0,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+         .offset = offsetof(Vertex3D, position)},
+        {.location = 1,
+         .buffer_slot = 0,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+         .offset = offsetof(Vertex3D, color)},
     };
 
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
@@ -89,11 +134,13 @@ static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *
     color_target_descriptions.blend_state.enable_blend = true;
 
     color_target_descriptions.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
-    color_target_descriptions.blend_state.dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.dst_color_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_target_descriptions.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
 
     color_target_descriptions.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
-    color_target_descriptions.blend_state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.dst_alpha_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
     color_target_descriptions.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
 
     createinfo.depth_stencil_state.enable_depth_test = true;
@@ -106,6 +153,8 @@ static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *
     createinfo.target_info.has_depth_stencil_target = true;
     createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
 
+    createinfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+
     auto pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
     SDL_ENSURE(pipeline, "create gpu graphics pipeline");
     SDL_ReleaseGPUShader(device, createinfo.vertex_shader);
@@ -113,13 +162,82 @@ static SDL_GPUGraphicsPipeline *createPipeline3D(Allocator &gpa, SDL_GPUDevice *
     return pipeline;
 }
 
-Renderer::Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale_factor) : window(window) {
+static SDL_GPUGraphicsPipeline *createPipeline3DLine(Allocator &gpa, SDL_GPUDevice *device,
+                                                     SDL_GPUTextureFormat texture_format) {
+    SDL_GPUGraphicsPipelineCreateInfo createinfo{};
+
+    createinfo.vertex_shader =
+        loadShader(gpa, device, "./build/shader3d.spv.vert", SDL_GPU_SHADERSTAGE_VERTEX, 1, 0);
+    createinfo.fragment_shader =
+        loadShader(gpa, device, "./build/shader3d.spv.frag", SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 0);
+
+    SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
+        {.slot = 0,
+         .pitch = sizeof(Vertex3D),
+         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+         .instance_step_rate = 0},
+    };
+
+    SDL_GPUVertexAttribute vertex_attributes[] = {
+        {.location = 0,
+         .buffer_slot = 0,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+         .offset = offsetof(Vertex3D, position)},
+        {.location = 1,
+         .buffer_slot = 0,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+         .offset = offsetof(Vertex3D, color)},
+    };
+
+    createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
+    createinfo.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
+    createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
+    createinfo.vertex_input_state.num_vertex_attributes = SDL_arraysize(vertex_attributes);
+
+    SDL_GPUColorTargetDescription color_target_descriptions{};
+    color_target_descriptions.format = texture_format;
+    color_target_descriptions.blend_state.enable_blend = true;
+
+    color_target_descriptions.blend_state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
+    color_target_descriptions.blend_state.dst_color_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.color_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    color_target_descriptions.blend_state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
+    color_target_descriptions.blend_state.dst_alpha_blendfactor =
+        SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
+    color_target_descriptions.blend_state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+
+    createinfo.depth_stencil_state.enable_depth_test = true;
+    createinfo.depth_stencil_state.enable_depth_write = true;
+    createinfo.depth_stencil_state.compare_op = SDL_GPU_COMPAREOP_LESS;
+
+    createinfo.target_info.color_target_descriptions = &color_target_descriptions;
+    createinfo.target_info.num_color_targets = 1;
+
+    createinfo.target_info.has_depth_stencil_target = true;
+    createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D24_UNORM;
+
+    createinfo.primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST;
+
+    auto pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
+    SDL_ENSURE(pipeline, "create gpu graphics pipeline");
+    SDL_ReleaseGPUShader(device, createinfo.vertex_shader);
+    SDL_ReleaseGPUShader(device, createinfo.fragment_shader);
+    return pipeline;
+}
+
+Renderer::Renderer(Allocator &gpa, SDL_Window *window, glm::vec2 screen, f32 scale_factor)
+    : window(window) {
     base_model_view = Matrix4::orthographic(0, screen.x, screen.y, 0, 0, 1);
 
-    device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
+    device =
+        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
     SDL_ENSURE(device, "create gpu device");
     SDL_ENSURE(SDL_ClaimWindowForGPUDevice(device, window), "claim window for gpu device");
-    SDL_ENSURE(SDL_SetGPUSwapchainParameters(device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC), "set gpu swapchain parameters");
+    SDL_ENSURE(SDL_SetGPUSwapchainParameters(device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                             SDL_GPU_PRESENTMODE_VSYNC),
+               "set gpu swapchain parameters");
 
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -146,6 +264,7 @@ Renderer::Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale
 
     pipeline2d = createPipeline2D(gpa, device, swapchain_texture_format);
     pipeline3d = createPipeline3D(gpa, device, swapchain_texture_format);
+    pipeline3d_line = createPipeline3DLine(gpa, device, swapchain_texture_format);
 
     {
         SDL_GPUSamplerCreateInfo createinfo{};
@@ -174,6 +293,10 @@ Renderer::Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale
         createinfo.size = sizeof(Vertex3D) * MAX_VERTICES_3D;
         vertex3d_buffer = SDL_CreateGPUBuffer(device, &createinfo);
         SDL_ENSURE(vertex3d_buffer, "create vertex 3d buffer");
+
+        createinfo.size = sizeof(Vertex3D) * MAX_VERTICES_3D_LINE;
+        vertex3d_line_buffer = SDL_CreateGPUBuffer(device, &createinfo);
+        SDL_ENSURE(vertex3d_buffer, "create vertex 3d line buffer");
 
         createinfo.size = sizeof(Instance) * MAX_INSTANCES;
         instance_buffer = SDL_CreateGPUBuffer(device, &createinfo);
@@ -257,6 +380,40 @@ static void upload3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
     SDL_ReleaseGPUTransferBuffer(self.device, transfer_buffer);
 }
 
+static void upload3DLine(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
+    if (self.vertices3d_line.len == 0) {
+        return;
+    }
+
+    auto n = self.vertices3d_line.len * sizeof(Vertex3D);
+
+    SDL_GPUTransferBufferCreateInfo createinfo{};
+    createinfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    createinfo.size = (u32)n;
+
+    auto transfer_buffer = SDL_CreateGPUTransferBuffer(self.device, &createinfo);
+    {
+        auto transfer_memory = (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
+        memcpy(transfer_memory, self.vertices3d_line.data, n);
+        SDL_UnmapGPUTransferBuffer(self.device, transfer_buffer);
+    }
+
+    auto copy_pass = SDL_BeginGPUCopyPass(command_buffer);
+    {
+        SDL_GPUTransferBufferLocation transfer_buffer_location{};
+        transfer_buffer_location.transfer_buffer = transfer_buffer;
+
+        SDL_GPUBufferRegion buffer_region{};
+        buffer_region.buffer = self.vertex3d_line_buffer;
+        buffer_region.size = (u32)n;
+
+        SDL_UploadToGPUBuffer(copy_pass, &transfer_buffer_location, &buffer_region, true);
+    }
+    SDL_EndGPUCopyPass(copy_pass);
+
+    SDL_ReleaseGPUTransferBuffer(self.device, transfer_buffer);
+}
+
 static void upload2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
     if (self.instances.len > 0) {
         auto n = self.instances.len * sizeof(Instance);
@@ -267,7 +424,8 @@ static void upload2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
 
         auto transfer_buffer = SDL_CreateGPUTransferBuffer(self.device, &createinfo);
         {
-            auto transfer_memory = (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
+            auto transfer_memory =
+                (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
             memcpy(transfer_memory, self.instances.data, n);
             SDL_UnmapGPUTransferBuffer(self.device, transfer_buffer);
         }
@@ -289,20 +447,19 @@ static void upload2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
     }
 }
 
-static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass) {
+static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
+                     SDL_GPURenderPass *render_pass) {
     SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline3d);
 
     SDL_GPUBufferBinding binding{};
     binding.buffer = self.vertex3d_buffer;
     SDL_BindGPUVertexBuffers(render_pass, 0, &binding, 1);
 
-    self.view = Matrix4::translation(-self.camera_position.x,
-                                     -self.camera_position.y,
-                                     -self.camera_position.z)
-              * Matrix4::rotateXYZ({-self.camera_pitch, self.camera_yaw, self.camera_roll});
+    self.view = Matrix4::rotateXYZ({-self.camera_pitch, -self.camera_yaw, self.camera_roll}) *
+                Matrix4::translation(-self.camera_position.x, -self.camera_position.y,
+                                     -self.camera_position.z);
 
-    auto final = self.base_model_view3d * self.view;
-
+    auto final = self.projection * self.view;
 
     SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
 
@@ -313,7 +470,31 @@ static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer, SDL_G
     SDL_DrawGPUPrimitives(render_pass, (u32)self.vertices3d.len, 1, 0, 0);
 }
 
-static void render2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass) {
+static void render3DLine(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
+                         SDL_GPURenderPass *render_pass) {
+    SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline3d_line);
+
+    SDL_GPUBufferBinding binding{};
+    binding.buffer = self.vertex3d_line_buffer;
+    SDL_BindGPUVertexBuffers(render_pass, 0, &binding, 1);
+
+    // self.view = Matrix4::rotateXYZ({-self.camera_pitch, -self.camera_yaw, self.camera_roll}) *
+    //             Matrix4::translation(-self.camera_position.x, -self.camera_position.y,n
+    //                                 -self.camera_position.z);
+
+    auto final = self.projection * self.view;
+
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(Matrix4));
+
+    // SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
+    // texture_sampler_bindings.sampler = self.sampler;
+    // SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_bindings, 1);
+
+    SDL_DrawGPUPrimitives(render_pass, (u32)self.vertices3d_line.len, 1, 0, 0);
+}
+
+static void render2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
+                     SDL_GPURenderPass *render_pass) {
     SDL_BindGPUGraphicsPipeline(render_pass, self.pipeline2d);
 
     SDL_GPUBufferBinding binding{};
@@ -350,11 +531,14 @@ void Renderer::frameEnd() {
     SDL_ENSURE(command_buffer, "acquire gpu command buffer");
 
     SDL_GPUTexture *swapchain_texture;
-    SDL_ENSURE(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture, nullptr, nullptr), "wait and acquire gpu swapchain texture");
+    SDL_ENSURE(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
+                                                     nullptr, nullptr),
+               "wait and acquire gpu swapchain texture");
 
     if (swapchain_texture) {
         upload2D(*this, command_buffer);
         upload3D(*this, command_buffer);
+        upload3DLine(*this, command_buffer);
         ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, command_buffer);
 
         SDL_GPUColorTargetInfo color_target_info{};
@@ -369,9 +553,11 @@ void Renderer::frameEnd() {
         depth_stencil_target_info.store_op = SDL_GPU_STOREOP_DONT_CARE;
         depth_stencil_target_info.clear_depth = 1;
 
-        auto render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, &depth_stencil_target_info);
+        auto render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1,
+                                                  &depth_stencil_target_info);
 
         render3D(*this, command_buffer, render_pass);
+        render3DLine(*this, command_buffer, render_pass);
 
         render2D(*this, command_buffer, render_pass);
 
@@ -389,7 +575,8 @@ void Renderer::frameEnd() {
     SDL_SubmitGPUCommandBuffer(command_buffer);
 }
 
-static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTexture *texture, Vector2 screen) {
+static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTexture *texture,
+                                            glm::vec2 screen) {
     if (texture != nullptr) {
         SDL_ReleaseGPUTexture(device, texture);
     }
@@ -406,9 +593,23 @@ static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTextur
     return SDL_CreateGPUTexture(device, &createinfo);
 }
 
-void Renderer::resize(Vector2 screen_size) {
+void Renderer::updateProjection() {
+    switch (projection_kind) {
+    case Projection::perspective: {
+        projection = Matrix4::perspective(degToRad(45), aspect_ratio, 0.1f, 1000.0f);
+        break;
+    }
+    case Projection::orthographic: {
+        projection =
+            Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -100, 100);
+        break;
+    }
+    }
+}
+
+void Renderer::resize(glm::vec2 screen_size) {
     screen = screen_size;
     depth_texture = recreateDepthTexture(device, depth_texture, screen_size);
     aspect_ratio = screen_size.x / screen_size.y;
-    base_model_view3d = Matrix4::orthographic(-10 * aspect_ratio, 10 * aspect_ratio, -10, 10, -100, 100);
+    updateProjection();
 }

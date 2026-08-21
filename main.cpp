@@ -34,11 +34,13 @@ SDL_AppResult SDL_AppInit(void **, [[maybe_unused]] int argc, [[maybe_unused]] c
     SDL_ENSURE(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMEPAD), "initialize SDL");
     f32 scale_factor = SDL_GetDisplayContentScale(SDL_GetPrimaryDisplay());
     SDL_ENSURE(scale_factor != 0.0f, "get display content scale");
-    engine.window = SDL_CreateWindow("Tower", int(SCREEN.x * scale_factor), int(SCREEN.y * scale_factor), SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
+    engine.window =
+        SDL_CreateWindow("Tower", int(SCREEN.x * scale_factor), int(SCREEN.y * scale_factor),
+                         SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     SDL_ENSURE(engine.window, "create window");
     engine.keyboard_state = SDL_GetKeyboardState(nullptr);
     engine.renderer = mem::create<Renderer>(*gpa);
-    new (engine.renderer)  Renderer(*gpa, engine.window, SCREEN, scale_factor);
+    new (engine.renderer) Renderer(*gpa, engine.window, SCREEN, scale_factor);
 
     return AppResultFromGameResult(gameInit(*gpa, engine, *engine.renderer));
 }
@@ -85,7 +87,8 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SD
             height *= scale;
             x_offset = (width - SCREEN.x) / 2;
         }
-        engine.renderer->base_model_view = Matrix4::orthographic(0, width, height, 0, 0, 1) * Matrix4::translation(x_offset, y_offset, 0);
+        engine.renderer->base_model_view = Matrix4::orthographic(0, width, height, 0, 0, 1) *
+                                           Matrix4::translation(x_offset, y_offset, 0);
         break;
     }
     }
@@ -96,10 +99,9 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *app_state) {
     u64 now = SDL_GetTicks();
     engine.dt = f32(now - engine.previous) / 1000.f;
     engine.previous = now;
-    if (engine.should_close)
-        return SDL_APP_SUCCESS;
+    if (engine.should_close) return SDL_APP_SUCCESS;
 
-    auto result = AppResultFromGameResult(gameUpdate(engine, *engine.renderer));
+    auto result = AppResultFromGameResult(gameUpdate(*gpa, engine, *engine.renderer));
     if (result != SDL_APP_CONTINUE) {
         return result;
     }

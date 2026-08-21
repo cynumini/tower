@@ -20,7 +20,7 @@ struct Texture {
 };
 
 struct Vertex2D {
-    Vector2 position;
+    glm::vec2 position;
 };
 
 struct Vertex3D {
@@ -33,8 +33,8 @@ struct Instance {
         USE_TEXTURE = 1u << 0,
     };
 
-    Vector2 position{};
-    Vector2 size{};
+    glm::vec2 position{};
+    glm::vec2 size{};
     Rectangle uv{};
     Color color = WHITE;
     u32 flags = 0;
@@ -44,6 +44,11 @@ struct Batch {
     u32 end;
     Texture::Id texture_id;
     Matrix4 model_view;
+};
+
+enum class Projection {
+    perspective,
+    orthographic,
 };
 
 struct Renderer {
@@ -57,34 +62,39 @@ struct Renderer {
 
     SDL_GPUGraphicsPipeline *pipeline2d;
     SDL_GPUGraphicsPipeline *pipeline3d;
+    SDL_GPUGraphicsPipeline *pipeline3d_line;
     SDL_GPUTexture *depth_texture = nullptr;
     SDL_GPUSampler *sampler;
     SDL_GPUBuffer *vertex2d_buffer;
     SDL_GPUBuffer *vertex3d_buffer;
     SDL_GPUBuffer *instance_buffer;
     SDL_GPUBuffer *index_buffer;
+    SDL_GPUBuffer *vertex3d_line_buffer;
     FixedArray<Instance, MAX_INSTANCES> instances;
     IndexedArray<Texture, MAX_TEXTURES> textures;
 
     FixedArray<Batch, MAX_INSTANCES> batches;
 
     Matrix4 base_model_view;
-    Matrix4 base_model_view3d = Matrix4::identity();
+    Matrix4 projection = Matrix4::identity();
 
-    static constexpr usize MAX_VERTICES_3D = 1 << 12;
+    static constexpr usize MAX_VERTICES_3D = 2 << 10;
     FixedArray<Vertex3D, MAX_VERTICES_3D> vertices3d;
+    static constexpr usize MAX_VERTICES_3D_LINE = 2;
+    FixedArray<Vertex3D, MAX_VERTICES_3D_LINE> vertices3d_line;
 
     Vector3 camera_position = {0, 0, 0};
-    Vector3 camera_forward = {0, 0, 0};
     Matrix4 view;
     f32 camera_pitch = 0;
     f32 camera_yaw = 0;
-
     f32 camera_roll = 0;
-    Vector2 screen;
+
+    glm::vec2 screen;
     f32 aspect_ratio;
 
-    Renderer(Allocator &gpa, SDL_Window *window, Vector2 screen, f32 scale_factor);
+    Projection projection_kind = Projection::perspective;
+
+    Renderer(Allocator &gpa, SDL_Window *window, glm::vec2 screen, f32 scale_factor);
 
     ~Renderer() {
         SDL_WaitForGPUIdle(device);
@@ -98,11 +108,13 @@ struct Renderer {
         SDL_ReleaseGPUBuffer(device, vertex2d_buffer);
         SDL_ReleaseGPUBuffer(device, vertex3d_buffer);
         SDL_ReleaseGPUBuffer(device, index_buffer);
+        SDL_ReleaseGPUBuffer(device, vertex3d_line_buffer);
 
         SDL_ReleaseGPUSampler(device, sampler);
 
         SDL_ReleaseGPUGraphicsPipeline(device, pipeline2d);
         SDL_ReleaseGPUGraphicsPipeline(device, pipeline3d);
+        SDL_ReleaseGPUGraphicsPipeline(device, pipeline3d_line);
 
         ImGui_ImplSDL3_Shutdown();
         ImGui_ImplSDLGPU3_Shutdown();
@@ -117,6 +129,7 @@ struct Renderer {
         batches.clear();
 
         vertices3d.clear();
+        vertices3d_line.clear();
 
         ImGui_ImplSDLGPU3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
@@ -131,7 +144,8 @@ struct Renderer {
         {
             auto copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
-            texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str.rawptr, &texture.width, &texture.height);
+            texture.texture = IMG_LoadGPUTexture(device, copy_pass, filename.c_str.rawptr,
+                                                 &texture.width, &texture.height);
             SDL_ENSURE(texture.texture, "load gpu texture");
 
             SDL_EndGPUCopyPass(copy_pass);
@@ -167,13 +181,19 @@ struct Renderer {
         draw({.position = dest.position(), .size = dest.size(), .color = color}, 0, model_view);
     }
 
-    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, Matrix4 model_view, Color color = WHITE) {
+    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, Matrix4 model_view,
+                     Color color = WHITE) {
         Rectangle uv = source;
         uv.x /= (f32)textures[texture_id].width;
         uv.y /= (f32)textures[texture_id].height;
         uv.w /= (f32)textures[texture_id].width;
         uv.h /= (f32)textures[texture_id].height;
-        draw({.position = dest.position(), .size = dest.size(), .uv = uv, .color = color, .flags = Instance::USE_TEXTURE}, texture_id, model_view);
+        draw({.position = dest.position(),
+              .size = dest.size(),
+              .uv = uv,
+              .color = color,
+              .flags = Instance::USE_TEXTURE},
+             texture_id, model_view);
     }
 
     void drawTriangle3D(Vector3 v1, Vector3 v2, Vector3 v3, Color color) {
@@ -188,21 +208,39 @@ struct Renderer {
     }
 
     void drawCube(Vector3 position) {
-        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
-                  {0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, RED); // front
-        drawPlane({-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
-                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, GREEN); // back
-        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
-                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, BLUE); // bottom
-        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
-                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, CYAN); // top
-        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
-                  {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, MAGENTA); // left
-        drawPlane({0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, {0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
-                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, {0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, YELLOW); // right
+        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {-0.5f + position.x, 0.5f + position.y, -0.5f + position.z}, RED); // front
+        drawPlane({-0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, GREEN); // back
+        drawPlane({-0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z}, BLUE); // bottom
+        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z}, CYAN); // top
+        drawPlane({-0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {-0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {-0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, MAGENTA); // left
+        drawPlane({0.5f + position.x, 0.5f + position.y, -0.5f + position.z},
+                  {0.5f + position.x, 0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, 0.5f + position.z},
+                  {0.5f + position.x, -0.5f + position.y, -0.5f + position.z}, YELLOW); // right
     }
 
-    void resize(Vector2 screen_size);
+    void drawLine(Vector3 start, Vector3 end) {
+        vertices3d_line.add({start, RED});
+        vertices3d_line.add({end, BLUE});
+    }
 
-    void updateView(Vector3 camera_position, f32 yaw, f32 pitch);
+    void setProjection(Projection kind);
+    void updateProjection();
+
+    void resize(glm::vec2 screen_size);
 };

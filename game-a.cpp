@@ -58,7 +58,8 @@ GameResult gameInit(Allocator &gpa, [[maybe_unused]] Engine &engine,
                         atlas.deinit(gpa);
     return GameResult::success;
 }
-GameResult gameUpdate([[maybe_unused]] Engine &engine, [[maybe_unused]] Renderer &renderer) {
+
+GameResult gameUpdate([[maybe_unused]]Allocator &gpa, [[maybe_unused]] Engine &engine, [[maybe_unused]] Renderer &renderer) {
     using enum GameResult;
 
     return ongoing;
