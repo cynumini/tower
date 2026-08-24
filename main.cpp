@@ -3,7 +3,6 @@
 #include <SDL3/SDL.h>
 #define SDL_MAIN_USE_CALLBACKS
 #include <SDL3/SDL_main.h>
-
 #include <imgui.h>
 
 #include "engine.hpp"
@@ -17,7 +16,7 @@ static SDL_AppResult AppResultFromGameResult(GameResult game_result) {
     case GameResult::failure:
         return SDL_APP_FAILURE;
     }
-    UNREACHABLE();
+    skn::unreachable();
 }
 
 static Engine engine;
@@ -73,23 +72,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *app_state, [[maybe_unused]] SD
         f32 width = (f32)event->window.data1;
         f32 height = (f32)event->window.data2;
         engine.renderer->resize({width, height});
-        f32 x_offset = 0, y_offset = 0;
-        auto aspect_ratio = width / height;
-        if (16.0 / 9.0 > aspect_ratio) {
-            auto scale = SCREEN.x / width;
-            width *= scale;
-            height *= scale;
-            y_offset = (height - SCREEN.y) / 2;
 
-        } else {
-            auto scale = SCREEN.y / height;
-            width *= scale;
-            height *= scale;
-            x_offset = (width - SCREEN.x) / 2;
-        }
-        engine.renderer->base_model_view =
-            glm::ortho(0.f, width, height, 0.f) *
-            glm::translate(glm::mat4(1.f), {x_offset, y_offset, 0.f});
         break;
     }
     }
@@ -117,7 +100,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *app_state) {
 
 void SDL_AppQuit(void *, [[maybe_unused]] SDL_AppResult result) {
 
-    gameQuit();
+    gameQuit(*gpa);
     engine.renderer->~Renderer();
     gpa->free(engine.renderer);
     gpa->DebugAllocator::~DebugAllocator();

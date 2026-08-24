@@ -52,17 +52,21 @@ static SDL_GPUGraphicsPipeline *createPipeline2D(Allocator &gpa, SDL_GPUDevice *
          .offset = offsetof(Instance, size)},
         {.location = 3,
          .buffer_slot = 1,
-         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-         .offset = offsetof(Instance, uv)},
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT,
+         .offset = offsetof(Instance, rotation)},
         {.location = 4,
          .buffer_slot = 1,
          .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-         .offset = offsetof(Instance, uv) + sizeof(glm::vec2)},
+         .offset = offsetof(Instance, uv)},
         {.location = 5,
+         .buffer_slot = 1,
+         .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
+         .offset = offsetof(Instance, uv) + sizeof(glm::vec2)},
+        {.location = 6,
          .buffer_slot = 1,
          .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
          .offset = offsetof(Instance, color)},
-        {.location = 6,
+        {.location = 7,
          .buffer_slot = 1,
          .format = SDL_GPU_VERTEXELEMENTFORMAT_UINT,
          .offset = offsetof(Instance, flags)},
@@ -229,7 +233,7 @@ static SDL_GPUGraphicsPipeline *createPipeline3DLine(Allocator &gpa, SDL_GPUDevi
 
 Renderer::Renderer(Allocator &gpa, SDL_Window *window, glm::vec2 screen, f32 scale_factor)
     : window(window) {
-    base_model_view = glm::ortho(0.f, screen.x, screen.y, 0.f);
+    ubo2d.projection = glm::ortho(0.f, screen.x, screen.y, 0.f);
 
     device =
         SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
@@ -463,7 +467,7 @@ static void render3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
 
     self.view = rotation * glm::translate(glm::mat4(1.0f), -self.camera_position);
 
-    auto final = self.projection * self.view;
+    auto final = self.projection3d * self.view;
 
     SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(glm::mat4));
 
@@ -486,7 +490,7 @@ static void render3DLine(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
     //             Matrix4::translation(-self.camera_position.x, -self.camera_position.y,n
     //                                 -self.camera_position.z);
 
-    auto final = self.projection * self.view;
+    auto final = self.projection3d * self.view;
 
     SDL_PushGPUVertexUniformData(command_buffer, 0, &final, sizeof(glm::mat4));
 
@@ -513,7 +517,7 @@ static void render2D(Renderer &self, SDL_GPUCommandBuffer *command_buffer,
 
     u32 start = 0;
     for (auto batch : self.batches) {
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &batch.model_view, sizeof(glm::mat4));
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &batch.ubo, sizeof(UBO));
         SDL_GPUTextureSamplerBinding texture_sampler_bindings{};
         if (batch.texture_id > 0) {
             texture_sampler_bindings.texture = self.textures[batch.texture_id].texture;
@@ -563,13 +567,13 @@ void Renderer::frameEnd() {
         render3D(*this, command_buffer, render_pass);
         render3DLine(*this, command_buffer, render_pass);
 
-        render2D(*this, command_buffer, render_pass);
-
         SDL_EndGPURenderPass(render_pass);
 
         {
             color_target_info.load_op = SDL_GPU_LOADOP_LOAD;
             render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, nullptr);
+
+            render2D(*this, command_buffer, render_pass);
 
             ImGui_ImplSDLGPU3_RenderDrawData(draw_data, command_buffer, render_pass);
 
@@ -600,11 +604,11 @@ static SDL_GPUTexture *recreateDepthTexture(SDL_GPUDevice *device, SDL_GPUTextur
 void Renderer::updateProjection() {
     switch (projection_kind) {
     case Projection::perspective: {
-        projection = glm::perspective(glm::radians(45.0f), aspect_ratio, 0.1f, 1000.0f);
+        projection3d = glm::perspective(glm::radians(45.0f), aspect_ratio, 0.1f, 1000.0f);
         break;
     }
     case Projection::orthographic: {
-        projection =
+        projection3d =
             glm::ortho(-10.0f * aspect_ratio, 10.0f * aspect_ratio, -10.0f, 10.0f, -100.0f, 100.0f);
     }
     }
@@ -614,5 +618,40 @@ void Renderer::resize(glm::vec2 screen_size) {
     screen = screen_size;
     depth_texture = recreateDepthTexture(device, depth_texture, screen_size);
     aspect_ratio = screen_size.x / screen_size.y;
+
+    f32 x_offset = 0, y_offset = 0;
+    auto width = screen_size.x;
+    auto height = screen_size.y;
+    auto aspect_ratio = width / height;
+    if (16.0 / 9.0 > aspect_ratio) {
+        auto scale = SCREEN.x / width;
+        width *= scale;
+        height *= scale;
+        y_offset = (height - SCREEN.y) / 2;
+
+    } else {
+        auto scale = SCREEN.y / height;
+        width *= scale;
+        height *= scale;
+        x_offset = (width - SCREEN.x) / 2;
+    }
+    ubo2d.projection = glm::ortho(0.f, width, height, 0.f) *
+                       glm::translate(glm::mat4(1.f), {x_offset, y_offset, 0.f});
     updateProjection();
+}
+
+void Renderer::drawSprite(Sprite sprite, glm::vec2 position, bool flip_x, bool flip_y, f32 rotation) {
+    auto texture_rectangle = sprite.rectangle;
+
+    if (flip_x) {
+        texture_rectangle.x += texture_rectangle.w;
+        texture_rectangle.w = -texture_rectangle.w;
+    }
+    if (flip_y) {
+        texture_rectangle.y += texture_rectangle.h;
+        texture_rectangle.h = -texture_rectangle.h;
+    }
+
+    drawTexture(sprite.texture_id, texture_rectangle,
+                {position.x, position.y, sprite.rectangle.w, sprite.rectangle.h}, ubo2d, rotation);
 }

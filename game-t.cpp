@@ -1,12 +1,15 @@
 #include "engine.hpp"
 
+#include "csv.hpp"
+
 glm::vec3 cursor_in_world = {0, 0, 0};
+f32 y = 0;
 
 constexpr u8 MAP_SIZE = 10;
 u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE]{};
 
 void loadMap(Allocator &gpa) {
-    auto csv = CSV(gpa, "level.csv", true);
+    auto csv = CSV::init(gpa, "level.csv", true);
 
     Optional<DynamicArray<String>> row;
     while (true) {
@@ -94,19 +97,40 @@ GameResult gameUpdate(Allocator &gpa, Engine &engine, Renderer &renderer) {
     auto screen_center = renderer.screen / 2.0f;
     auto mouse_ndc = (engine.getMousePosition() - screen_center) / screen_center;
     mouse_ndc.y *= -1;
-    cursor_in_world.x = mouse_ndc.x * 10;
-    cursor_in_world.z = mouse_ndc.y * 10;
-    cursor_in_world.y = 0;
 
-    // cursor_in_world.z += engine.isKeyPressed(Key::up) - engine.isKeyPressed(Key::down);
-    // cursor_in_world.x += engine.isKeyPressed(Key::right) - engine.isKeyPressed(Key::left);
-    // cursor_in_world.y += engine.isKeyPressed(Key::space) - engine.isKeyPressed(Key::lshift);
-    // if (engine.isKeyPressed(Key::enter)) {
-    //     map[usize(cursor_in_world.x)][usize(cursor_in_world.y)][usize(cursor_in_world.z)] = 1;
-    // }
-    // if (engine.isKeyPressed(Key::del)) {
-    //     map[usize(cursor_in_world.x)][usize(cursor_in_world.y)][usize(cursor_in_world.z)] = 0;
-    // }
+    auto inv_vp = glm::inverse(renderer.projection3d * renderer.view);
+
+    auto start = inv_vp * glm::vec4(mouse_ndc.x, mouse_ndc.y, 0, 1);
+    start /= start.w;
+    auto end = inv_vp * glm::vec4(mouse_ndc.x, mouse_ndc.y, 1, 1);
+    end /= end.w;
+    auto ray = glm::normalize(glm::vec3(end) - glm::vec3(start));
+
+    glm::vec3 ray_origin = glm::vec3(start);
+
+    float t = -ray_origin.y / ray.y;
+
+    cursor_in_world = ray_origin + ray * t;
+
+    y += f32(engine.isKeyPressed(Key::space) - engine.isKeyPressed(Key::lshift));
+    cursor_in_world.y = y;
+
+    cursor_in_world = {glm::round(cursor_in_world.x), glm::round(cursor_in_world.y),
+                       glm::round(cursor_in_world.z)};
+
+    auto x = usize(cursor_in_world.x);
+    auto y = usize(cursor_in_world.y);
+    auto z = usize(cursor_in_world.z);
+
+    if (engine.isKeyPressed(Key::enter)) {
+
+        map[x][y][z] = 1;
+    }
+
+    if (engine.isKeyPressed(Key::del)) {
+
+        map[x][y][z] = 0;
+    }
 
     return GameResult::ongoing;
 }
@@ -149,4 +173,4 @@ void gameDraw(Renderer &renderer) {
     }
 }
 
-void gameQuit() {}
+void gameQuit([[maybe_unused]]Allocator &gpa) {}

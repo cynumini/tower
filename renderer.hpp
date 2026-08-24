@@ -11,12 +11,28 @@
 
 #include "base.hpp"
 
+constexpr glm::vec2 SCREEN = {640, 360};
+
+struct UBO {
+    glm::mat4 projection = glm::mat4(1.0f);
+    glm::mat4 view = glm::mat4(1.0f);
+
+    bool operator==(const UBO &other) const {
+        return projection == other.projection and view == other.view;
+    }
+};
+
 struct Texture {
     using Id = usize;
 
     SDL_GPUTexture *texture;
     int width = 0;
     int height = 0;
+};
+
+struct Sprite {
+    Texture::Id texture_id;
+    Rectangle rectangle;
 };
 
 struct Vertex2D {
@@ -32,9 +48,9 @@ struct Instance {
     enum Flags : u32 {
         USE_TEXTURE = 1u << 0,
     };
-
-    glm::vec2 position{};
-    glm::vec2 size{};
+    glm::vec2 position;
+    glm::vec2 size;
+    f32 rotation;
     Rectangle uv{};
     Color color = WHITE;
     u32 flags = 0;
@@ -43,7 +59,7 @@ struct Instance {
 struct Batch {
     u32 end;
     Texture::Id texture_id;
-    glm::mat4 model_view;
+    UBO ubo;
 };
 
 enum class Projection {
@@ -75,10 +91,11 @@ struct Renderer {
 
     FixedArray<Batch, MAX_INSTANCES> batches;
 
-    glm::mat4 base_model_view;
-    glm::mat4 projection = glm::mat4(1.0f);
+    glm::mat4 projection2d = glm::mat4(1.0f);
+    glm::mat4 projection3d = glm::mat4(1.0f);
+    UBO ubo2d = {};
 
-    static constexpr usize MAX_VERTICES_3D = 2 << 10;
+    static constexpr usize MAX_VERTICES_3D = 2 << 12;
     FixedArray<Vertex3D, MAX_VERTICES_3D> vertices3d;
     static constexpr usize MAX_VERTICES_3D_LINE = 2;
     FixedArray<Vertex3D, MAX_VERTICES_3D_LINE> vertices3d_line;
@@ -155,10 +172,10 @@ struct Renderer {
         return textures.add(texture);
     };
 
-    void draw(const Instance &instance, Texture::Id texture_id, glm::mat4 model_view) {
+    void draw(const Instance &instance, Texture::Id texture_id, UBO ubo) {
         instances.add(instance);
         if (batches.len == 0) {
-            batches.add({1, texture_id, model_view});
+            batches.add({1, texture_id, ubo});
             return;
         }
         auto &batch = batches.last();
@@ -170,31 +187,36 @@ struct Renderer {
             batch.texture_id = texture_id;
         }
 
-        if (batch.texture_id == texture_id and batch.model_view == model_view) {
+        if (batch.texture_id == texture_id and batch.ubo == ubo) {
             batch.end++;
         } else {
-            batches.add({batch.end + 1, texture_id, model_view});
+            batches.add({batch.end + 1, texture_id, ubo});
         }
     }
 
-    void drawRectangle(const Rectangle &dest, const glm::mat4 &model_view, const Color &color) {
-        draw({.position = dest.position(), .size = dest.size(), .color = color}, 0, model_view);
+    void drawRectangle(const Rectangle &dest, const UBO &ubo, const Color &color, f32 rotation = 0) {
+        draw({.position = dest.position(), .size = dest.size(), .rotation = rotation, .color = color}, 0, ubo);
     }
 
-    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, glm::mat4 model_view,
-                     Color color = WHITE) {
+    void drawTexture(Texture::Id texture_id, Rectangle source, Rectangle dest, UBO ubo,
+                     f32 rotation = 0, Color color = WHITE) {
         Rectangle uv = source;
         uv.x /= (f32)textures[texture_id].width;
         uv.y /= (f32)textures[texture_id].height;
         uv.w /= (f32)textures[texture_id].width;
         uv.h /= (f32)textures[texture_id].height;
-        draw({.position = dest.position(),
-              .size = dest.size(),
-              .uv = uv,
-              .color = color,
-              .flags = Instance::USE_TEXTURE},
-             texture_id, model_view);
+        draw({
+            .position = dest.position(),
+            .size = dest.size(),
+            .rotation = rotation,
+            .uv = uv,
+            .color = color,
+            .flags = Instance::USE_TEXTURE
+        },
+             texture_id, ubo);
     }
+
+    void drawSprite(Sprite sprite, glm::vec2 position, bool flip_x = false, bool flip_y = false, f32 rotation = 0);
 
     void drawTriangle3D(glm::vec3 v1, glm::vec3 v2, glm::vec3 v3, Color color) {
         vertices3d.add({v1, color});

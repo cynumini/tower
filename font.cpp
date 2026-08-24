@@ -44,7 +44,7 @@ void Font::drawText(Renderer &renderer, glm::vec2 position, f32 size, const Stri
         int y = (c - 0x20) / 16;
         glm::vec2 char_position(f32(x) * font_height, f32(y) * font_height);
         renderer.drawTexture(texture_id, {char_position.x, char_position.y, font_width, font_height}, {offset, position.y, width, height},
-                             renderer.base_model_view);
+                             renderer.ubo2d);
         offset += width + space;
     }
 }

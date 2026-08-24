@@ -14,7 +14,7 @@ projectile0,16,16,16,16
 projectile1,32,16,16,16
 projectile2,32,16,16,16
 skull,48,32,16,16
-slash0,96,0,32,16
+slash0,96,0,16,32
 slash1,48,48,16,16
 tree,64,0,32,64
 water,16,0,16,16

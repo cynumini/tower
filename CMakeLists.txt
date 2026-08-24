@@ -4,6 +4,7 @@ project(tower)
 add_subdirectory(vendor/SDL)
 add_subdirectory(vendor/SDL_image)
 add_subdirectory(vendor/glm)
+add_subdirectory(sakana)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -18,19 +19,18 @@ add_library(
 )
 target_include_directories(imgui PUBLIC vendor/imgui vendor/imgui/backends)
 
-add_executable(tower-a main.cpp game-a.cpp base.cpp renderer.cpp font.cpp)
-target_link_libraries(tower-a PRIVATE SDL3::SDL3)
-target_link_libraries(tower-a PRIVATE SDL3_image::SDL3_image)
-target_link_libraries(tower-a PRIVATE imgui)
-target_link_libraries(tower-a PRIVATE glm::glm)
+add_library(tower STATIC main.cpp base.cpp renderer.cpp font.cpp csv.cpp)
+target_link_libraries(tower PUBLIC sakana::core SDL3::SDL3 SDL3_image::SDL3_image imgui glm::glm)
+target_compile_features(tower PRIVATE cxx_std_23)
+target_compile_options(tower PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
+
+add_executable(tower-a game-a.cpp)
+target_link_libraries(tower-a PRIVATE tower)
 target_compile_features(tower-a PRIVATE cxx_std_23)
 target_compile_options(tower-a PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 
-add_executable(tower-t main.cpp game-t.cpp base.cpp renderer.cpp font.cpp)
-target_link_libraries(tower-t PRIVATE SDL3::SDL3)
-target_link_libraries(tower-t PRIVATE SDL3_image::SDL3_image)
-target_link_libraries(tower-t PRIVATE imgui)
-target_link_libraries(tower-t PRIVATE glm::glm)
+add_executable(tower-t game-t.cpp)
+target_link_libraries(tower-t PRIVATE tower)
 target_compile_features(tower-t PRIVATE cxx_std_23)
 target_compile_options(tower-t PRIVATE -Wall -Wextra -Wpedantic -Wconversion)
 

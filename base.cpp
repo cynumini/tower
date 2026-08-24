@@ -9,16 +9,6 @@ glm::vec2 Rectangle::overlapSize(const Rectangle &other) const {
     return {};
 }
 
-void unreachable(const char *string, usize line) {
-    printf("%s:%zu: unreachable\n", string, line);
-    abort();
-}
-
-void todo(const char *string, usize line, const char *message) {
-    printf("%s:%zu: %s\n", string, line, message);
-    abort();
-}
-
 namespace OS {
 Slice<u8> readEntireFile(Allocator &gpa, const String &name, Location location) {
     auto stream = fopen(name.c_str.rawptr, "r");

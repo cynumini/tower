@@ -4,8 +4,6 @@
 
 #include "renderer.hpp"
 
-constexpr glm::vec2 SCREEN = {640, 360};
-
 enum class Key : usize {
     a = 4,
     b = 5,
@@ -106,4 +104,4 @@ enum class GameResult { ongoing, success, failure };
 GameResult gameInit(Allocator &gpa, Engine &engine, Renderer &renderer);
 GameResult gameUpdate(Allocator &gpa, Engine &engine, Renderer &renderer);
 void gameDraw(Renderer &renderer);
-void gameQuit();
+void gameQuit(Allocator &gpa);

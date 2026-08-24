@@ -11,6 +11,12 @@
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/glm.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/rotate_vector.hpp>
+
+#include <sakana/builtin.hpp>
+
+namespace skn = sakana;
 
 using f32 = float;
 using f64 = double;
@@ -188,6 +194,16 @@ namespace mem {
 template <typename T> T *create(Allocator &gpa, Location location = Location::current()) {
     return (T *)gpa.alloc(sizeof(T), location);
 }
+#define MEM_INIT(T, gpa, ...) mem::init<T>(gpa, Location::current(), __VA_ARGS__)
+template <typename T, typename... Args> T *init(Allocator &gpa, Location loc, Args &&...args) {
+    auto object = (T *)gpa.alloc(sizeof(T), loc);
+    new (object) T(args...);
+    return object;
+}
+template <typename T> void deinit(Allocator &gpa, T *ptr) {
+    ptr->~T();
+    gpa.free(ptr);
+}
 template <typename T>
 Slice<T> alloc(Allocator &gpa, usize len, Location location = Location::current()) {
     return {(T *)gpa.alloc(sizeof(T) * len, location), len};
@@ -214,7 +230,15 @@ struct String {
     static String fromCStr(const char *str) { return {str, strlen(str)}; }
     template <size_t N> String(const char (&c_str)[N]) : c_str(c_str, N - 1) {}
 
-    bool operator==(String other) const { return strcmp(c_str.rawptr, other.c_str.rawptr) == 0; }
+    bool operator==(String other) const {
+        if (c_str.len != other.c_str.len) {
+            return false;
+        }
+        for (usize i = 0; i < c_str.len; i++) {
+            if (c_str[i] != other.c_str[i]) return false;
+        }
+        return true;
+    }
 
     const char *begin() const { return c_str.rawptr; }
     const char *end() const { return c_str.rawptr + c_str.len; }
@@ -243,9 +267,9 @@ struct String {
             f64 digit = (f64)(c - '0');
 
             if (!decimal) {
-                result += result * 10 + digit;
+                result = result * 10 + digit;
             } else {
-                result += digit * fraction;
+                result = digit * fraction;
                 fraction *= 0.1;
             }
         }
@@ -277,16 +301,6 @@ template <typename T> struct Optional {
             abort();                                                                               \
         }                                                                                          \
     } while (false)
-
-[[noreturn]]
-void unreachable(const char *string, usize line);
-
-#define UNREACHABLE() unreachable(__FILE__, __LINE__)
-
-[[noreturn]]
-void todo(const char *string, usize line, const char *message);
-
-#define TODO(message) todo(__FILE__, __LINE__, message)
 
 struct CAllocator : Allocator {
     void *alloc(usize size, [[maybe_unused]] Location location = Location::current()) {
@@ -426,6 +440,26 @@ template <typename T, usize N> struct HashMap {
         T value;
     };
 
+    struct Iterator {
+        HashMap<T, N> *hash_map;
+        usize index;
+
+        Item &operator*() { return hash_map->data[index]; }
+        bool operator!=(const Iterator &other) const { return index != other.index; }
+
+        Iterator &operator++() {
+            for (usize i = index + 1; i < N; i++) {
+                if (hash_map->used[i]) {
+                    index = i;
+                    return *this;
+                }
+            }
+
+            index = N;
+            return *this;
+        }
+    };
+
     Item data[N]{};
     bool used[N]{};
 
@@ -456,55 +490,26 @@ template <typename T, usize N> struct HashMap {
                 return false;
             }
         }
-        UNREACHABLE();
+        skn::unreachable();
     }
-};
 
-struct CSV {
-    Slice<u8> buffer;
-    bool header = false;
-    usize position = 0;
-
-    CSV(Allocator &gpa, String name, bool header = false, Location location = Location::current())
-        : header(header) {
-        buffer = OS::readEntireFile(gpa, name, location);
+    Iterator begin() {
+        for (usize i = 0; i < N; i++) {
+            if (used[i]) {
+                return Iterator{.hash_map = this, .index = i};
+            }
+        }
+        return end();
     }
-    void deinit(Allocator &gpa) { mem::free(gpa, buffer); }
 
-    // please deinit dynamic array
-    Optional<DynamicArray<String>> readline(Allocator &gpa) {
-        if (header) {
-            while (buffer[position] != '\n' and position < buffer.len) {
-                position += 1;
-            }
-            position += 1;
-            header = false;
+    Iterator end() { return Iterator{.hash_map = this, .index = N}; }
+
+    const T &operator[](const String &key) const {
+        auto hash = FNV1aHash(key) % N;
+        for (auto i = hash; i < N; i++) {
+            if (!used[i]) skn::panic("The key is not in hashmap");
+            if (data[i].key == key) return data[i].value;
         }
-
-        if (position >= buffer.len) {
-            return {};
-        }
-
-        DynamicArray<String> result;
-
-        usize start = position;
-        while (position < buffer.len) {
-            auto c = buffer[position];
-            if (c == ',' or c == '\n') {
-                result.add(gpa, {buffer.slice(start, position)});
-                start = position + 1;
-                if (c == '\n') {
-                    position++;
-                    break;
-                }
-            }
-            position++;
-        }
-
-        if (position == buffer.len and start < position) {
-            result.add(gpa, {buffer.slice(start, position)});
-        }
-
-        return {result};
+        skn::panic("The key is not in hashmap");
     }
 };
