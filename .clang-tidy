@@ -1,0 +1,27 @@
+Checks: >
+  *,
+  -altera-id-dependent-backward-branch,
+  -altera-unroll-loops,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-pro-type-cstyle-cast,
+  -google-readability-casting,modernize-avoid-c-style-cast,
+  -hicpp-avoid-c-arrays,
+  -llvmlibc-callee-namespace,
+  -llvmlibc-implementation-in-namespace,
+  -llvmlibc-restrict-system-libc-headers,
+  -misc-include-cleaner,
+  -misc-use-anonymous-namespace,
+  -modernize-avoid-c-arrays,
+  -modernize-avoid-c-style-cast,
+  -modernize-use-trailing-return-type,
+  -readability-function-cognitive-complexity,
+  -readability-magic-numbers
+
+# CheckOptions:
+#   - key:   misc-include-cleaner.MissingIncludes
+#     value: false
+#   - key:   misc-include-cleaner.UnusedIncludes
+#     value: false
+
+ExcludeHeaderFilterRegex: '/usr/include/gentoo'
