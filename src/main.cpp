@@ -1,7 +1,13 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-static SDL_GPUShader *createGPUShader(SDL_GPUDevice *device, const char *file) {
+struct Vector2 {
+    float x;
+    float y;
+};
+
+static SDL_GPUShader *createGPUShader(SDL_GPUDevice *device, const char *file,
+                                      Uint32 num_uniform_buffers) {
     size_t code_size = 0;
     auto *code = (Uint8 *)SDL_LoadFile(file, &code_size);
     SDL_assert(code);
@@ -11,65 +17,87 @@ static SDL_GPUShader *createGPUShader(SDL_GPUDevice *device, const char *file) {
     create_info.entrypoint = "main";
     create_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
     create_info.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+    create_info.num_uniform_buffers = num_uniform_buffers;
     auto *shader = SDL_CreateGPUShader(device, &create_info);
     SDL_assert(shader);
     SDL_free(code);
     return shader;
 }
 
+static SDL_GPUBuffer *createGPUBuffer(SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage,
+                                      size_t size) {
+    SDL_GPUBufferCreateInfo buffer_create_info = {};
+    buffer_create_info.usage = usage;
+    buffer_create_info.size = size;
+    auto *buffer = SDL_CreateGPUBuffer(device, &buffer_create_info);
+    SDL_assert(buffer);
+    return buffer;
+}
+
 int main() {
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
     SDL_assert(SDL_SetAppMetadata("tower", "0.3.0", "cynumini.tower"));
     SDL_assert(SDL_Init(SDL_INIT_VIDEO));
-    auto *window = SDL_CreateWindow("tower", 640, 360, 0);
+
+    const float width = 640;
+    const float height = 360;
+    auto *window = SDL_CreateWindow("tower", int(width), int(height), 0);
     SDL_assert(window);
     auto *device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, nullptr);
     SDL_assert(device);
     SDL_assert(SDL_ClaimWindowForGPUDevice(device, window));
 
-    const float vertices[6] = {
-        0.0F,
-        1.0F, // top
-        -1.0F,
-        -1.0F, // left
-        1.0F,
-        -1.F, // right
+    const Vector2 vertices[4] = {
+        {0.0F, 0.0F},   // top left
+        {32.0F, 0.0F},  // top right
+        {32.0F, 32.0F}, // bottom right
+        {0.0F, 32.0F},  // bottom left
     };
-    SDL_GPUBufferCreateInfo buffer_create_info = {};
-    buffer_create_info.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-    buffer_create_info.size = sizeof(vertices);
-    auto *buffer = SDL_CreateGPUBuffer(device, &buffer_create_info);
-    SDL_assert(buffer);
+
+    const Uint16 indices[6]{0, 1, 2, 0, 2, 3};
+
+    auto *vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
+    auto *index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
 
     SDL_GPUTransferBufferCreateInfo transfer_buffer_create_info = {};
     transfer_buffer_create_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    transfer_buffer_create_info.size = sizeof(vertices);
+    transfer_buffer_create_info.size = sizeof(vertices) + sizeof(indices);
     auto *transfer_buffer = SDL_CreateGPUTransferBuffer(device, &transfer_buffer_create_info);
     SDL_assert(transfer_buffer);
-    auto *transfer_buffer_data = (float *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
+    auto *transfer_buffer_data =
+        (Uint8 *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
     SDL_assert(transfer_buffer_data);
-    SDL_memcpy(transfer_buffer_data, (float *)vertices, sizeof(vertices));
+    SDL_memcpy(transfer_buffer_data, (Uint8 *)vertices, sizeof(vertices));
+    SDL_memcpy(transfer_buffer_data + sizeof(vertices), (Uint8 *)indices, sizeof(indices));
     SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     SDL_assert(command_buffer);
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-    const SDL_GPUTransferBufferLocation source{transfer_buffer, 0};
-    const SDL_GPUBufferRegion destination = {buffer, 0, sizeof(vertices)};
+
+    SDL_GPUTransferBufferLocation source{transfer_buffer, 0};
+    SDL_GPUBufferRegion destination = {vertex_buffer, 0, sizeof(vertices)};
     SDL_UploadToGPUBuffer(copy_pass, &source, &destination, false);
+
+    source.offset = sizeof(vertices);
+    destination.buffer = index_buffer;
+    destination.size = sizeof(indices);
+    SDL_UploadToGPUBuffer(copy_pass, &source, &destination, false);
+
     SDL_EndGPUCopyPass(copy_pass);
     SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     SDL_SubmitGPUCommandBuffer(command_buffer);
 
-    auto *vertex_shader = createGPUShader(device, "shader.vert.spv");
-    auto *fragment_shader = createGPUShader(device, "shader.frag.spv");
+    auto *vertex_shader = createGPUShader(device, "shader.vert.spv", 1);
+    auto *fragment_shader = createGPUShader(device, "shader.frag.spv", 0);
 
     SDL_GPUGraphicsPipelineCreateInfo pipeline_create_info = {};
     pipeline_create_info.vertex_shader = vertex_shader;
     pipeline_create_info.fragment_shader = fragment_shader;
     const SDL_GPUVertexBufferDescription vertex_buffer_description = {
-        0, sizeof(float) * 2, SDL_GPU_VERTEXINPUTRATE_VERTEX, 0};
-    pipeline_create_info.vertex_input_state.vertex_buffer_descriptions = &vertex_buffer_description;
+        0, sizeof(Vector2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0};
+    pipeline_create_info.vertex_input_state.vertex_buffer_descriptions =
+        &vertex_buffer_description;
     pipeline_create_info.vertex_input_state.num_vertex_buffers = 1;
     const SDL_GPUVertexAttribute vertex_attribute = {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0};
     pipeline_create_info.vertex_input_state.vertex_attributes = &vertex_attribute;
@@ -107,8 +135,8 @@ int main() {
 
         SDL_GPUTexture *swapchain_texture = nullptr;
 
-        SDL_assert(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
-                                                         nullptr, nullptr));
+        SDL_assert(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window,
+                                                         &swapchain_texture, nullptr, nullptr));
 
         if (swapchain_texture != nullptr) {
             SDL_GPUColorTargetInfo color_target_info = {};
@@ -119,9 +147,14 @@ int main() {
             auto *render_pass =
                 SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, nullptr);
             SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
-            const SDL_GPUBufferBinding buffer_binding = {buffer, 0};
+            SDL_GPUBufferBinding buffer_binding = {vertex_buffer, 0};
             SDL_BindGPUVertexBuffers(render_pass, 0, &buffer_binding, 1);
-            SDL_DrawGPUPrimitives(render_pass, 3, 1, 0, 0);
+            buffer_binding.buffer = index_buffer;
+            SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+            Vector2 ubo[2] = {{2 / width, -2 / height}, {-width / 2, -height / 2}};
+            SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(ubo));
+            SDL_DrawGPUIndexedPrimitives(render_pass, 6, 1, 0, 0, 0);
+
             SDL_EndGPURenderPass(render_pass);
         }
 
@@ -129,7 +162,8 @@ int main() {
     }
 
     SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
-    SDL_ReleaseGPUBuffer(device, buffer);
+    SDL_ReleaseGPUBuffer(device, vertex_buffer);
+    SDL_ReleaseGPUBuffer(device, index_buffer);
     SDL_ReleaseWindowFromGPUDevice(device, window);
     SDL_DestroyGPUDevice(device);
     SDL_DestroyWindow(window);
