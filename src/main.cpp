@@ -59,18 +59,15 @@ int main() {
     auto *texture = IMG_LoadGPUTexture(device, copy_pass, "resources/world.png", &width, &height);
     SDL_assert(texture);
 
-    Rect rect0 = {0.0F, 0.0F, 16.0F, 32.0F};
-    rect0.x -= (rect0.w / 2.0F);
-    rect0.y -= (rect0.h / 2.0F);
-    Rect rect1 = {0.0F, 32.0F, 16.0F, 32.0F};
-    rect1.x /= float(width);
-    rect1.w /= float(width);
-    rect1.y /= float(height);
-    rect1.h /= float(height);
+    Rect position_and_size_rect = {0.0F, 0.0F, 16.0F, 32.0F};
+    position_and_size_rect.x -= (position_and_size_rect.w / 2.0F);
+    position_and_size_rect.y -= (position_and_size_rect.h / 2.0F);
 
     vec2 vertices[8] = {
-        rectTopLeft(rect0),  rectTopLeft(rect1),  rectTopRight(rect0), rectTopRight(rect1),
-        rectBotRight(rect0), rectBotRight(rect1), rectBotLeft(rect0),  rectBotLeft(rect1),
+        rectTopLeft(position_and_size_rect),  {0.0F, 0.0F},
+        rectTopRight(position_and_size_rect), {1.0F, 0.0F},
+        rectBotRight(position_and_size_rect), {1.0F, 1.0F},
+        rectBotLeft(position_and_size_rect),  {0.0F, 1.0F},
     };
 
     const Uint16 indices[6]{0, 1, 2, 0, 2, 3};
@@ -122,6 +119,7 @@ int main() {
     const SDL_GPUVertexAttribute vertex_attribute[] = {
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
         {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(vec2)}};
+
     pipeline_create_info.vertex_input_state.vertex_attributes =
         (SDL_GPUVertexAttribute *)vertex_attribute;
     pipeline_create_info.vertex_input_state.num_vertex_attributes =
@@ -151,7 +149,12 @@ int main() {
     const auto *keyboard_state = SDL_GetKeyboardState(0);
 
     auto previous = SDL_GetTicks();
-    vec2 position = {};
+    vec2 position = {screen.x / 2.0F, screen.y / 2.0F};
+    float timer = 0.0F;
+    int frame = 0;
+
+    vec2 atlas_offset = {0.0F, 32.0F};
+    bool flip_x = false;
 
     bool running = true;
     while (running) {
@@ -183,7 +186,41 @@ int main() {
         if (length > 0.0F) {
             velocity.x /= length;
             velocity.y /= length;
+            timer += dt;
+            if (timer > 0.2F) {
+                frame += 1;
+                frame %= 4;
+                timer = 0.0F;
+            }
+        } else {
+            frame = 0;
+            timer = 0;
         }
+
+        vec2 uv_position = {0.0F, 32.0F};
+        vec2 uv_size = {16.0F, 32.0F};
+
+        if (velocity.y < 0) {
+            atlas_offset = {0.0F, 64.0F};
+        } else if (velocity.y > 0) {
+            atlas_offset = {0.0F, 32.0F};
+        } else if (velocity.x > 0) {
+            atlas_offset = {48.0F, 64.0F};
+            flip_x = false;
+        } else if (velocity.x < 0) {
+            atlas_offset = {48.0F, 64.0F};
+            flip_x = true;
+        }
+
+        if (frame == 1) {
+            uv_position.x = atlas_offset.x + 16.0F;
+        } else if (frame == 3) {
+            uv_position.x = atlas_offset.x + 32.0F;
+        } else {
+            uv_position.x = atlas_offset.x + 0.0F;
+        }
+
+        uv_position.y = atlas_offset.y;
 
         const auto player_speed = 100.0F;
         position.x += velocity.x * dt * player_speed;
@@ -213,7 +250,15 @@ int main() {
             SDL_assert(sampler);
             const SDL_GPUTextureSamplerBinding texture_sampler_binding = {texture, sampler};
             SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
-            vec2 ubo[2] = {screen, position};
+            if (flip_x) {
+                uv_position.x += uv_size.x;
+                uv_size.x *= -1;
+            }
+            uv_position.x /= float(width);
+            uv_position.y /= float(height);
+            uv_size.x /= float(width);
+            uv_size.y /= float(height);
+            vec2 ubo[4] = {screen, position, uv_position, uv_size};
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(ubo));
             SDL_DrawGPUIndexedPrimitives(render_pass, 6, 1, 0, 0, 0);
 
