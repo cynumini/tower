@@ -235,8 +235,8 @@ Renderer::Renderer(Allocator &gpa, SDL_Window *window, glm::vec2 screen, f32 sca
     : window(window) {
     ubo2d.projection = glm::ortho(0.f, screen.x, screen.y, 0.f);
 
-    device =
-        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, nullptr);
+    device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true,
+                                 nullptr);
     SDL_ENSURE(device, "create gpu device");
     SDL_ENSURE(SDL_ClaimWindowForGPUDevice(device, window), "claim window for gpu device");
     SDL_ENSURE(SDL_SetGPUSwapchainParameters(device, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
@@ -363,7 +363,8 @@ static void upload3D(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
 
     auto transfer_buffer = SDL_CreateGPUTransferBuffer(self.device, &createinfo);
     {
-        auto transfer_memory = (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
+        auto transfer_memory =
+            (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
         memcpy(transfer_memory, self.vertices3d.data, n);
         SDL_UnmapGPUTransferBuffer(self.device, transfer_buffer);
     }
@@ -397,7 +398,8 @@ static void upload3DLine(Renderer &self, SDL_GPUCommandBuffer *command_buffer) {
 
     auto transfer_buffer = SDL_CreateGPUTransferBuffer(self.device, &createinfo);
     {
-        auto transfer_memory = (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
+        auto transfer_memory =
+            (char *)SDL_MapGPUTransferBuffer(self.device, transfer_buffer, true);
         memcpy(transfer_memory, self.vertices3d_line.data, n);
         SDL_UnmapGPUTransferBuffer(self.device, transfer_buffer);
     }
@@ -608,8 +610,8 @@ void Renderer::updateProjection() {
         break;
     }
     case Projection::orthographic: {
-        projection3d =
-            glm::ortho(-10.0f * aspect_ratio, 10.0f * aspect_ratio, -10.0f, 10.0f, -100.0f, 100.0f);
+        projection3d = glm::ortho(-10.0f * aspect_ratio, 10.0f * aspect_ratio, -10.0f, 10.0f,
+                                  -100.0f, 100.0f);
     }
     }
 }
@@ -640,7 +642,8 @@ void Renderer::resize(glm::vec2 screen_size) {
     updateProjection();
 }
 
-void Renderer::drawSprite(Sprite sprite, glm::vec2 position, bool flip_x, bool flip_y, f32 rotation) {
+void Renderer::drawSprite(Sprite sprite, glm::vec2 position, bool flip_x, bool flip_y,
+                          f32 rotation) {
     auto texture_rectangle = sprite.rectangle;
 
     if (flip_x) {
@@ -653,5 +656,6 @@ void Renderer::drawSprite(Sprite sprite, glm::vec2 position, bool flip_x, bool f
     }
 
     drawTexture(sprite.texture_id, texture_rectangle,
-                {position.x, position.y, sprite.rectangle.w, sprite.rectangle.h}, ubo2d, rotation);
+                {position.x, position.y, sprite.rectangle.w, sprite.rectangle.h}, ubo2d,
+                rotation);
 }

@@ -8,8 +8,14 @@ Checks: >
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-pro-type-cstyle-cast,
+  -cppcoreguidelines-pro-type-vararg,hicpp-vararg,
+  -fuchsia-overloaded-operator,
   -google-readability-casting,modernize-avoid-c-style-cast,
+  -google-readability-todo,
   -hicpp-avoid-c-arrays,
+  -hicpp-use-nullptr,
+  -hicpp-vararg,
+  -llvm-qualified-auto,
   -llvmlibc-callee-namespace,
   -llvmlibc-implementation-in-namespace,
   -llvmlibc-restrict-system-libc-headers,
@@ -18,8 +24,11 @@ Checks: >
   -misc-use-internal-linkage,
   -modernize-avoid-c-arrays,
   -modernize-avoid-c-style-cast,
+  -modernize-use-nullptr,
   -modernize-use-trailing-return-type,
+  -modernize-use-using,
   -readability-function-cognitive-complexity,
+  -readability-identifier-length,
   -readability-magic-numbers
 
 # CheckOptions:
