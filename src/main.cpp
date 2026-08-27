@@ -5,52 +5,40 @@
 typedef SDL_FPoint vec2;
 typedef SDL_FRect Rect;
 
+template <typename F> struct privDefer {
+    F f;
+    privDefer(F f) : f(f) {}
+    ~privDefer() { f(); }
+};
+
+template <typename F> privDefer<F> defer_func(F f) { return privDefer<F>(f); }
+
+#define DEFER_1(x, y) x##y
+#define DEFER_2(x, y) DEFER_1(x, y)
+#define DEFER_3(x) DEFER_2(x, __COUNTER__)
+#define defer(code) auto DEFER_3(_defer_) = defer_func([&]() { code; })
+
 static void operator/=(Rect &self, vec2 other) {
-    self.x /= other.x;
-    self.y /= other.y;
-    self.w /= other.x;
-    self.h /= other.y;
-}
-
-static SDL_GPUShader *createGPUShader(SDL_GPUDevice *device, const char *file,
-                                      SDL_GPUShaderStage stage, Uint32 num_samplers,
-                                      Uint32 num_uniform_buffers) {
-    size_t code_size = 0;
-    auto *code = (Uint8 *)SDL_LoadFile(file, &code_size);
-    SDL_assert(code);
-    SDL_GPUShaderCreateInfo create_info = {};
-    create_info.code_size = code_size;
-    create_info.code = code;
-    create_info.entrypoint = "main";
-    create_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
-    create_info.stage = stage;
-    create_info.num_samplers = num_samplers;
-    create_info.num_uniform_buffers = num_uniform_buffers;
-    auto *shader = SDL_CreateGPUShader(device, &create_info);
-    SDL_assert(shader);
-    SDL_free(code);
-    return shader;
-}
-
-static SDL_GPUBuffer *createGPUBuffer(SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage,
-                                      Uint32 size) {
-    const SDL_GPUBufferCreateInfo buffer_create_info = {usage, size, 0};
-    auto *buffer = SDL_CreateGPUBuffer(device, &buffer_create_info);
-    SDL_assert(buffer);
-    return buffer;
+    self.x /= other.x, self.y /= other.y, self.w /= other.x, self.h /= other.y;
 }
 
 int main() {
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
     SDL_assert(SDL_SetAppMetadata("tower", "0.3.0", "cynumini.tower"));
     SDL_assert(SDL_Init(SDL_INIT_VIDEO));
+    defer(SDL_Quit());
 
     const vec2 screen = {640, 360};
     auto *window = SDL_CreateWindow("tower", int(screen.x), int(screen.y), 0);
+    defer(SDL_DestroyWindow(window));
     SDL_assert(window);
+
     auto *device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, 0);
+    defer(SDL_DestroyGPUDevice(device));
     SDL_assert(device);
+
     SDL_assert(SDL_ClaimWindowForGPUDevice(device, window));
+    defer(SDL_ReleaseWindowFromGPUDevice(device, window));
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     SDL_assert(command_buffer);
@@ -64,25 +52,36 @@ int main() {
         texture = IMG_LoadGPUTexture(device, copy_pass, "resources/world.png", &width, &height);
         texture_size = {float(width), float(height)};
     }
+    defer(SDL_ReleaseGPUTexture(device, texture));
     SDL_assert(texture);
 
     vec2 vertices[4] = {{-0.5, -0.5}, {0.5, -0.5}, {0.5, 0.5}, {-0.5, 0.5}};
     const Uint16 indices[6]{0, 1, 2, 0, 2, 3};
     struct Instance {
-        vec2 position;
-        vec2 size;
+        Rect rect;
         Rect uv;
         float rotation;
     };
     const SDL_GPUSamplerCreateInfo sampler_create_info = {};
     auto *sampler = SDL_CreateGPUSampler(device, &sampler_create_info);
+    defer(SDL_ReleaseGPUSampler(device, sampler));
 
-    const Uint32 instance_capacity = 2;
+    const Uint32 instance_capacity = 1U << 2U; // 2^2 = 4
+
+    auto createGPUBuffer = [](SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage, Uint32 size) {
+        const SDL_GPUBufferCreateInfo buffer_create_info = {usage, size, 0};
+        auto *buffer = SDL_CreateGPUBuffer(device, &buffer_create_info);
+        SDL_assert(buffer);
+        return buffer;
+    };
 
     auto *vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
+    defer(SDL_ReleaseGPUBuffer(device, vertex_buffer));
     auto *index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
+    defer(SDL_ReleaseGPUBuffer(device, index_buffer));
     auto *instance_buffer =
         createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(Instance) * instance_capacity);
+    defer(SDL_ReleaseGPUBuffer(device, instance_buffer));
 
     SDL_GPUTransferBufferCreateInfo transfer_buffer_create_info = {};
     transfer_buffer_create_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
@@ -108,6 +107,25 @@ int main() {
     SDL_EndGPUCopyPass(copy_pass);
     SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
     SDL_SubmitGPUCommandBuffer(command_buffer);
+
+    auto createGPUShader = [](SDL_GPUDevice *device, const char *file, SDL_GPUShaderStage stage,
+                              Uint32 num_samplers, Uint32 num_uniform_buffers) {
+        size_t code_size = 0;
+        auto *code = (Uint8 *)SDL_LoadFile(file, &code_size);
+        SDL_assert(code);
+        SDL_GPUShaderCreateInfo create_info = {};
+        create_info.code_size = code_size;
+        create_info.code = code;
+        create_info.entrypoint = "main";
+        create_info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        create_info.stage = stage;
+        create_info.num_samplers = num_samplers;
+        create_info.num_uniform_buffers = num_uniform_buffers;
+        auto *shader = SDL_CreateGPUShader(device, &create_info);
+        SDL_assert(shader);
+        SDL_free(code);
+        return shader;
+    };
 
     auto *vertex_shader =
         createGPUShader(device, "shader.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
@@ -156,6 +174,7 @@ int main() {
     pipeline_create_info.target_info.color_target_descriptions = &color_target_description;
     pipeline_create_info.target_info.num_color_targets = 1;
     auto *pipeline = SDL_CreateGPUGraphicsPipeline(device, &pipeline_create_info);
+    defer(SDL_ReleaseGPUGraphicsPipeline(device, pipeline));
 
     SDL_ReleaseGPUShader(device, vertex_shader);
     SDL_ReleaseGPUShader(device, fragment_shader);
@@ -163,7 +182,7 @@ int main() {
     const auto *keyboard_state = SDL_GetKeyboardState(0);
 
     auto previous = SDL_GetTicks();
-    vec2 position = {screen.x / 2.0F, screen.y / 2.0F};
+    Rect player = {screen.x / 2.0F, screen.y / 2.0F, 16.0F, 32.0F};
 
     vec2 direction = {0, 1};
     float walking_timer = 0.0F;
@@ -174,6 +193,9 @@ int main() {
 
     vec2 atlas_offset = {0.0F, 32.0F};
     bool flip_x = false;
+
+    Rect enemy = {screen.x / 2.0F, (screen.y / 2.0F) + 32.0F, 16.0F, 32.0F};
+    const bool enemy_alive = true;
 
     bool running = true;
     while (running) {
@@ -245,13 +267,18 @@ int main() {
         uv.y = atlas_offset.y;
 
         const auto player_speed = 100.0F;
-        position.x += velocity.x * dt * player_speed;
-        position.y += velocity.y * dt * player_speed;
+        player.x += velocity.x * dt * player_speed;
+        player.y += velocity.y * dt * player_speed;
 
-        vec2 attack_position = position;
-        attack_position.x += direction.x * 16.0F;
-        attack_position.y += direction.y * 24.0F;
+        Rect attack_rect = player;
+        attack_rect.x += direction.x * 16.0F;
+        attack_rect.y += direction.y * 24.0F;
         auto attack_angle = SDL_atan2f(direction.y, direction.x);
+
+        auto checkCollison = [](Rect a, Rect b) {
+            return a.x < (b.x + b.w) and b.x < (a.x + a.w) and a.y < (b.y + b.h) and
+                   b.y < (a.y + a.h);
+        };
 
         if (attack) {
             attack_timer += dt;
@@ -259,7 +286,22 @@ int main() {
                 attack = false;
                 attack_timer = 0;
             }
+
+            if (checkCollison(attack_rect, enemy)) {
+                // enemy_alive = false;
+                const auto knockback = 128.0F;
+                enemy.x += direction.x * knockback * dt;
+                enemy.y += direction.y * knockback * dt;
+            }
         }
+
+        // if (collision) {
+        //     player.x = prev.x;
+        //     player.y = prev.y;
+        // } else {
+        //     prev.x = player.x;
+        //     prev.y = player.y;
+        // }
 
         // pre draw
         command_buffer = SDL_AcquireGPUCommandBuffer(device);
@@ -283,13 +325,31 @@ int main() {
             uv.w *= -1;
         }
         uv /= texture_size;
-        transfer_buffer_data[0] = {position, {16.F, 32.F}, uv, 0};
+        transfer_buffer_data[0] = {player, uv, 0};
 
         Uint32 instance_count = 1;
+
+        if (enemy_alive) {
+            Rect enemy_uv = {0.0F, 0.0F, 16.0F, 32.0F};
+            enemy_uv /= texture_size;
+            transfer_buffer_data[instance_count] = {enemy, enemy_uv, 0};
+            instance_count++;
+        }
+
+        auto compare = [](const void *a, const void *b) {
+            const auto *A = (const Instance *)a;
+            const auto *B = (const Instance *)b;
+            if (A->rect.y < B->rect.y) return -1;
+            if (B->rect.y < A->rect.y) return 1;
+            return 0;
+        };
+
+        SDL_qsort(transfer_buffer_data, instance_count, sizeof(Instance), compare);
+
         if (attack) {
             Rect attack_uv = {96.0F, 0.0F, 16.0F, 32.0F};
             attack_uv /= texture_size;
-            transfer_buffer_data[1] = {attack_position, {16.F, 32.F}, attack_uv, attack_angle};
+            transfer_buffer_data[instance_count] = {attack_rect, attack_uv, attack_angle};
             instance_count++;
         }
 
@@ -338,15 +398,5 @@ int main() {
         SDL_SubmitGPUCommandBuffer(command_buffer);
     }
 
-    SDL_ReleaseGPUTexture(device, texture);
-    SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
-    SDL_ReleaseGPUBuffer(device, vertex_buffer);
-    SDL_ReleaseGPUBuffer(device, index_buffer);
-    SDL_ReleaseGPUBuffer(device, instance_buffer);
-    SDL_ReleaseGPUSampler(device, sampler);
-    SDL_ReleaseWindowFromGPUDevice(device, window);
-    SDL_DestroyGPUDevice(device);
-    SDL_DestroyWindow(window);
-    SDL_Quit();
     return 0;
 }
