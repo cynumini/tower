@@ -12,4 +12,4 @@
 	url = https://github.com/g-truc/glm
 [submodule "sakana"]
 	path = sakana
-	url = git@github.com:cynumini/sakana.git
+	url = https://github.com/cynumini/sakana

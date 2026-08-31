@@ -3,27 +3,27 @@ Checks: >
   -altera-id-dependent-backward-branch,
   -altera-struct-pack-align,
   -altera-unroll-loops,
+  -android-cloexec-fopen,
   -bugprone-easily-swappable-parameters,
+  -bugprone-suspicious-include,
+  -concurrency-mt-unsafe,
   -cppcoreguidelines-avoid-c-arrays,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-macro-usage,
+  -cppcoreguidelines-no-malloc,
+  -cppcoreguidelines-owning-memory,
   -cppcoreguidelines-pro-*,
   -cppcoreguidelines-special-member-functions,
   -fuchsia-overloaded-operator,
   -google-explicit-constructor,
   -google-readability-casting,modernize-avoid-c-style-cast,
   -google-readability-todo,
-  -hicpp-avoid-c-arrays,
-  -hicpp-braces-around-statements,
-  -hicpp-deprecated-headers,
-  -hicpp-explicit-conversions,
-  -hicpp-member-init,
-  -hicpp-special-member-functions,
-  -hicpp-use-nullptr,
-  -hicpp-vararg,
+  -hicpp-*,
+  -llvm-header-guard,
   -llvm-qualified-auto,
   -llvmlibc-callee-namespace,
   -llvmlibc-implementation-in-namespace,
+  -llvmlibc-inline-function-decl,
   -llvmlibc-restrict-system-libc-headers,
   -misc-include-cleaner,
   -misc-non-private-member-variables-in-classes,
@@ -32,6 +32,7 @@ Checks: >
   -modernize-avoid-c-arrays,
   -modernize-avoid-c-style-cast,
   -modernize-deprecated-headers,
+  -modernize-loop-convert,
   -modernize-use-designated-initializers,
   -modernize-use-nullptr,
   -modernize-use-trailing-return-type,
@@ -39,13 +40,6 @@ Checks: >
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
-  -modernize-loop-convert,
   -readability-magic-numbers
-
-# CheckOptions:
-#   - key:   misc-include-cleaner.MissingIncludes
-#     value: false
-#   - key:   misc-include-cleaner.UnusedIncludes
-#     value: false
 
 ExcludeHeaderFilterRegex: '/usr/include/gentoo'
