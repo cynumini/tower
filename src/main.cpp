@@ -4,8 +4,9 @@
 
 typedef SDL_FColor Color;
 
-const Color WHITE = {1, 1, 1, 1};
+const Color BLACK = {1, 1, 1, 1};
 const Color RED = {1, 0.5, 0.5, 1};
+const Color WHITE = {1, 1, 1, 1};
 
 static SDL_GPUBuffer *createGPUBuffer(SDL_GPUDevice *device, SDL_GPUBufferUsageFlags usage,
                                       Uint32 size) {
@@ -60,10 +61,16 @@ struct Instance {
     i32 texture_index;
 };
 
-void addInstance(Instance *instances, Uint32 *count, Instance instance, vec2 texture_size) {
+struct Renderer {
+    Instance *instances;
+    Uint32 count;
+};
+
+void addInstance(Renderer *renderer, Instance instance, vec2 texture_size) {
+    // TODO: Can I somehow merge texture_index and texture_size?
     instance.uv /= texture_size;
-    instances[*count] = instance;
-    *count += 1;
+    renderer->instances[renderer->count] = instance;
+    renderer->count += 1;
 };
 
 struct Texture {
@@ -80,6 +87,54 @@ Texture loadTexture(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass, const cha
     SDL_assert(texture.ptr);
     return texture;
 };
+
+struct String {
+    const char *ptr;
+    usize len;
+};
+
+struct Font {
+    u8 widths[256];
+    Texture texture;
+};
+
+Font initFont(Texture texture) {
+    Font font{};
+    for (usize i = 0; i < 256; i++) {
+        font.widths[i] = 4;
+    }
+    font.widths['M'] = 7;
+    font.widths['x'] = 5;
+    font.widths['y'] = 5;
+    font.widths['?'] = 5;
+    font.texture = texture;
+    return font;
+}
+
+String createString(const char *c_str) { return {.ptr = c_str, .len = SDL_strlen(c_str)}; }
+
+void drawText(Renderer *renderer, String text, Font font, vec2 position) {
+    f32 advance = 0;
+    for (usize i = 0; i < text.len; i++) {
+        vec2 texture_offset = {0, 0};
+        const u8 c = text.ptr[i] - ' ';
+        texture_offset = {
+            .x = f32(c % 16) * 10.0F,
+            .y = f32(c / 16) * 10.0F, // NOLINT
+        };
+        addInstance(renderer,
+                    {
+                        .position = {position.x + advance, position.y},
+                        .size = {10.0F, 10.0F},
+                        .uv = {texture_offset.x, texture_offset.y, 10.0F, 10.0F},
+                        .color = BLACK,
+                        .rotation = 0.0F,
+                        .texture_index = 1,
+                    },
+                    font.texture.size);
+        advance += f32(font.widths[u8(text.ptr[i])]) + 1;
+    }
+}
 
 i32 main() {
     App app = sakanaInit("tower", "0.3.0", "cynumini.tower");
@@ -102,7 +157,7 @@ i32 main() {
     auto *sampler = SDL_CreateGPUSampler(app.device, &sampler_create_info);
     defer(SDL_ReleaseGPUSampler(app.device, sampler));
 
-    const Uint32 INSTANCE_CAPACITY = 1U << 4U; // 2^4 = 16
+    const Uint32 INSTANCE_CAPACITY = 1U << 5U; // 2^5 = 32
 
     auto *vertex_buffer =
         createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
@@ -196,7 +251,7 @@ i32 main() {
 
     auto previous = SDL_GetTicks();
 
-    vec2 player_position = {app.screen.x / 2.0F, app.screen.y / 2.0F};
+    vec2 player_position = {0.0F, 0.0F};
     const vec2 PLAYER_SIZE = {16.0F, 32.0F};
 
     vec2 direction = {0, 1};
@@ -232,9 +287,12 @@ i32 main() {
     }
 
     for (size_t i = 0; i < ENEMY_COUNT; i++) {
-        enemies[i].position.x = float(SDL_rand(Sint32(app.screen.x)));
-        enemies[i].position.y = float(SDL_rand(Sint32(app.screen.y)));
+        enemies[i].position.x = f32(SDL_rand(Sint32(app.screen.x))) - (app.screen.x / 2.0F);
+        enemies[i].position.y = f32(SDL_rand(Sint32(app.screen.y))) - (app.screen.y / 2.0F);
     }
+
+    const Font font = initFont(font_texture);
+    auto my_text = createString("My text");
 
     bool running = true;
     while (running) {
@@ -347,14 +405,6 @@ i32 main() {
             }
         }
 
-        // if (collision) {
-        //     player.x = prev.x;
-        //     player.y = prev.y;
-        // } else {
-        //     prev.x = player.x;
-        //     prev.y = player.y;
-        // }
-
         // pre draw
         command_buffer = SDL_AcquireGPUCommandBuffer(app.device);
         SDL_assert(command_buffer);
@@ -368,23 +418,23 @@ i32 main() {
             SDL_CreateGPUTransferBuffer(app.device, &transfer_buffer_create_info);
         SDL_assert(transfer_buffer);
 
-        auto *transfer_buffer_data =
-            (Instance *)SDL_MapGPUTransferBuffer(app.device, transfer_buffer, true);
-        SDL_assert(transfer_buffer_data);
-
-        Uint32 instance_count = 0;
+        Renderer renderer = {
+            .instances = (Instance *)SDL_MapGPUTransferBuffer(app.device, transfer_buffer, true),
+            .count = 0,
+        };
+        SDL_assert(renderer.instances);
+        Uint32 ui_instance_offset = 0;
 
         // filling instance
         if (flip_x) {
             uv.x += uv.w;
             uv.w *= -1;
         }
-        addInstance(transfer_buffer_data, &instance_count,
-                    {player_position, PLAYER_SIZE, uv, WHITE, 0, 0}, texture.size);
+        addInstance(&renderer, {player_position, PLAYER_SIZE, uv, WHITE, 0, 0}, texture.size);
 
         for (size_t i = 0; i < ENEMY_COUNT; i++) {
             if (enemies[i].hp > 0) {
-                addInstance(transfer_buffer_data, &instance_count,
+                addInstance(&renderer,
                             {enemies[i].position,
                              enemies[i].size,
                              {0.0F, 0.0F, 16.0F, 32.0F},
@@ -395,7 +445,7 @@ i32 main() {
             }
         }
 
-        SDL_qsort(transfer_buffer_data, instance_count, sizeof(Instance),
+        SDL_qsort(renderer.instances, renderer.count, sizeof(Instance),
                   [](const void *a, const void *b) -> int {
                       const auto *A = (const Instance *)a;
                       const auto *B = (const Instance *)b;
@@ -405,7 +455,7 @@ i32 main() {
                   });
 
         if (attack) {
-            addInstance(transfer_buffer_data, &instance_count,
+            addInstance(&renderer,
                         {attack_position,
                          attack_size,
                          {96.0F, 0.0F, 16.0F, 32.0F},
@@ -415,7 +465,11 @@ i32 main() {
                         texture.size);
         }
 
-        SDL_assert(instance_count < INSTANCE_CAPACITY);
+        ui_instance_offset = renderer.count;
+        drawText(&renderer, my_text, font, {0, 0});
+        drawText(&renderer, createString("Maji desuka?"), font, {0, 10});
+
+        SDL_assert(renderer.count < INSTANCE_CAPACITY);
 
         SDL_UnmapGPUTransferBuffer(app.device, transfer_buffer);
 
@@ -455,11 +509,18 @@ i32 main() {
             struct UBO {
                 vec2 screen;
                 vec2 camera;
+                i32 center;
             } ubo;
             ubo.screen = app.screen;
-            ubo.camera = player_position;
+            ubo.camera = -player_position;
+            ubo.center = 1;
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-            SDL_DrawGPUIndexedPrimitives(render_pass, 6, instance_count, 0, 0, 0);
+            SDL_DrawGPUIndexedPrimitives(render_pass, 6, ui_instance_offset, 0, 0, 0);
+            ubo.camera = -vec2(app.screen.x / 2.0F, app.screen.y / 2.0F);
+            ubo.center = 0;
+            SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
+            SDL_DrawGPUIndexedPrimitives(render_pass, 6, renderer.count - ui_instance_offset, 0,
+                                         0, ui_instance_offset);
 
             SDL_EndGPURenderPass(render_pass);
         }

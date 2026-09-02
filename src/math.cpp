@@ -10,6 +10,7 @@ static void operator+=(vec2 &self, vec2 other) {
     self.x += other.x;
     self.y += other.y;
 }
+static vec2 operator-(vec2 a) { return {-a.x, -a.y}; }
 
 static f32 vec2Length(vec2 self) { return SDL_sqrtf((self.x * self.x) + (self.y * self.y)); };
 static f32 vec2Dot(vec2 a, vec2 b) { return (a.x * b.x) + (a.y * b.y); }
