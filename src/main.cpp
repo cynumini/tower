@@ -57,12 +57,28 @@ struct Instance {
     Rect uv;
     Color color;
     float rotation;
+    i32 texture_index;
 };
 
 void addInstance(Instance *instances, Uint32 *count, Instance instance, vec2 texture_size) {
     instance.uv /= texture_size;
     instances[*count] = instance;
     *count += 1;
+};
+
+struct Texture {
+    vec2 size;
+    SDL_GPUTexture *ptr;
+};
+
+Texture loadTexture(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass, const char *filename) {
+    Texture texture = {};
+    int width = 0;
+    int height = 0;
+    texture.ptr = IMG_LoadGPUTexture(device, copy_pass, filename, &width, &height);
+    texture.size = {float(width), float(height)};
+    SDL_assert(texture.ptr);
+    return texture;
 };
 
 i32 main() {
@@ -73,16 +89,11 @@ i32 main() {
     SDL_assert(command_buffer);
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
-    SDL_GPUTexture *texture = 0;
-    vec2 texture_size;
-    {
-        int width = 0;
-        int height = 0;
-        texture = IMG_LoadGPUTexture(app.device, copy_pass, "resources/world.png", &width, &height);
-        texture_size = {float(width), float(height)};
-    }
-    defer(SDL_ReleaseGPUTexture(app.device, texture));
-    SDL_assert(texture);
+    auto texture = loadTexture(app.device, copy_pass, "resources/world.png");
+    defer(SDL_ReleaseGPUTexture(app.device, texture.ptr));
+
+    auto font_texture = loadTexture(app.device, copy_pass, "resources/font.png");
+    defer(SDL_ReleaseGPUTexture(app.device, font_texture.ptr));
 
     vec2 vertices[4] = {{-0.5, -0.5}, {0.5, -0.5}, {0.5, 0.5}, {-0.5, 0.5}};
     const Uint16 indices[6]{0, 1, 2, 0, 2, 3};
@@ -93,12 +104,13 @@ i32 main() {
 
     const Uint32 INSTANCE_CAPACITY = 1U << 4U; // 2^4 = 16
 
-    auto *vertex_buffer = createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
+    auto *vertex_buffer =
+        createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
     defer(SDL_ReleaseGPUBuffer(app.device, vertex_buffer));
     auto *index_buffer = createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
     defer(SDL_ReleaseGPUBuffer(app.device, index_buffer));
-    auto *instance_buffer =
-        createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(Instance) * INSTANCE_CAPACITY);
+    auto *instance_buffer = createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX,
+                                            sizeof(Instance) * INSTANCE_CAPACITY);
     defer(SDL_ReleaseGPUBuffer(app.device, instance_buffer));
 
     SDL_GPUTransferBufferCreateInfo transfer_buffer_create_info = {};
@@ -127,9 +139,9 @@ i32 main() {
     SDL_SubmitGPUCommandBuffer(command_buffer);
 
     auto *vertex_shader =
-        createGPUShader(app.device, "shader.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
-    auto *fragment_shader =
-        createGPUShader(app.device, "shader.frag.spv", SDL_GPU_SHADERSTAGE_FRAGMENT, 1, 0);
+        createGPUShader(app.device, "./build/shader.vert.spv", SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
+    auto *fragment_shader = createGPUShader(app.device, "./build/shader.frag.spv",
+                                            SDL_GPU_SHADERSTAGE_FRAGMENT, 2, 0);
 
     SDL_GPUGraphicsPipelineCreateInfo pipeline_create_info = {};
     pipeline_create_info.vertex_shader = vertex_shader;
@@ -149,6 +161,7 @@ i32 main() {
         {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv) + sizeof(vec2)},
         {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, color)},
         {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, rotation)},
+        {7, 1, SDL_GPU_VERTEXELEMENTFORMAT_INT, offsetof(Instance, texture_index)},
 
     };
 
@@ -302,6 +315,9 @@ i32 main() {
             if (advanceTimerAndCheck(&attack_timer, dt)) attack = false;
 
             for (size_t i = 0; i < ENEMY_COUNT; i++) {
+                // if (checkCollisonAABB(rectFromVec2(attack_position, attack_size),
+                //                   rectFromVec2(enemies[i].position, enemies[i].size)) and
+                //     !enemies[i].invincible) {
                 if (checkCollisonSAT(rectFromVec2(attack_position, attack_size), attack_angle,
                                      rectFromVec2(enemies[i].position, enemies[i].size), 0) and
                     !enemies[i].invincible) {
@@ -348,7 +364,8 @@ i32 main() {
         SDL_GPUTransferBufferCreateInfo transfer_buffer_create_info = {};
         transfer_buffer_create_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         transfer_buffer_create_info.size = sizeof(Instance) * INSTANCE_CAPACITY;
-        auto *transfer_buffer = SDL_CreateGPUTransferBuffer(app.device, &transfer_buffer_create_info);
+        auto *transfer_buffer =
+            SDL_CreateGPUTransferBuffer(app.device, &transfer_buffer_create_info);
         SDL_assert(transfer_buffer);
 
         auto *transfer_buffer_data =
@@ -363,7 +380,7 @@ i32 main() {
             uv.w *= -1;
         }
         addInstance(transfer_buffer_data, &instance_count,
-                    {player_position, PLAYER_SIZE, uv, WHITE, 0}, texture_size);
+                    {player_position, PLAYER_SIZE, uv, WHITE, 0, 0}, texture.size);
 
         for (size_t i = 0; i < ENEMY_COUNT; i++) {
             if (enemies[i].hp > 0) {
@@ -372,8 +389,9 @@ i32 main() {
                              enemies[i].size,
                              {0.0F, 0.0F, 16.0F, 32.0F},
                              enemies[i].tint,
+                             0,
                              0},
-                            texture_size);
+                            texture.size);
             }
         }
 
@@ -387,10 +405,14 @@ i32 main() {
                   });
 
         if (attack) {
-            addInstance(
-                transfer_buffer_data, &instance_count,
-                {attack_position, attack_size, {96.0F, 0.0F, 16.0F, 32.0F}, WHITE, attack_angle},
-                texture_size);
+            addInstance(transfer_buffer_data, &instance_count,
+                        {attack_position,
+                         attack_size,
+                         {96.0F, 0.0F, 16.0F, 32.0F},
+                         WHITE,
+                         attack_angle,
+                         0},
+                        texture.size);
         }
 
         SDL_assert(instance_count < INSTANCE_CAPACITY);
@@ -427,10 +449,9 @@ i32 main() {
             SDL_BindGPUVertexBuffers(render_pass, 1, &buffer_binding, 1);
             buffer_binding.buffer = index_buffer;
             SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-            SDL_assert(texture);
-            SDL_assert(sampler);
-            const SDL_GPUTextureSamplerBinding texture_sampler_binding = {texture, sampler};
-            SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
+            SDL_GPUTextureSamplerBinding texture_sampler_binding[] = {
+                {texture.ptr, sampler}, {font_texture.ptr, sampler}};
+            SDL_BindGPUFragmentSamplers(render_pass, 0, texture_sampler_binding, 2);
             struct UBO {
                 vec2 screen;
                 vec2 camera;

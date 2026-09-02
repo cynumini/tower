@@ -26,9 +26,11 @@ i32 main(i32 argc, const char *argv[]) {
         addArg(&args, "-lSDL3_image");
         addArg(&args, "-o");
         addArg(&args, output);
-        run(args.data);
+        run(args);
     }
 
-    const char *tidy_args[] = {"clang-tidy", src[0], 0};
+    Args tidy_args = {};
+    addArg(&tidy_args, "clang-tidy");
+    addArg(&tidy_args, src[0]);
     run(tidy_args);
 }

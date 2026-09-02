@@ -12,9 +12,11 @@ layout(location=3) in vec2 uv_position;
 layout(location=4) in vec2 uv_size;
 layout(location=5) in vec4 color_in;
 layout(location=6) in float rotation;
+layout(location=7) in int texture_index_in;
 
 layout(location=0) out vec2 uv_out;
 layout(location=1) out vec4 color_out;
+layout(location=2) out int texture_index_out;
 
 void main() {
     // TODO: Check which is faster: calc it here or on the CPU
@@ -30,4 +32,5 @@ void main() {
     gl_Position = vec4(pos0, 0.0F, 1.0F);
     uv_out = uv_position + ((position + vec2(0.5, 0.5)) * uv_size);
     color_out = color_in;
+    texture_index_out = texture_index_in;
 }
