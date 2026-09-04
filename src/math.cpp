@@ -3,14 +3,12 @@
 typedef SDL_FRect Rect;
 
 // vec2
-static vec2 operator*(vec2 self, f32 other) { return {self.x * other, self.y * other}; }
 static vec2 operator*(vec2 a, vec2 b) { return {a.x * b.x, a.y * b.y}; }
-static vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
-static void operator+=(vec2 &self, vec2 other) {
-    self.x += other.x;
-    self.y += other.y;
-}
+static vec2 operator*(vec2 self, f32 other) { return {self.x * other, self.y * other}; }
+static vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
 static vec2 operator-(vec2 a) { return {-a.x, -a.y}; }
+static vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
+static void operator+=(vec2 &self, vec2 other) { self.x += other.x, self.y += other.y; }
 
 static f32 vec2Length(vec2 self) { return SDL_sqrtf((self.x * self.x) + (self.y * self.y)); };
 static f32 vec2Dot(vec2 a, vec2 b) { return (a.x * b.x) + (a.y * b.y); }
@@ -35,7 +33,7 @@ static Rect rectFromVec2(vec2 position, vec2 size) {
     return {position.x, position.y, size.x, size.y};
 }
 
-static bool checkCollisonAABB(Rect a, Rect b) {
+static bool checkCollisionAABB(Rect a, Rect b) {
     return a.x < (b.x + b.w) and b.x < (a.x + a.w) and a.y < (b.y + b.h) and b.y < (a.y + a.h);
 };
 
@@ -78,7 +76,7 @@ static f32 min(const f32 values[4]) {
     return value;
 }
 
-static bool checkCollisonSAT(Rect a, f32 a_angle, Rect b, f32 b_angle) {
+static bool checkCollisionSAT(Rect a, f32 a_angle, Rect b, f32 b_angle) {
     auto a_points = calcRectPoints(a, a_angle);
     auto b_points = calcRectPoints(b, b_angle);
     const vec2 axes[4] = {a_points.p1 - a_points.p0, a_points.p2 - a_points.p1,

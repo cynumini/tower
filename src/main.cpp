@@ -52,6 +52,8 @@ static bool advanceTimerAndCheck(Timer *timer, float dt) {
     return false;
 };
 
+const Uint32 INSTANCE_CAPACITY = 1U << 9U; // 2^8 = 512
+
 struct Instance {
     vec2 position;
     vec2 size;
@@ -67,6 +69,7 @@ struct Renderer {
 };
 
 void addInstance(Renderer *renderer, Instance instance, vec2 texture_size) {
+    SDL_assert(renderer->count < INSTANCE_CAPACITY);
     // TODO: Can I somehow merge texture_index and texture_size?
     instance.uv /= texture_size;
     renderer->instances[renderer->count] = instance;
@@ -93,9 +96,16 @@ struct String {
     usize len;
 };
 
+const f32 FONT_SIZE = 10;
+
 struct Font {
     u8 widths[256];
     Texture texture;
+};
+
+struct InvertorySlot {
+    u8 item_id;
+    u8 count;
 };
 
 Font initFont(Texture texture) {
@@ -103,15 +113,27 @@ Font initFont(Texture texture) {
     for (usize i = 0; i < 256; i++) {
         font.widths[i] = 4;
     }
+    font.widths['0'] = 5;
+    font.widths['2'] = 5;
+    font.widths['6'] = 5;
+    font.widths['8'] = 5;
+    font.widths['9'] = 5;
+    font.widths['?'] = 5;
     font.widths['M'] = 7;
     font.widths['x'] = 5;
     font.widths['y'] = 5;
-    font.widths['?'] = 5;
     font.texture = texture;
     return font;
 }
 
 String createString(const char *c_str) { return {.ptr = c_str, .len = SDL_strlen(c_str)}; }
+
+f32 measureText(String text, Font font) {
+    if (text.len == 0) return 0;
+    f32 advance = 0;
+    for (usize i = 0; i < text.len; i++) advance += f32(font.widths[u8(text.ptr[i])]) + 1;
+    return advance - 1;
+}
 
 void drawText(Renderer *renderer, String text, Font font, vec2 position) {
     f32 advance = 0;
@@ -136,6 +158,30 @@ void drawText(Renderer *renderer, String text, Font font, vec2 position) {
     }
 }
 
+const f32 ENEMY_KNOCKBACK_MAX_SPEED = 100;
+const f32 ENEMY_KNOCKBACK_FRICTION = 250;
+const vec2 ENEMY_SIZE = {16.0F, 32.0F};
+
+struct Enemy {
+    vec2 position;
+    Color tint = WHITE;
+    int hp = 5;
+    bool invincible = false;
+    Timer invincibility_timer = timerInit(0.2F);
+    vec2 knockback_direction = {};
+    float knockback_speed = 0.0F;
+};
+
+void enemy_take_damage(Enemy *enemy, vec2 direction, InvertorySlot *invertory) {
+    enemy->knockback_direction = direction;
+    enemy->knockback_speed = ENEMY_KNOCKBACK_MAX_SPEED;
+    enemy->hp -= 1;
+    enemy->invincible = true;
+    if (enemy->hp == 0) {
+        invertory[0].count += 1;
+    }
+}
+
 i32 main() {
     App app = sakanaInit("tower", "0.3.0", "cynumini.tower");
     defer(sakanaDeinit(app));
@@ -156,8 +202,6 @@ i32 main() {
     const SDL_GPUSamplerCreateInfo sampler_create_info = {};
     auto *sampler = SDL_CreateGPUSampler(app.device, &sampler_create_info);
     defer(SDL_ReleaseGPUSampler(app.device, sampler));
-
-    const Uint32 INSTANCE_CAPACITY = 1U << 5U; // 2^5 = 32
 
     auto *vertex_buffer =
         createGPUBuffer(app.device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
@@ -265,20 +309,8 @@ i32 main() {
     vec2 atlas_offset = {0.0F, 32.0F};
     bool flip_x = false;
 
-    const float ENEMY_KNOCKBACK_MAX_SPEED = 100;
-    const float ENEMY_KNOCKBACK_FRICTION = 250;
-
-    const size_t ENEMY_COUNT = 10;
-    struct Enemy {
-        vec2 position;
-        vec2 size = {16.0F, 32.0F};
-        Color tint = WHITE;
-        int hp = 5;
-        bool invincible = false;
-        Timer invincibility_timer = timerInit(0.2F);
-        vec2 knockback_direction = {};
-        float knockback_speed = 0.0F;
-    } enemies[ENEMY_COUNT] = {};
+    const size_t ENEMY_COUNT = 100;
+    Enemy enemies[ENEMY_COUNT] = {};
 
     {
         SDL_Time ticks; // NOLINT
@@ -286,13 +318,27 @@ i32 main() {
         SDL_srand(ticks);
     }
 
+    const i32 MAX_X = 1000;
+    const i32 MAX_Y = 1000;
     for (size_t i = 0; i < ENEMY_COUNT; i++) {
-        enemies[i].position.x = f32(SDL_rand(Sint32(app.screen.x))) - (app.screen.x / 2.0F);
-        enemies[i].position.y = f32(SDL_rand(Sint32(app.screen.y))) - (app.screen.y / 2.0F);
+        enemies[i].position = {f32(SDL_rand(MAX_X)) - (MAX_X / 2.0F),
+                               f32(SDL_rand(MAX_Y)) - (MAX_Y / 2.0F)};
     }
 
     const Font font = initFont(font_texture);
-    auto my_text = createString("My text");
+    // TOOD: make fps counter
+    auto my_text = createString("FPS: 144.00");
+
+    InvertorySlot invertory[8 * 8] = {};
+    invertory[0] = InvertorySlot{1, 1};
+    bool invertory_visible = false;
+    bool cast_spell = false;
+
+    vec2 spell_position = {};
+    vec2 spell_direction = {};
+    const f32 SPELL_SPEED = 100;
+    const vec2 SPELL_SIZE = vec2{16.0F, 16.0F};
+    bool spell_alive = false;
 
     bool running = true;
     while (running) {
@@ -308,6 +354,12 @@ i32 main() {
                 }
                 if (event.key.scancode == SDL_SCANCODE_SPACE) {
                     attack = true;
+                }
+                if (event.key.scancode == SDL_SCANCODE_E) {
+                    invertory_visible = !invertory_visible;
+                }
+                if (event.key.scancode == SDL_SCANCODE_F) {
+                    cast_spell = true;
                 }
             } break;
             default: {
@@ -373,16 +425,32 @@ i32 main() {
             if (advanceTimerAndCheck(&attack_timer, dt)) attack = false;
 
             for (size_t i = 0; i < ENEMY_COUNT; i++) {
-                // if (checkCollisonAABB(rectFromVec2(attack_position, attack_size),
-                //                   rectFromVec2(enemies[i].position, enemies[i].size)) and
-                //     !enemies[i].invincible) {
-                if (checkCollisonSAT(rectFromVec2(attack_position, attack_size), attack_angle,
-                                     rectFromVec2(enemies[i].position, enemies[i].size), 0) and
+                if (enemies[i].hp <= 0) continue;
+                if (checkCollisionSAT(rectFromVec2(attack_position, attack_size), attack_angle,
+                                     rectFromVec2(enemies[i].position, ENEMY_SIZE), 0) and
                     !enemies[i].invincible) {
-                    enemies[i].knockback_direction = direction;
-                    enemies[i].knockback_speed = ENEMY_KNOCKBACK_MAX_SPEED;
-                    enemies[i].hp -= 1;
-                    enemies[i].invincible = true;
+                    enemy_take_damage(&enemies[i], direction, invertory);
+                }
+            }
+        }
+
+        if (cast_spell) {
+            spell_alive = true;
+            spell_position = player_position;
+            spell_direction = direction;
+            cast_spell = false;
+        }
+
+        if (spell_alive) {
+            spell_position += spell_direction * SPELL_SPEED * dt;
+            for (size_t i = 0; i < ENEMY_COUNT; i++) {
+                if (enemies[i].hp <= 0) continue;
+                // TODO: Works but very janky
+                if (checkCollisionAABB(rectFromVec2(spell_position, SPELL_SIZE - vec2{6.0F, 6.0F}),
+                                      rectFromVec2(enemies[i].position, ENEMY_SIZE)) and
+                    !enemies[i].invincible) {
+                    enemy_take_damage(&enemies[i], spell_direction, invertory);spell_alive =
+                        false;
                 }
             }
         }
@@ -425,7 +493,6 @@ i32 main() {
         SDL_assert(renderer.instances);
         Uint32 ui_instance_offset = 0;
 
-        // filling instance
         if (flip_x) {
             uv.x += uv.w;
             uv.w *= -1;
@@ -436,7 +503,7 @@ i32 main() {
             if (enemies[i].hp > 0) {
                 addInstance(&renderer,
                             {enemies[i].position,
-                             enemies[i].size,
+                             ENEMY_SIZE,
                              {0.0F, 0.0F, 16.0F, 32.0F},
                              enemies[i].tint,
                              0,
@@ -465,11 +532,59 @@ i32 main() {
                         texture.size);
         }
 
-        ui_instance_offset = renderer.count;
-        drawText(&renderer, my_text, font, {0, 0});
-        drawText(&renderer, createString("Maji desuka?"), font, {0, 10});
+        if (spell_alive) {
+            addInstance(&renderer,
+                        {spell_position, SPELL_SIZE, {16.0F, 16.0F, 16.0F, 16.0F}, WHITE, 0, 0},
+                        texture.size);
+        }
 
-        SDL_assert(renderer.count < INSTANCE_CAPACITY);
+        ui_instance_offset = renderer.count;
+        if (invertory_visible) {
+            for (usize x_i = 0; x_i < 8; x_i++) {
+                for (usize y_i = 0; y_i < 8; y_i++) {
+
+                    const vec2 cell_size = {24.0F, 24.0F};
+                    const vec2 position =
+                        vec2{f32(x_i), f32(y_i)} * cell_size + (app.screen - (cell_size * 8.0F));
+
+                    addInstance(&renderer,
+                                {
+                                    position,
+                                    cell_size,
+                                    {112.0F, 80.0F, 16.0F, 16.0F},
+                                    WHITE,
+                                    0.0F,
+                                    0,
+                                },
+                                texture.size);
+
+                    const auto *invertory_slot = &invertory[(y_i * 8) + x_i];
+                    if (invertory_slot->item_id != 0) {
+                        char buffer[3] = {0, 0, 0};
+                        SDL_assert(invertory_slot->count);
+                        SDL_assert(invertory_slot->count < 100);
+                        SDL_snprintf(buffer, 3, "%d", invertory_slot->count);
+                        const auto text = createString(buffer);
+                        addInstance(&renderer,
+                                    {
+                                        position,
+                                        cell_size,
+                                        {112.0F, 0.0F, 16.0F, 16.0F},
+                                        WHITE,
+                                        0.0F,
+                                        0,
+                                    },
+                                    texture.size);
+
+                        const vec2 text_offset =
+                            position + (cell_size - vec2(measureText(text, font), FONT_SIZE));
+                        drawText(&renderer, text, font, text_offset);
+                    }
+                }
+            }
+        }
+
+        drawText(&renderer, my_text, font, {0, 0});
 
         SDL_UnmapGPUTransferBuffer(app.device, transfer_buffer);
 
@@ -483,7 +598,6 @@ i32 main() {
         SDL_ReleaseGPUTransferBuffer(app.device, transfer_buffer);
 
         // draw
-
         SDL_GPUTexture *swapchain_texture = 0;
 
         SDL_assert(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, app.window,
