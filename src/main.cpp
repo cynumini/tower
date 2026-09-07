@@ -5,8 +5,6 @@
 #include "../build/shader.frag.hpp"
 #include "../build/shader.vert.hpp"
 
-typedef SDL_FColor Color;
-
 struct Timer {
     float elapsed = 0;
     float duration;
@@ -26,26 +24,31 @@ static bool advanceTimerAndCheck(Timer *timer, float dt) {
 const Uint32 INSTANCE_CAPACITY = 1U << 9U; // 2^8 = 512
 
 struct Instance {
-    vec2 position;
-    vec2 size;
+    Rect rect;
     Rect uv;
-    Color color;
+    FColor color;
     float rotation;
-    i32 texture_index;
+    u32 texture_index;
 };
 
 struct Renderer {
     Instance *instances;
+    Pipeline *pipeline;
     Uint32 count;
 };
 
-void addInstance(Renderer *renderer, Instance instance, vec2 texture_size) {
+void addInstance(Renderer *renderer, Rect rect, Rect uv, FColor color, f32 rotation,
+                 Texture texture) {
     SDL_assert(renderer->count < INSTANCE_CAPACITY);
-    // TODO: Can I somehow merge texture_index and texture_size?
-    instance.uv /= texture_size;
-    renderer->instances[renderer->count] = instance;
+    renderer->instances[renderer->count] = {
+        .rect = rect,
+        .uv = uv / texture.size,
+        .color = color,
+        .rotation = rotation,
+        .texture_index = bindTexture(renderer->pipeline, texture),
+    };
     renderer->count += 1;
-};
+}
 
 Texture loadTexture(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass, const char *filename) {
     Texture texture = {};
@@ -55,11 +58,6 @@ Texture loadTexture(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass, const cha
     texture.size = {float(width), float(height)};
     SDL_assert(texture.ptr);
     return texture;
-};
-
-struct String {
-    const char *ptr;
-    usize len;
 };
 
 const f32 FONT_SIZE = 10;
@@ -92,16 +90,18 @@ Font initFont(Texture texture) {
     return font;
 }
 
-String createString(const char *c_str) { return {.ptr = c_str, .len = SDL_strlen(c_str)}; }
+Slice<const char> createString(const char *c_str) {
+    return {.ptr = c_str, .len = SDL_strlen(c_str)};
+}
 
-f32 measureText(String text, Font font) {
+f32 measureText(Slice<const char> text, Font font) {
     if (text.len == 0) return 0;
     f32 advance = 0;
     for (usize i = 0; i < text.len; i++) advance += f32(font.widths[u8(text.ptr[i])]) + 1;
     return advance - 1;
 }
 
-void drawText(Renderer *renderer, String text, Font font, vec2 position) {
+void drawText(Renderer *renderer, Slice<const char> text, Font font, vec2 position) {
     f32 advance = 0;
     for (usize i = 0; i < text.len; i++) {
         vec2 texture_offset = {0, 0};
@@ -110,16 +110,9 @@ void drawText(Renderer *renderer, String text, Font font, vec2 position) {
             .x = f32(c % 16) * 10.0F,
             .y = f32(c / 16) * 10.0F, // NOLINT
         };
-        addInstance(renderer,
-                    {
-                        .position = {position.x + advance, position.y},
-                        .size = {10.0F, 10.0F},
-                        .uv = {texture_offset.x, texture_offset.y, 10.0F, 10.0F},
-                        .color = BLACK,
-                        .rotation = 0.0F,
-                        .texture_index = 1,
-                    },
-                    font.texture.size);
+        addInstance(renderer, {position.x + advance, position.y, 10.0F, 10.0F},
+                    {texture_offset.x, texture_offset.y, 10.0F, 10.0F}, BLACK, 0.0F,
+                    font.texture);
         advance += f32(font.widths[u8(text.ptr[i])]) + 1;
     }
 }
@@ -130,7 +123,7 @@ const vec2 ENEMY_SIZE = {16.0F, 32.0F};
 
 struct Enemy {
     vec2 position;
-    Color tint = WHITE;
+    FColor tint = WHITE;
     int hp = 5;
     bool invincible = false;
     Timer invincibility_timer = timerInit(0.2F);
@@ -149,30 +142,29 @@ void enemy_take_damage(Enemy *enemy, vec2 direction, InvertorySlot *invertory) {
 }
 
 i32 main() {
+    // TODO do a refactoring (inlcluding compression and decompression)
     App app = unagiInit("tower", "0.3.0", "cynumini.tower");
     defer(unagiDeinit(app));
 
+    char buffer_raw[1U << 6U] = {}; // 2 ^ 6 = 64
+    const Slice<char> buffer = {.ptr = buffer_raw, .len = SDL_arraysize(buffer_raw)};
+
     const SDL_GPUVertexAttribute vertex_attributes[] = {
         {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
-        {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, position)},
-        {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, size)},
+        {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, rect)},
+        {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, rect) + sizeof(vec2)},
         {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv)},
         {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv) + sizeof(vec2)},
         {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, color)},
         {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, rotation)},
-        {7, 1, SDL_GPU_VERTEXELEMENTFORMAT_INT, offsetof(Instance, texture_index)},
-
+        {7, 1, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offsetof(Instance, texture_index)},
     };
 
     auto pipeline =
-        createPipeline(app.device, sizeof(Instance), INSTANCE_CAPACITY, shader_vert_code,
-                       shader_frag_code, 2, vertex_attributes, SDL_arraysize(vertex_attributes),
+        createPipeline(app, sizeof(Instance), INSTANCE_CAPACITY, shader_vert_code,
+                       shader_frag_code, vertex_attributes, SDL_arraysize(vertex_attributes),
                        SDL_GetGPUSwapchainTextureFormat(app.device, app.window));
     defer(destroyPipeline(pipeline, app.device));
-
-    const SDL_GPUSamplerCreateInfo sampler_create_info = {};
-    auto *sampler = SDL_CreateGPUSampler(app.device, &sampler_create_info);
-    defer(SDL_ReleaseGPUSampler(app.device, sampler));
 
     Texture texture;
     defer(SDL_ReleaseGPUTexture(app.device, texture.ptr));
@@ -187,10 +179,12 @@ i32 main() {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         defer(SDL_EndGPUCopyPass(copy_pass));
 
+        unagiUpload(app, copy_pass);
+
         texture = loadTexture(app.device, copy_pass, "resources/world.png");
         font_texture = loadTexture(app.device, copy_pass, "resources/font.png");
 
-        vec2 vertices[4] = {{-0.5, -0.5}, {0.5, -0.5}, {0.5, 0.5}, {-0.5, 0.5}};
+        vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
         uploadPipeline(pipeline, app.device, copy_pass, vertices);
     }
 
@@ -229,8 +223,6 @@ i32 main() {
     }
 
     const Font font = initFont(font_texture);
-    // TOOD: make fps counter
-    auto my_text = createString("FPS: 144.00");
 
     InvertorySlot invertory[8 * 8] = {};
     invertory[0] = InvertorySlot{1, 1};
@@ -240,20 +232,24 @@ i32 main() {
     vec2 spell_position = {};
     vec2 spell_direction = {};
     const f32 SPELL_SPEED = 100;
-    const vec2 SPELL_SIZE = vec2{16.0F, 16.0F};
+    const vec2 SPELL_SIZE = vec2{10.0F, 10.0F};
     bool spell_alive = false;
 
-    bool running = true;
-    while (running) {
+    const f32 frequency = f32(SDL_GetPerformanceFrequency());
+    u64 counter = SDL_GetPerformanceCounter();
+    u64 frames = 0;
+    f32 seconds = 0.0F;
+    f32 fps = 0.0F;
+    while (app.running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
             switch (event.type) {
             case SDL_EVENT_QUIT: {
-                running = false;
+                app.running = false;
             } break;
             case SDL_EVENT_KEY_DOWN: {
                 if (event.key.scancode == SDL_SCANCODE_ESCAPE) {
-                    running = false;
+                    app.running = false;
                 }
                 if (event.key.scancode == SDL_SCANCODE_SPACE) {
                     attack = true;
@@ -274,9 +270,8 @@ i32 main() {
         const float dt = float(current - previous) / 1000.F;
         previous = current;
 
-        vec2 velocity{
-            float(keyboard_state[SDL_SCANCODE_D]) - float(keyboard_state[SDL_SCANCODE_A]),
-            float(keyboard_state[SDL_SCANCODE_S]) - float(keyboard_state[SDL_SCANCODE_W])};
+        vec2 velocity{f32(keyboard_state[SDL_SCANCODE_D]) - f32(keyboard_state[SDL_SCANCODE_A]),
+                      f32(keyboard_state[SDL_SCANCODE_S]) - f32(keyboard_state[SDL_SCANCODE_W])};
 
         velocity = normalizeVec2(velocity);
         auto length = vec2Length(velocity);
@@ -340,6 +335,7 @@ i32 main() {
         if (cast_spell) {
             spell_alive = true;
             spell_position = player_position;
+            spell_position += PLAYER_SIZE / 2.0F - SPELL_SIZE / 2.0F;
             spell_direction = direction;
             cast_spell = false;
         }
@@ -348,10 +344,8 @@ i32 main() {
             spell_position += spell_direction * SPELL_SPEED * dt;
             for (size_t i = 0; i < ENEMY_COUNT; i++) {
                 if (enemies[i].hp <= 0) continue;
-                // TODO: Works but very janky
-                if (checkCollisionAABB(
-                        rectFromVec2(spell_position, SPELL_SIZE - vec2{6.0F, 6.0F}),
-                        rectFromVec2(enemies[i].position, ENEMY_SIZE)) and
+                if (checkCollisionAABB(rectFromVec2(spell_position, SPELL_SIZE),
+                                       rectFromVec2(enemies[i].position, ENEMY_SIZE)) and
                     !enemies[i].invincible) {
                     enemy_take_damage(&enemies[i], spell_direction, invertory);
                     spell_alive = false;
@@ -385,6 +379,7 @@ i32 main() {
 
         Renderer renderer = {
             .instances = (Instance *)beginUploadInstances(&pipeline, app.device),
+            .pipeline = &pipeline,
             .count = 0,
         };
 
@@ -392,22 +387,19 @@ i32 main() {
             auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
             defer(SDL_EndGPUCopyPass(copy_pass));
 
+            defer(endUploadInstances(&pipeline, app.device, copy_pass));
+
             if (flip_x) {
                 uv.x += uv.w;
                 uv.w *= -1;
             }
-            addInstance(&renderer, {player_position, PLAYER_SIZE, uv, WHITE, 0, 0}, texture.size);
+            addInstance(&renderer, rectFromVec2(player_position, PLAYER_SIZE), uv, WHITE, 0,
+                        texture);
 
             for (size_t i = 0; i < ENEMY_COUNT; i++) {
                 if (enemies[i].hp > 0) {
-                    addInstance(&renderer,
-                                {enemies[i].position,
-                                 ENEMY_SIZE,
-                                 {0.0F, 0.0F, 16.0F, 32.0F},
-                                 enemies[i].tint,
-                                 0,
-                                 0},
-                                texture.size);
+                    addInstance(&renderer, rectFromVec2(enemies[i].position, ENEMY_SIZE),
+                                {0.0F, 0.0F, 16.0F, 32.0F}, enemies[i].tint, 0, texture);
                 }
             }
 
@@ -415,48 +407,31 @@ i32 main() {
                       [](const void *a, const void *b) -> int {
                           const auto *A = (const Instance *)a;
                           const auto *B = (const Instance *)b;
-                          if (A->position.y < B->position.y) return -1;
-                          if (B->position.y < A->position.y) return 1;
+                          if (A->rect.y < B->rect.y) return -1;
+                          if (B->rect.y < A->rect.y) return 1;
                           return 0;
                       });
 
             if (attack) {
-                addInstance(&renderer,
-                            {attack_position,
-                             attack_size,
-                             {96.0F, 0.0F, 16.0F, 32.0F},
-                             WHITE,
-                             attack_angle,
-                             0},
-                            texture.size);
+                addInstance(&renderer, rectFromVec2(attack_position, attack_size),
+                            {96.0F, 0.0F, 16.0F, 32.0F}, WHITE, attack_angle, texture);
             }
 
             if (spell_alive) {
-                addInstance(
-                    &renderer,
-                    {spell_position, SPELL_SIZE, {16.0F, 16.0F, 16.0F, 16.0F}, WHITE, 0, 0},
-                    texture.size);
+                addInstance(&renderer, rectFromVec2(spell_position, SPELL_SIZE),
+                            {19.0F, 19.0F, 10.0F, 10.0F}, WHITE, 0, texture);
             }
 
             ui_instance_offset = renderer.count;
             if (invertory_visible) {
                 for (usize x_i = 0; x_i < 8; x_i++) {
                     for (usize y_i = 0; y_i < 8; y_i++) {
-
                         const vec2 cell_size = {24.0F, 24.0F};
                         const vec2 position = vec2{f32(x_i), f32(y_i)} * cell_size +
                                               (app.screen - (cell_size * 8.0F));
 
-                        addInstance(&renderer,
-                                    {
-                                        position,
-                                        cell_size,
-                                        {112.0F, 80.0F, 16.0F, 16.0F},
-                                        WHITE,
-                                        0.0F,
-                                        0,
-                                    },
-                                    texture.size);
+                        addInstance(&renderer, rectFromVec2(position, cell_size),
+                                    {112.0F, 80.0F, 16.0F, 16.0F}, WHITE, 0, texture);
 
                         const auto *invertory_slot = &invertory[(y_i * 8) + x_i];
                         if (invertory_slot->item_id != 0) {
@@ -465,16 +440,8 @@ i32 main() {
                             SDL_assert(invertory_slot->count < 100);
                             SDL_snprintf(buffer, 3, "%d", invertory_slot->count);
                             const auto text = createString(buffer);
-                            addInstance(&renderer,
-                                        {
-                                            position,
-                                            cell_size,
-                                            {112.0F, 0.0F, 16.0F, 16.0F},
-                                            WHITE,
-                                            0.0F,
-                                            0,
-                                        },
-                                        texture.size);
+                            addInstance(&renderer, rectFromVec2(position, cell_size),
+                                        {112.0F, 0.0F, 16.0F, 16.0F}, WHITE, 0.0F, texture);
 
                             const vec2 text_offset =
                                 position + (cell_size - vec2(measureText(text, font), FONT_SIZE));
@@ -484,9 +451,8 @@ i32 main() {
                 }
             }
 
-            drawText(&renderer, my_text, font, {0, 0});
-
-            endUploadInstances(&pipeline, app.device, copy_pass);
+            bufferPrint(buffer, "%.02f FPS", fps);
+            drawText(&renderer, createString(buffer.ptr), font, {0, 0});
         }
 
         // draw
@@ -501,27 +467,29 @@ i32 main() {
 
             bindPipeline(pipeline, render_pass);
 
-            SDL_GPUTextureSamplerBinding texture_sampler_binding[] = {
-                {texture.ptr, sampler}, {font_texture.ptr, sampler}};
-            SDL_BindGPUFragmentSamplers(render_pass, 0, texture_sampler_binding, 2);
             struct UBO {
                 vec2 screen;
                 vec2 camera;
-                i32 center;
             } ubo;
             ubo.screen = app.screen;
-            ubo.camera = -player_position;
-            ubo.center = 1;
+            ubo.camera = -player_position + app.screen / 2.0 - PLAYER_SIZE / 2.0F;
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
             SDL_DrawGPUIndexedPrimitives(render_pass, 6, ui_instance_offset, 0, 0, 0);
-            ubo.camera = -vec2(app.screen.x / 2.0F, app.screen.y / 2.0F);
-            ubo.center = 0;
+            ubo.camera = {};
             SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
             SDL_DrawGPUIndexedPrimitives(render_pass, 6, renderer.count - ui_instance_offset, 0,
                                          0, ui_instance_offset);
         }
 
         SDL_SubmitGPUCommandBuffer(command_buffer);
+
+        auto prev = counter;
+        counter = SDL_GetPerformanceCounter();
+        frames += 1, seconds += f32(counter - prev) / frequency;
+
+        if (seconds > 0.5F) {
+            fps = (f32)frames / seconds, frames = 0, seconds = 0;
+        }
     }
 
     return 0;

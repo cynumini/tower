@@ -5,6 +5,7 @@ typedef SDL_FRect Rect;
 // vec2
 static vec2 operator*(vec2 a, vec2 b) { return {a.x * b.x, a.y * b.y}; }
 static vec2 operator*(vec2 self, f32 other) { return {self.x * other, self.y * other}; }
+static vec2 operator/(vec2 self, f32 other) { return {self.x / other, self.y / other}; }
 static vec2 operator+(vec2 a, vec2 b) { return {a.x + b.x, a.y + b.y}; }
 static vec2 operator-(vec2 a) { return {-a.x, -a.y}; }
 static vec2 operator-(vec2 a, vec2 b) { return {a.x - b.x, a.y - b.y}; }
@@ -22,12 +23,16 @@ static vec2 normalizeVec2(vec2 self) {
 };
 
 // Rect
-static void operator/=(Rect &self, vec2 other) {
-    self.x /= other.x;
-    self.y /= other.y;
-    self.w /= other.x;
-    self.h /= other.y;
+static Rect operator/(Rect self, vec2 other) {
+    return {self.x / other.x, self.y / other.y, self.w / other.x, self.h / other.y};
 }
+
+// static void operator/=(Rect &self, vec2 other) {
+//     self.x /= other.x;
+//     self.y /= other.y;
+//     self.w /= other.x;
+//     self.h /= other.y;
+// }
 
 static Rect rectFromVec2(vec2 position, vec2 size) {
     return {position.x, position.y, size.x, size.y};
