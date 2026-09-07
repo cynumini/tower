@@ -1,6 +1,1 @@
-Completion:
-  HeaderInsertion: Never
-Diagnostics:
-  Suppress:
-    - unused-function
-    - unused-includes
+sakana/.clangd
