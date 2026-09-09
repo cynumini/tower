@@ -1,28 +1,27 @@
 #include "sakana/build.cpp"
 
-i32 main(i32 argc, const char *argv[]) {
+int main(int argc, const char *argv[]) {
     rebuildAndRestartOnChanges(argc, argv);
 
-    glslc("src/shader.vert", "build/shader.vert.spv");
-    glslc("src/shader.frag", "build/shader.frag.spv");
-
     const char *output = "./build/tower";
-    const char *const input[] = {
-        "src/main.cpp",
-        "src/math.cpp",
-        glslcHpp("src/shader.frag", "build/shader.frag.hpp", "shader_frag_code"),
-        glslcHpp("src/shader.vert", "build/shader.vert.hpp", "shader_vert_code"),
-        "sakana/sakana.cpp",
-        "sakana/unagi.cpp",
+    const char *const inputs[] = {
+        "unagi.cpp",
+        "tower.cpp",
+        "unagi.hpp",
+        "tower.hpp",
+        "sakana/sdl.cpp",
+        glslcHpp("shader.frag", "./build/shader.frag.hpp", "shader_frag_code"),
+        glslcHpp("shader.vert", "./build/shader.vert.hpp", "shader_vert_code"),
         0,
     };
-    if (needsUpdate(output, input)) {
+    if (needsUpdate(output, inputs)) {
         Args args = {};
         addArg(&args, CXX);
-        addArg(&args, input[0]);
+        addArg(&args, inputs[0]); // unagi.cpp
+        addArg(&args, inputs[1]); // tower.cpp
 
         auto compile_flags = loadFile("compile_flags.txt");
-        defer(free(compile_flags.ptr));
+
         addArgsFromCompileFlags(&args, compile_flags);
 
         addArg(&args, "-o");
@@ -34,11 +33,14 @@ i32 main(i32 argc, const char *argv[]) {
         addArg(&args, "-g");
 
         run(args);
+
+        free(compile_flags.ptr);
     }
 
     Args tidy_args = {};
     addArg(&tidy_args, "clang-tidy");
-    addArg(&tidy_args, input[0]);
+    addArg(&tidy_args, inputs[0]); // unagi.cpp
+    addArg(&tidy_args, inputs[1]); // tower.cpp
     run(tidy_args);
 
     return 0;
