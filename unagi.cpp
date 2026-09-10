@@ -1,7 +1,6 @@
-#include "unagi.hpp"
-
 #include <stddef.h>
 
+#include <skn_math.cpp>
 #include <skn_sdl.cpp>
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -10,18 +9,9 @@
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
-#include "tower.hpp"
+#include "game.hpp"
 
 const uint MAX_INSTANCES = 1U << 0U; // 1
-
-struct Instance {
-    vec2 position;
-    vec2 size;
-    Rect uv;
-    Color color;
-    float rotation;
-    uint texture_index;
-};
 
 #define KB(value) ((value) * 1024)
 
@@ -35,12 +25,12 @@ struct State {
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *index_buffer;
     SDL_GPUBuffer *instance_buffer;
-    SDLTexture world_texture;
-    SDLTexture font_texture;
+    Texture character_texture;
+    Texture font_texture;
+    Texture atlas;
     SDL_GPUTransferBuffer *instance_transfer_buffer;
     SDL_GPUTextureSamplerBinding texture_sampler_bindings[MAX_TEXTURE_SAMPLERS];
-    Game *game;
-    u8 game_mem[KB(1)];
+    DebugAllocator debug_allocator;
 };
 
 SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
@@ -52,6 +42,8 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     // TODO: zeros on init by default
     *state = {};
     *appstate = state;
+    state->debug_allocator = debugAllocatorInit(&sdl_allocator);
+    Allocator *allocator = &state->debug_allocator.allocator;
     state->screen = {640, 360};
     state->window = SDL_CreateWindow(name, state->screen.x, state->screen.y, 0);
     SDL_CHECK(state->window, "create window");
@@ -80,7 +72,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
         createinfo.vertex_shader =
             createGPUShader(state->device, shader_vert_code, SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
         SDL_CHECK(createinfo.vertex_shader, "create gpu vertex shader");
-
         createinfo.fragment_shader =
             createGPUShader(state->device, shader_frag_code, SDL_GPU_SHADERSTAGE_FRAGMENT,
                             MAX_TEXTURE_SAMPLERS, 0);
@@ -177,8 +168,28 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
         SDL_ReleaseGPUTransferBuffer(state->device, transfer_buffer);
 
-        state->world_texture = loadTexture(state->device, copy_pass, "resources/world.png");
-        SDL_CHECK(state->world_texture.ptr, "load world texture");
+        {
+            char **files = SDL_GlobDirectory("resources/", "*.png", SDL_GLOB_CASEINSENSITIVE, 0);
+            debugAllocatorOwn(&state->debug_allocator, files);
+            SDL_CHECK(files, "find any resources")
+            for (uint i = 0; files[i]; i++) {
+                const uint BUFFER_SIZE = 256;
+                char buffer[BUFFER_SIZE] = {};
+                const uint result = SDL_snprintf(buffer, BUFFER_SIZE, "resources/%s", files[i]);
+                SDL_CHECK(result <= BUFFER_SIZE, "SDL_snprintf failed");
+                SDL_Log("%s", buffer);
+                auto *surface = SDL_LoadPNG(buffer);
+                SDL_Log("%d %d %x", surface->w, surface->h, surface->format);
+                SDL_CHECK(surface, "load png")
+                SDL_DestroySurface(surface);
+            }
+
+             free(allocator, (void *)files);
+        }
+
+        state->character_texture =
+            loadTexture(state->device, copy_pass, "resources/character.png");
+        SDL_CHECK(state->character_texture.ptr, "load world texture");
         state->font_texture = loadTexture(state->device, copy_pass, "resources/font.png");
         SDL_CHECK(state->font_texture.ptr, "load font texture");
     }
@@ -194,8 +205,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
         state->texture_sampler_bindings[i].sampler = state->sampler;
     }
 
-    gameInit(&state->game, {.ptr = state->game_mem, .len = SDL_arraysize(state->game_mem)});
-
     return SDL_APP_CONTINUE;
 }
 
@@ -209,8 +218,6 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
 SDL_AppResult SDL_AppIterate(void *appstate) {
     auto *state = (State *)appstate;
 
-    gameUpdate(state->game);
-
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(state->device);
     SDL_CHECK(command_buffer, "acquire gpu command buffer");
 
@@ -219,12 +226,11 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
     {
         {
-            Instance *instances = (Instance *)SDL_MapGPUTransferBuffer(
+            Instance *instances_raw = (Instance *)SDL_MapGPUTransferBuffer(
                 state->device, state->instance_transfer_buffer, true);
-            SDL_CHECK(instances, "map gpu transfer buffer");
+            SDL_CHECK(instances_raw, "map gpu transfer buffer");
 
-            instances[0] = {{1, 1}, {128, 128}, {0, 0, 1, 1}, WHITE, 0, 0};
-            instances_len++;
+            instances_len = gameUpdate({instances_raw, MAX_INSTANCES});
 
             SDL_CHECK(instances_len <= MAX_INSTANCES, "too many instances");
 
@@ -245,7 +251,11 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     if (swapchain_texture) {
         SDL_GPUColorTargetInfo color_target_info = {};
         color_target_info.texture = swapchain_texture;
-        color_target_info.clear_color = toFColor(GRAY);
+        const FColor clear_color = toFColor(GRAY);
+        color_target_info.clear_color.r = clear_color.r;
+        color_target_info.clear_color.g = clear_color.g;
+        color_target_info.clear_color.b = clear_color.b;
+        color_target_info.clear_color.a = clear_color.a;
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, 0);
@@ -258,7 +268,7 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
         // TODO: auto bind
-        state->texture_sampler_bindings[0].texture = state->world_texture.ptr;
+        state->texture_sampler_bindings[0].texture = state->character_texture.ptr;
         for (uint i = 1; i < MAX_TEXTURE_SAMPLERS; i++) {
             state->texture_sampler_bindings[i].texture = state->default_texture;
         }
@@ -285,7 +295,7 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
 
     SDL_ReleaseGPUTransferBuffer(state->device, state->instance_transfer_buffer);
 
-    SDL_ReleaseGPUTexture(state->device, state->world_texture.ptr);
+    SDL_ReleaseGPUTexture(state->device, state->character_texture.ptr);
     SDL_ReleaseGPUTexture(state->device, state->font_texture.ptr);
 
     SDL_ReleaseGPUBuffer(state->device, state->instance_buffer);
@@ -300,12 +310,6 @@ void SDL_AppQuit(void *appstate, SDL_AppResult result) {
     SDL_DestroyGPUDevice(state->device);
     SDL_DestroyWindow(state->window);
     // TODO: notify about memory leak
+    debugAllocatorDeinit(&state->debug_allocator);
     SDL_free(state);
-}
-
-Sprite *loadSprite(const char *file) {
-    return {};
-}
-
-void drawSprite(Sprite *sprite, vec2 positon) {
 }
