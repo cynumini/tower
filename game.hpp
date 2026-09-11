@@ -1,3 +1,5 @@
+#pragma once
+
 #include <skn_math.cpp>
 
 struct Instance {
