@@ -14,11 +14,9 @@ layout(location=3) in vec2 uv_position;
 layout(location=4) in vec2 uv_size;
 layout(location=5) in vec4 color_in;
 layout(location=6) in float rotation;
-layout(location=7) in uint texture_index_in;
 
 layout(location=0) out vec2 uv;
 layout(location=1) out vec4 color_out;
-layout(location=2) out uint texture_index_out;
 
 void main() {
     vec2 proj_scale  = 2.0F / screen;
@@ -43,5 +41,4 @@ void main() {
 
     uv = uv_position + (vertex_position * uv_size);
     color_out = color_in;
-    texture_index_out = texture_index_in;
 }
