@@ -6,48 +6,50 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
+#include "game.hpp"
+
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
 static Arena arena;
 static Engine engine;
+static Game game;
 
 static SDL_Window *window;
 static SDL_GPUDevice *device;
 static SDL_GPUSampler *sampler;
 static SDL_GPUGraphicsPipeline *pipeline;
+static SDL_GPUTransferBuffer *instance_transfer_buffer;
 
 static SDL_GPUBuffer *vertex_buffer;
 static SDL_GPUBuffer *index_buffer;
 static SDL_GPUBuffer *instance_buffer;
 
 static Texture atlas;
-// -- clear line
 
-#include "game.hpp"
+// -- clear line
 
 const uint MAX_INSTANCES = 16;
 
 struct State {
 
-    SDL_GPUTransferBuffer *instance_transfer_buffer;
-
-    HashMap<Rect> sprites;
-
     u64 counter;
     u64 frames;
     float seconds;
     float frequency;
-
-    GameState game_state;
 };
 
 static State state = {};
 
+struct AtlasItem {
+    Slice<const char> name;
+    SDL_Surface *surface;
+};
+
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
     // -- clear line
-    arena.init(sdl_allocator, KB(7));
+    arena.init(sdl_allocator, KB(3));
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
     SDL_SetAppMetadata(name, "0.3.0", "cynumini.tower");
@@ -159,26 +161,27 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), index_buffer,
                           sizeof(indices));
     }
-    // -- clear line
 
     {
         ScopeArena scope(&arena);
-        auto scratch = scope.tmp.allocator();
 
-        auto files = globDirectory("resources/", "*.png", SDL_GLOB_CASEINSENSITIVE);
-        defer(sdl_allocator.free(files.ptr));
-        SDL_assert(files.len);
+        int files_len = 0;
+        char **files =
+            SDL_GlobDirectory("resources/", "*.png", SDL_GLOB_CASEINSENSITIVE, &files_len);
+        defer(SDL_free((void *)files));
+        SDL_CHECK(files);
 
-        Dictionary<SDL_Surface *> files_dict = {};
-        defer(for (auto &file : files_dict) SDL_DestroySurface(file.value));
+        engine.sprites = HashMap<Rect>::init(&arena, size_t(files_len) * 2);
 
-        for (auto &file : files) {
-            auto path = scratch.allocFormatZ("resources/%s", file);
+        auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len);
+        defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
 
+        for (char **it = files; *it; it++) {
+            Slice<const char> file = arena.dupeConst(getStem(*it));
+            SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
-
-            scratch.free(path);
+            scope.tmp.free(path);
 
             if (surface->format != SDL_PIXELFORMAT_RGBA32) {
                 SDL_Surface *old_surface = surface;
@@ -187,23 +190,22 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                 SDL_CHECK(surface);
             }
 
-            files_dict.put(&scratch, file, surface);
+            atlas_items.append(&scope.tmp, {file, surface});
         }
 
-        files_dict.sort([](const void *a, const void *b) {
-            using Item = Dictionary<SDL_Surface *>::Item;
-            auto *s_a = (Item *)a;
-            auto *s_b = (Item *)b;
-            if (s_a->value->h > s_b->value->h) return -1;
-            if (s_a->value->h < s_b->value->h) return 1;
+        atlas_items.sort([](const void *a, const void *b) {
+            auto *s_a = (AtlasItem *)a;
+            auto *s_b = (AtlasItem *)b;
+            if (s_a->surface->h > s_b->surface->h) return -1;
+            if (s_a->surface->h < s_b->surface->h) return 1;
             return 0;
         });
 
         uint x_offset = 0;
         uint y_offset = 0;
         uint y_max = 0;
-        for (auto &file : files_dict) {
-            auto *surface = file.value;
+
+        for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
                 createGPUTransferBuffer(device, sizeof(Color) * surface->w * surface->h);
             defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
@@ -233,8 +235,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_assert(x_offset + uint(surface->w) <= uint(atlas.size.x));
             SDL_assert(y_offset + uint(surface->h) <= uint(atlas.size.y));
 
-            state.sprites.put(
-                &scratch, scratch.dupeZ(getStem(file.key)).ptr,
+            engine.sprites.put(
+                &arena, name,
                 {float(x_offset), float(y_offset), float(surface->w), float(surface->h)});
 
             y_max = max(uint(surface->h), y_max);
@@ -244,33 +246,35 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
             x_offset += surface->w;
         }
-        auto global_allocator = arena.allocator();
-        state.sprites = state.sprites.copy(&global_allocator);
     }
 
-    state.instance_transfer_buffer =
-        createGPUTransferBuffer(device, sizeof(Instance) * MAX_INSTANCES);
-    SDL_CHECK(state.instance_transfer_buffer);
+    instance_transfer_buffer = createGPUTransferBuffer(device, sizeof(Instance) * MAX_INSTANCES);
+    SDL_CHECK(instance_transfer_buffer);
+
+    engine.keyboard_state = SDL_GetKeyboardState(0);
+
+    game.init(&engine);
 
     state.frequency = float(SDL_GetPerformanceFrequency());
     state.counter = SDL_GetPerformanceCounter();
-
-    gameInit(&state.game_state, &engine, state.sprites);
-
-    engine.keyboard_state = SDL_GetKeyboardState(0);
 
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
-    memset(&engine.key_down, 0, sizeof(engine.key_down));
-
     switch (event->type) {
     case SDL_EVENT_QUIT: {
         return SDL_APP_SUCCESS;
     }
-    case SDL_EVENT_KEY_DOWN: {
-        engine.key_down[event->key.scancode] = true;
+    case SDL_EVENT_KEY_DOWN:
+        if (!event->key.repeat) {
+            engine.key_state[event->key.scancode] = KeyState::pressed;
+        }
+        break;
+    case SDL_EVENT_KEY_UP:
+        engine.key_state[event->key.scancode] = KeyState::released;
+        break;
+    default: {
         break;
     }
     }
@@ -280,47 +284,35 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
 
 SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     ScopeArena scope(&arena);
-    auto frame = scope.tmp.allocator();
-
-    auto prev = state.counter;
-    state.counter = SDL_GetPerformanceCounter();
-    state.frames += 1;
-    engine.dt = float(state.counter - prev) / state.frequency;
-    state.seconds += engine.dt;
-
-    if (state.seconds > 0.5F) {
-        engine.fps = (float)state.frames / state.seconds;
-        state.frames = 0;
-        state.seconds = 0;
-    }
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
+
+    // -- clear line
 
     GameResult game_update_result = {};
     {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         defer(SDL_EndGPUCopyPass(copy_pass));
         {
-            Instance *instances_raw = (Instance *)SDL_MapGPUTransferBuffer(
-                device, state.instance_transfer_buffer, true);
+            Instance *instances_raw =
+                (Instance *)SDL_MapGPUTransferBuffer(device, instance_transfer_buffer, true);
             SDL_CHECK(instances_raw);
 
             game_update_result =
-                gameUpdate(&state.game_state, &engine, &frame,
-                           {.items = {instances_raw, MAX_INSTANCES}}, state.sprites);
+                game.update(&engine, &scope.tmp, {.items = {MAX_INSTANCES, instances_raw}});
 
             // SDL_Log("%d\n", game_update_result.quit);
-            if (game_update_result.quit) return SDL_APP_SUCCESS;
+            if (engine.running) return SDL_APP_SUCCESS;
 
             SDL_assert(game_update_result.instances_len <= MAX_INSTANCES);
 
-            SDL_UnmapGPUTransferBuffer(device, state.instance_transfer_buffer);
+            SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer);
         }
 
         if (game_update_result.instances_len) {
-            uploadToGPUBuffer(copy_pass, state.instance_transfer_buffer, 0, instance_buffer,
+            uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, instance_buffer,
                               sizeof(Instance) * game_update_result.instances_len);
         }
     }
@@ -371,11 +363,25 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         SDL_EndGPURenderPass(render_pass);
     }
 
+    memset(&engine.key_state, 0, sizeof(engine.key_state));
+
+    auto prev = state.counter;
+    state.counter = SDL_GetPerformanceCounter();
+    state.frames += 1;
+    engine.dt = float(state.counter - prev) / state.frequency;
+    state.seconds += engine.dt;
+
+    if (state.seconds > 0.5F) {
+        engine.fps = (float)state.frames / state.seconds;
+        state.frames = 0;
+        state.seconds = 0;
+    }
+
     return SDL_APP_CONTINUE;
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    SDL_ReleaseGPUTransferBuffer(device, state.instance_transfer_buffer);
+    SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
 
@@ -398,4 +404,12 @@ void unagiLog(const char *fmt, ...) {
     va_start(args, fmt);
     SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
     va_end(args);
+}
+
+bool Engine::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
+bool Engine::is_key_just_pressed(Key key) const {
+    return key_state[int(key)] == KeyState::pressed;
+}
+bool Engine::is_key_just_released(Key key) const {
+    return key_state[int(key)] == KeyState::released;
 }

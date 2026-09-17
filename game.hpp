@@ -25,13 +25,10 @@ struct Font {
     }
 };
 
-struct GameState {
-    vec2 player_size;
-    vec2 player_position;
-    Font font;
-    bool attack;
-    bool invertory_visible;
-    bool cast_spell;
+struct GameResult {
+    size_t instances_len;
+    size_t ui_instance_offset;
+    vec2 camera;
 };
 
 struct Instance {
@@ -42,14 +39,15 @@ struct Instance {
     float rotation;
 };
 
-void gameInit(GameState *state, Engine *engine, HashMap<Rect> sprites);
+struct Game {
+    vec2 player_size;
+    vec2 player_position;
+    Font font;
+    bool attack;
+    bool invertory_visible;
+    bool cast_spell;
 
-struct GameResult {
-    size_t instances_len;
-    size_t ui_instance_offset;
-    vec2 camera;
-    bool quit;
+    void init(Engine *engine);
+    GameResult update(Engine *engine, Arena *a,
+                          Fixed<Instance> instances);
 };
-
-GameResult gameUpdate(GameState *state, Engine *engine, AllocatorOld *a, Fixed<Instance> instances,
-                HashMap<Rect> sprites);

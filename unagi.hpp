@@ -3,7 +3,7 @@
 #include <skn.cpp>
 #include <skn_math.cpp>
 
-enum class Scancode : u8 {
+enum class Key : u8 {
     a = 4,
     b = 5,
     c = 6,
@@ -104,10 +104,21 @@ enum class Scancode : u8 {
 
 __attribute__((format(printf, 1, 2))) void unagiLog(const char *fmt, ...);
 
+enum class KeyState : u8 { none, pressed, released };
+
 struct Engine {
-    float fps;
-    ivec2 screen;
-    bool key_down[512];
+    HashMap<Rect> sprites;
     const bool *keyboard_state;
+
+    ivec2 screen;
+    float fps;
     float dt;
+
+    bool running;
+
+    KeyState key_state[99];
+
+    bool is_key_pressed(Key key) const;
+    bool is_key_just_pressed(Key key) const;
+    bool is_key_just_released(Key key) const;
 };
