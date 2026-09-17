@@ -1,6 +1,13 @@
-#include <skn_sdl.cpp>
 // -- clear line
 #include "unagi.hpp"
+
+#include <skn_sdl.cpp>
+
+#define SDL_MAIN_USE_CALLBACKS 1
+#include <SDL3/SDL_main.h>
+
+#include "build/shader.frag.hpp"
+#include "build/shader.vert.hpp"
 
 static Arena arena;
 static Engine engine;
@@ -16,12 +23,6 @@ static SDL_GPUBuffer *instance_buffer;
 
 static Texture atlas;
 // -- clear line
-
-#define SDL_MAIN_USE_CALLBACKS 1
-#include <SDL3/SDL_main.h>
-
-#include "build/shader.frag.hpp"
-#include "build/shader.vert.hpp"
 
 #include "game.hpp"
 
@@ -45,6 +46,7 @@ static State state = {};
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
+    // -- clear line
     arena.init(sdl_allocator, KB(7));
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -117,19 +119,15 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         createinfo.target_info.num_color_targets = 1;
         pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
     }
-
     SDL_CHECK(pipeline);
 
     vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-    const uint VERTEX_BUFFER_SIZE = sizeof(vertices);
-
     i16 indices[6]{0, 1, 2, 0, 2, 3};
-    const uint INDEX_BUFFER_SIZE = sizeof(indices);
 
-    vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, VERTEX_BUFFER_SIZE);
+    vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
     SDL_CHECK(vertex_buffer);
 
-    index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, INDEX_BUFFER_SIZE);
+    index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
     SDL_CHECK(index_buffer);
 
     instance_buffer =
@@ -145,7 +143,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     {
         auto *transfer_buffer =
-            createGPUTransferBuffer(device, VERTEX_BUFFER_SIZE + INDEX_BUFFER_SIZE);
+            createGPUTransferBuffer(device, sizeof(vertices) + sizeof(indices));
         SDL_CHECK(transfer_buffer);
         defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
 
@@ -154,13 +152,14 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
             SDL_CHECK(memory);
 
-            SDL_memcpy(memory, vertices, VERTEX_BUFFER_SIZE);
-            SDL_memcpy(memory + VERTEX_BUFFER_SIZE, indices, INDEX_BUFFER_SIZE);
+            SDL_memcpy(memory, vertices, sizeof(vertices));
+            SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
         }
-        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, vertex_buffer, VERTEX_BUFFER_SIZE);
-        uploadToGPUBuffer(copy_pass, transfer_buffer, VERTEX_BUFFER_SIZE, index_buffer,
-                          INDEX_BUFFER_SIZE);
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, vertex_buffer, sizeof(vertices));
+        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), index_buffer,
+                          sizeof(indices));
     }
+    // -- clear line
 
     {
         ScopeArena scope(&arena);
@@ -376,7 +375,6 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-
     SDL_ReleaseGPUTransferBuffer(device, state.instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);

@@ -32,18 +32,10 @@ void gameInit(GameState *state, Engine *engine, HashMap<Rect> sprites) {
 GameResult gameUpdate(GameState *state, Engine *engine, AllocatorOld *a,
                       Fixed<Instance> instances, HashMap<Rect> sprites) {
     bool quit = false;
-    if (engine->key_down[int(Scancode::escape)]) {
-        quit = true;
-    }
-    if (engine->key_down[int(Scancode::space)]) {
-        state->attack = true;
-    }
-    if (engine->key_down[int(Scancode::e)]) {
-        state->invertory_visible = !state->invertory_visible;
-    }
-    if (engine->key_down[int(Scancode::f)]) {
-        state->cast_spell = true;
-    }
+    if (engine->key_down[int(Scancode::escape)]) quit = true;
+    if (engine->key_down[int(Scancode::space)]) state->attack = true;
+    if (engine->key_down[int(Scancode::e)]) state->invertory_visible = !state->invertory_visible;
+    if (engine->key_down[int(Scancode::f)]) state->cast_spell = true;
 
     vec2 velocity{float(engine->keyboard_state[int(Scancode::d)]) -
                       float(engine->keyboard_state[int(Scancode::a)]),
@@ -60,5 +52,4 @@ GameResult gameUpdate(GameState *state, Engine *engine, AllocatorOld *a,
 
     return {instances.len, ui_instance_offset,
             -state->player_position + engine->screen / 2.0F - state->player_size / 2.0F, quit};
-
 }
