@@ -1,6 +1,5 @@
 #pragma once
 
-#include <skn.cpp>
 #include <skn_math.cpp>
 
 enum class Key : u8 {
@@ -102,8 +101,6 @@ enum class Key : u8 {
     kp_period = 99
 };
 
-__attribute__((format(printf, 1, 2))) void unagiLog(const char *fmt, ...);
-
 enum class KeyState : u8 { none, pressed, released };
 
 struct Engine {
@@ -111,14 +108,17 @@ struct Engine {
     const bool *keyboard_state;
 
     ivec2 screen;
-    float fps;
+    u16 fps;
+    float ms;
     float dt;
 
     bool running;
+    Color clear_color;
 
-    KeyState key_state[99];
+    KeyState key_state[100];
 
     bool is_key_pressed(Key key) const;
     bool is_key_just_pressed(Key key) const;
     bool is_key_just_released(Key key) const;
+    __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
 };

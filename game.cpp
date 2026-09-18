@@ -2,7 +2,6 @@
 
 #include "unagi.hpp"
 
-
 static void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, Font font,
                      vec2 position) {
     float advance = 0;
@@ -24,12 +23,14 @@ static void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, Font fo
     }
 }
 
-void Game::init(Engine *engine) {
+void Game::init(Engine *engine, Arena *arena) {
+    this->arena = arena;
     font.init(engine->sprites.get("font"));
     player_size = {16.0F, 32.0F};
+    engine->clear_color = colorFromHex(0x8bbbffff);
 }
 
-GameResult Game::update(Engine *engine, Arena *a, Fixed<Instance> instances) {
+vec2 Game::update(Engine *engine, Fixed<Instance> *instances) {
     if (engine->is_key_just_pressed(Key::escape)) engine->running = true;
     if (engine->is_key_just_pressed(Key::space)) attack = true;
     if (engine->is_key_just_pressed(Key::e)) invertory_visible = !invertory_visible;
@@ -40,12 +41,16 @@ GameResult Game::update(Engine *engine, Arena *a, Fixed<Instance> instances) {
 
     velocity = velocity.normalize();
 
-    const size_t ui_instance_offset = instances.len;
-    // Rect character = engine->sprites.get("spell2");
-    //  instances.append({{0, 0}, character.size(), character / 4096, WHITE, 0});
-    auto buffer = a->allocPrint("%.02f FPS", engine->fps);
-    drawText(&instances, {buffer.len, buffer.ptr}, font, {0, 0});
+    Rect character = engine->sprites.get("zombie");
+    instances->append({{0, 0}, character.size(), character / 4096, WHITE, 0});
 
-    return {instances.len, ui_instance_offset,
-            -player_position + engine->screen / 2.0F - player_size / 2.0F};
+    return -player_position + engine->screen / 2.0F - player_size / 2.0F;
+}
+
+void Game::updateUI(Engine *engine, Fixed<Instance> *instances) const {
+    ScopeArena scope(arena);
+    auto buffer1 = scope.tmp.allocPrint("FPS: %d", engine->fps);
+    auto buffer2 = scope.tmp.allocPrint("%.2fms", engine->ms);
+    drawText(instances, {buffer1.len, buffer1.ptr}, font, {2, 2});
+    drawText(instances, {buffer2.len, buffer2.ptr}, font, {2, 14});
 }

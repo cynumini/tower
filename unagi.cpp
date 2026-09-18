@@ -1,4 +1,3 @@
-// -- clear line
 #include "unagi.hpp"
 
 #include <skn_sdl.cpp>
@@ -11,9 +10,19 @@
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
+const uint MAX_INSTANCES = 32;
+
 static Arena arena;
+static Arena game_arena;
 static Engine engine;
 static Game game;
+
+static struct Time {
+    u64 counter;
+    u64 frames;
+    float seconds;
+    float frequency;
+} time;
 
 static SDL_Window *window;
 static SDL_GPUDevice *device;
@@ -27,29 +36,21 @@ static SDL_GPUBuffer *instance_buffer;
 
 static Texture atlas;
 
-// -- clear line
-
-const uint MAX_INSTANCES = 16;
-
-struct State {
-
-    u64 counter;
-    u64 frames;
-    float seconds;
-    float frequency;
-};
-
-static State state = {};
-
 struct AtlasItem {
     Slice<const char> name;
     SDL_Surface *surface;
 };
 
+struct UBO {
+    ivec2 screen;
+    vec2 camera;
+};
+
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    // -- clear line
-    arena.init(sdl_allocator, KB(3));
+    arena.init(KB(3));
+    game_arena.init(64);
+
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
     SDL_SetAppMetadata(name, "0.3.0", "cynumini.tower");
@@ -176,9 +177,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
 
-        for (char **it = files; *it; it++) {
-            Slice<const char> file = arena.dupeConst(getStem(*it));
-            SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
+        for (char *const *it = files; *it; it++) {
+            const Slice<const char> file = arena.dupeConst(getStem(*it));
+            const SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
             scope.tmp.free(path);
@@ -253,10 +254,10 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
 
-    game.init(&engine);
+    game.init(&engine, &game_arena);
 
-    state.frequency = float(SDL_GetPerformanceFrequency());
-    state.counter = SDL_GetPerformanceCounter();
+    time.frequency = float(SDL_GetPerformanceFrequency());
+    time.counter = SDL_GetPerformanceCounter();
 
     return SDL_APP_CONTINUE;
 }
@@ -278,42 +279,40 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         break;
     }
     }
-
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
+    if (engine.running) return SDL_APP_SUCCESS;
+
     ScopeArena scope(&arena);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
 
-    // -- clear line
+    vec2 camera = {};
+    size_t ui_offset = 0;
+    size_t instances_len = 0;
 
-    GameResult game_update_result = {};
     {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         defer(SDL_EndGPUCopyPass(copy_pass));
         {
             Instance *instances_raw =
                 (Instance *)SDL_MapGPUTransferBuffer(device, instance_transfer_buffer, true);
+            defer(SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer));
             SDL_CHECK(instances_raw);
 
-            game_update_result =
-                game.update(&engine, &scope.tmp, {.items = {MAX_INSTANCES, instances_raw}});
-
-            // SDL_Log("%d\n", game_update_result.quit);
-            if (engine.running) return SDL_APP_SUCCESS;
-
-            SDL_assert(game_update_result.instances_len <= MAX_INSTANCES);
-
-            SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer);
+            Fixed<Instance> instances = {.items = {MAX_INSTANCES, instances_raw}};
+            camera = game.update(&engine, &instances);
+            ui_offset = instances.len;
+            game.updateUI(&engine, &instances);
+            instances_len = instances.len;
         }
-
-        if (game_update_result.instances_len) {
+        if (instances_len) {
             uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, instance_buffer,
-                              sizeof(Instance) * game_update_result.instances_len);
+                              sizeof(Instance) * instances_len);
         }
     }
 
@@ -325,58 +324,53 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     if (swapchain_texture) {
         SDL_GPUColorTargetInfo color_target_info = {};
         color_target_info.texture = swapchain_texture;
-        const FColor clear_color = toFColor(GRAY);
-        color_target_info.clear_color.r = clear_color.r;
-        color_target_info.clear_color.g = clear_color.g;
-        color_target_info.clear_color.b = clear_color.b;
-        color_target_info.clear_color.a = clear_color.a;
+        color_target_info.clear_color = {
+            .r = float(engine.clear_color.r) / 255.0F,
+            .g = float(engine.clear_color.g) / 255.0F,
+            .b = float(engine.clear_color.b) / 255.0F,
+            .a = float(engine.clear_color.a) / 255.0F,
+        };
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, 0);
+        defer(SDL_EndGPURenderPass(render_pass));
 
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
+
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {instance_buffer, 0}};
         SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
+
         const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
         const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
-        struct UBO {
-            ivec2 screen;
-            vec2 camera;
-        } ubo;
-        ubo.screen = engine.screen;
-        ubo.camera = game_update_result.camera;
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
 
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, game_update_result.ui_instance_offset, 0, 0,
-                                     0);
+        UBO ubo = {.screen = engine.screen};
+
+        ubo.camera = camera;
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, ui_offset, 0, 0, 0);
+
         ubo.camera = {};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6,
-                                     game_update_result.instances_len -
-                                         game_update_result.ui_instance_offset,
-                                     0, 0, game_update_result.ui_instance_offset);
-
-        SDL_EndGPURenderPass(render_pass);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len - ui_offset, 0, 0, ui_offset);
     }
 
-    memset(&engine.key_state, 0, sizeof(engine.key_state));
+    memset(engine.key_state, 0, sizeof(engine.key_state));
 
-    auto prev = state.counter;
-    state.counter = SDL_GetPerformanceCounter();
-    state.frames += 1;
-    engine.dt = float(state.counter - prev) / state.frequency;
-    state.seconds += engine.dt;
-
-    if (state.seconds > 0.5F) {
-        engine.fps = (float)state.frames / state.seconds;
-        state.frames = 0;
-        state.seconds = 0;
+    auto prev = time.counter;
+    time.counter = SDL_GetPerformanceCounter();
+    time.frames += 1;
+    engine.dt = float(time.counter - prev) / time.frequency;
+    time.seconds += engine.dt;
+    engine.ms = engine.dt * 1000;
+    if (time.seconds >= 0.5F) {
+        engine.fps = (u16)SDL_roundf((float)time.frames / time.seconds);
+        time.frames = 0;
+        time.seconds = 0;
     }
-
     return SDL_APP_CONTINUE;
 }
 
@@ -396,20 +390,23 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
     SDL_DestroyGPUDevice(device);
     SDL_DestroyWindow(window);
 
-    sdl_allocator.free(arena.mem);
+    arena.deinit();
+    game_arena.deinit();
 }
 
-void unagiLog(const char *fmt, ...) {
+bool Engine::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
+
+bool Engine::is_key_just_pressed(Key key) const {
+    return key_state[int(key)] == KeyState::pressed;
+}
+
+bool Engine::is_key_just_released(Key key) const {
+    return key_state[int(key)] == KeyState::released;
+}
+
+void Engine::log(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
     va_end(args);
-}
-
-bool Engine::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
-bool Engine::is_key_just_pressed(Key key) const {
-    return key_state[int(key)] == KeyState::pressed;
-}
-bool Engine::is_key_just_released(Key key) const {
-    return key_state[int(key)] == KeyState::released;
 }

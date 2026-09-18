@@ -12,23 +12,25 @@ struct Font {
         for (size_t i = 0; i < 256; i++) {
             widths[i] = 4;
         }
+        widths[' '] = 2;
+        widths[','] = 2;
+        widths['.'] = 1;
         widths['0'] = 5;
+        widths['1'] = 3;
         widths['2'] = 5;
         widths['6'] = 5;
         widths['8'] = 5;
         widths['9'] = 5;
+        widths[':'] = 1;
         widths['?'] = 5;
         widths['M'] = 7;
+        widths['P'] = 5;
+        widths['S'] = 5;
+        widths['m'] = 5;
         widths['x'] = 5;
         widths['y'] = 5;
         this->texture = texture;
     }
-};
-
-struct GameResult {
-    size_t instances_len;
-    size_t ui_instance_offset;
-    vec2 camera;
 };
 
 struct Instance {
@@ -40,6 +42,8 @@ struct Instance {
 };
 
 struct Game {
+    Arena *arena;
+
     vec2 player_size;
     vec2 player_position;
     Font font;
@@ -47,7 +51,7 @@ struct Game {
     bool invertory_visible;
     bool cast_spell;
 
-    void init(Engine *engine);
-    GameResult update(Engine *engine, Arena *a,
-                          Fixed<Instance> instances);
+    void init(Engine *engine, Arena *arena);
+    vec2 update(Engine *engine, Fixed<Instance> *instances);
+    void updateUI(Engine *engine, Fixed<Instance> *instance) const;
 };
