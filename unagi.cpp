@@ -10,7 +10,7 @@
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
-const uint MAX_INSTANCES = 32;
+const uint MAX_INSTANCES = 1024;
 
 static Arena arena;
 static Arena game_arena;
@@ -22,6 +22,8 @@ static struct Time {
     u64 frames;
     float seconds;
     float frequency;
+    u16 fps;
+    float ms;
 } time;
 
 static SDL_Window *window;
@@ -253,13 +255,30 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     SDL_CHECK(instance_transfer_buffer);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
+    engine.default_font.init(engine.sprites.get("font"));
 
     game.init(&engine, &game_arena);
 
     time.frequency = float(SDL_GetPerformanceFrequency());
     time.counter = SDL_GetPerformanceCounter();
 
+    {
+        SDL_Time ticks; // NOLINT
+        SDL_assert(SDL_GetCurrentTime(&ticks));
+        SDL_srand(ticks);
+    }
+
     return SDL_APP_CONTINUE;
+}
+
+void Engine::updateUI(Fixed<Instance> *instances) {
+    if (show_fps) {
+        ScopeArena scope(&arena);
+        auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
+        auto buffer2 = scope.tmp.allocPrint("%.2fms", time.ms);
+        drawText(instances, {buffer1.len, buffer1.ptr}, {2, 2});
+        drawText(instances, {buffer2.len, buffer2.ptr}, {2, 14});
+    }
 }
 
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
@@ -285,8 +304,6 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
 SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     if (engine.running) return SDL_APP_SUCCESS;
 
-    ScopeArena scope(&arena);
-
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
@@ -308,7 +325,12 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             camera = game.update(&engine, &instances);
             ui_offset = instances.len;
             game.updateUI(&engine, &instances);
+            engine.updateUI(&instances);
             instances_len = instances.len;
+
+            for (auto &instance : instances) {
+                instance.uv /= 4096.0F;
+            }
         }
         if (instances_len) {
             uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, instance_buffer,
@@ -365,9 +387,9 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     time.frames += 1;
     engine.dt = float(time.counter - prev) / time.frequency;
     time.seconds += engine.dt;
-    engine.ms = engine.dt * 1000;
+    time.ms = engine.dt * 1000;
     if (time.seconds >= 0.5F) {
-        engine.fps = (u16)SDL_roundf((float)time.frames / time.seconds);
+        time.fps = (u16)SDL_roundf((float)time.frames / time.seconds);
         time.frames = 0;
         time.seconds = 0;
     }
@@ -404,9 +426,38 @@ bool Engine::is_key_just_released(Key key) const {
     return key_state[int(key)] == KeyState::released;
 }
 
+int Engine::rand(int n) { return SDL_rand(n); }
+
 void Engine::log(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
     va_end(args);
+}
+
+void Engine::drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position,
+                      Font font) {
+    float advance = 0;
+    for (size_t i = 0; i < text.len; i++) {
+        vec2 texture_offset = {0, 0};
+        const u8 c = text.ptr[i] - ' ';
+        texture_offset = {
+            .x = float(c % 16) * 10.0F,
+            .y = float(c / 16) * 10.0F, // NOLINT
+        };
+        renderer->append({{position.x + advance, position.y},
+                          {10.0F, 10.0F},
+                          Rect{font.texture.x + texture_offset.x,
+                               font.texture.y + texture_offset.y, 10.0F, 10.0F},
+                          WHITE,
+                          0.0F});
+        advance += float(font.widths[u8(text.ptr[i])]) + 1;
+    }
+}
+
+float Engine::measureText(Slice<const char> text, Font font) {
+    if (text.len == 0) return 0;
+    float advance = 0;
+    for (size_t i = 0; i < text.len; i++) advance += float(font.widths[u8(text.ptr[i])]) + 1;
+    return advance - 1;
 }

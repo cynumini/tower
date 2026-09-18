@@ -2,6 +2,43 @@
 
 #include <skn_math.cpp>
 
+struct Instance {
+    vec2 position;
+    vec2 size;
+    Rect uv;
+    Color color;
+    float rotation;
+};
+
+struct Font {
+    u8 widths[256];
+    Rect texture;
+
+    void init(Rect texture) {
+        for (size_t i = 0; i < 256; i++) {
+            widths[i] = 4;
+        }
+        widths[' '] = 2;
+        widths[','] = 2;
+        widths['.'] = 1;
+        widths['0'] = 5;
+        widths['1'] = 3;
+        widths['2'] = 5;
+        widths['6'] = 5;
+        widths['8'] = 5;
+        widths['9'] = 5;
+        widths[':'] = 1;
+        widths['?'] = 5;
+        widths['M'] = 7;
+        widths['P'] = 5;
+        widths['S'] = 5;
+        widths['m'] = 5;
+        widths['x'] = 5;
+        widths['y'] = 5;
+        this->texture = texture;
+    }
+};
+
 enum class Key : u8 {
     a = 4,
     b = 5,
@@ -107,18 +144,29 @@ struct Engine {
     HashMap<Rect> sprites;
     const bool *keyboard_state;
 
+    Font default_font;
+
     ivec2 screen;
-    u16 fps;
-    float ms;
+
     float dt;
 
     bool running;
+    bool show_fps;
     Color clear_color;
 
-    KeyState key_state[100];
+    KeyState key_state[512];
 
     bool is_key_pressed(Key key) const;
     bool is_key_just_pressed(Key key) const;
     bool is_key_just_released(Key key) const;
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
+    static int rand(int n);
+    static void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position,
+                         Font font);
+    void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position) const {
+        drawText(renderer, text, position, default_font);
+    }
+    static float measureText(Slice<const char> text, Font font);
+    void updateUI(Fixed<Instance> *instances);
+    float measureText(Slice<const char> text) const { return measureText(text, default_font); }
 };
