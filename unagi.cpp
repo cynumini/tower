@@ -13,7 +13,7 @@
 const uint MAX_INSTANCES = 1024;
 
 static Arena arena;
-static Arena game_arena;
+
 static Engine engine;
 static Game game;
 
@@ -51,7 +51,7 @@ struct UBO {
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
     arena.init(KB(3));
-    game_arena.init(64);
+
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -257,7 +257,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     engine.keyboard_state = SDL_GetKeyboardState(0);
     engine.default_font.init(engine.sprites.get("font"));
 
-    game.init(&engine, &game_arena);
+    game.init(&engine);
 
     time.frequency = float(SDL_GetPerformanceFrequency());
     time.counter = SDL_GetPerformanceCounter();
@@ -397,6 +397,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
+    game.deinit(&engine);
+    
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
@@ -413,7 +415,6 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
     SDL_DestroyWindow(window);
 
     arena.deinit();
-    game_arena.deinit();
 }
 
 bool Engine::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
