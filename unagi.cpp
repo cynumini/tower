@@ -10,7 +10,7 @@
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
-const uint MAX_INSTANCES = 1024;
+const uint MAX_INSTANCES = 4096;
 
 static Arena arena;
 
@@ -51,7 +51,6 @@ struct UBO {
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
     arena.init(KB(3));
-
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -398,7 +397,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
     game.deinit(&engine);
-    
+
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
@@ -436,29 +435,31 @@ void Engine::log(const char *fmt, ...) {
     va_end(args);
 }
 
-void Engine::drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position,
-                      Font font) {
+void Engine::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position,
+                      float size, Color color, Font font) {
     float advance = 0;
     for (size_t i = 0; i < text.len; i++) {
         vec2 texture_offset = {0, 0};
         const u8 c = text.ptr[i] - ' ';
         texture_offset = {
-            .x = float(c % 16) * 10.0F,
-            .y = float(c / 16) * 10.0F, // NOLINT
+            .x = float(c % 16) * font.size,
+            .y = float(c / 16) * font.size, // NOLINT
         };
         renderer->append({{position.x + advance, position.y},
-                          {10.0F, 10.0F},
+                          {size, size},
                           Rect{font.texture.x + texture_offset.x,
-                               font.texture.y + texture_offset.y, 10.0F, 10.0F},
-                          WHITE,
+                               font.texture.y + texture_offset.y, font.size, font.size},
+                          color,
                           0.0F});
-        advance += float(font.widths[u8(text.ptr[i])]) + 1;
+        advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
     }
 }
 
-float Engine::measureText(Slice<const char> text, Font font) {
+float Engine::measureText(Slice<const char> text, float size, Font font) {
     if (text.len == 0) return 0;
     float advance = 0;
-    for (size_t i = 0; i < text.len; i++) advance += float(font.widths[u8(text.ptr[i])]) + 1;
+    for (size_t i = 0; i < text.len; i++) {
+        advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
+    }
     return advance - 1;
 }

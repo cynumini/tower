@@ -13,8 +13,10 @@ struct Instance {
 struct Font {
     u8 widths[256];
     Rect texture;
+    float size;
 
     void init(Rect texture) {
+        size = 10.0F;
         for (size_t i = 0; i < 256; i++) {
             widths[i] = 4;
         }
@@ -30,9 +32,12 @@ struct Font {
         widths[':'] = 1;
         widths['?'] = 5;
         widths['M'] = 7;
+        widths['O'] = 5;
         widths['P'] = 5;
         widths['S'] = 5;
+        widths['i'] = 1;
         widths['m'] = 5;
+        widths['w'] = 5;
         widths['x'] = 5;
         widths['y'] = 5;
         this->texture = texture;
@@ -161,12 +166,12 @@ struct Engine {
     bool is_key_just_released(Key key) const;
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
     static int rand(int n);
-    static void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position,
-                         Font font);
-    void drawText(Fixed<Instance> *renderer, SliceZ<const char> text, vec2 position) const {
-        drawText(renderer, text, position, default_font);
+    static void drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position,
+                         float size, Color color, Font font);
+    void drawText(Fixed<Instance> *renderer, Slice<const char> text,  vec2 position, float size = 10.0F, Color color = WHITE) const {
+        drawText(renderer, text, position, size, color, default_font);
     }
-    static float measureText(Slice<const char> text, Font font);
+    static float measureText(Slice<const char> text, float size, Font font);
     void updateUI(Fixed<Instance> *instances);
-    float measureText(Slice<const char> text) const { return measureText(text, default_font); }
+    float measureText(Slice<const char> text, float size = 10.0F) const { return measureText(text, size, default_font); }
 };

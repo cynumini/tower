@@ -9,7 +9,7 @@ struct Timer {
     float elapsed;
     float duration;
 
-    static Timer init(float duration) { return {.duration = duration}; };
+    constexpr static Timer init(float duration) noexcept { return {.duration = duration}; };
 
     void reset() { elapsed = 0; };
 
@@ -99,6 +99,22 @@ static size_t player_id;
 static size_t attack_id;
 static size_t spell_id;
 
+// Locations
+const float TITLE_SIZE = 16.0F;
+
+static struct Location {
+    const char *name;
+    Rect rect;
+    Rect ground;
+} locations[2];
+
+static struct ShowLocation {
+    bool active;
+    int curr_id;
+    int prev_id;
+    Timer timer;
+} show_location = {false, -1, -1, Timer::init(2)};
+
 void Game::init(Engine *engine) {
     // globals
     arena.init(64);
@@ -117,7 +133,7 @@ void Game::init(Engine *engine) {
     player_right.init(engine->sprites.get("player_right"), 3);
     player_left.init(engine->sprites.get("player_right"), 3, true);
 
-    player_id =objects.append({
+    player_id = objects.append({
         .direction = {0.0F, 1.0F},
         .timer = Timer::init(0.2F),
         .size = player_down.get(0).size(),
@@ -142,16 +158,16 @@ void Game::init(Engine *engine) {
         .tint = WHITE,
     });
 
-    const i32 MAX_X = 1000;
-    const i32 MAX_Y = 1000;
+    const i32 MAX_X = 64;
+    const i32 MAX_Y = 32;
 
     const size_t ENEMY_COUNT = 100;
     for (size_t i = 0; i < ENEMY_COUNT; i++) {
         objects.append({
             .hp = 5,
             .timer = Timer::init(0.2F),
-            .pos = {float(engine->rand(MAX_X)) - (MAX_X / 2.0F),
-                    float(engine->rand(MAX_Y)) - (MAX_Y / 2.0F)},
+            .pos = {float(engine->rand(MAX_X)) * TITLE_SIZE,
+                    (float(engine->rand(MAX_Y)) * TITLE_SIZE) - 16},
             .size = engine->sprites.get("zombie").size(),
             .sprite = engine->sprites.get("zombie"),
             .kind = Object::ENEMY,
@@ -159,13 +175,38 @@ void Game::init(Engine *engine) {
             .tint = WHITE,
         });
     }
+    const Rect grass = engine->sprites.get("grass");
+    const Rect dirt = engine->sprites.get("dirt");
+
+    // Location
+    locations[0] = {"Home", {0, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, dirt};
+    locations[1] = {"Town", {TITLE_SIZE * 32, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, grass};
 }
 
 vec2 Game::update(Engine *engine, Fixed<Instance> *instances) {
     if (engine->is_key_just_pressed(Key::escape)) engine->running = true;
     if (engine->is_key_just_pressed(Key::f3)) engine->show_fps = !engine->show_fps;
 
-    const Object *player = &objects[player_id];
+    // map
+    for (u8 i = 0; i < u8(ARRAY_LEN(locations)); ++i) {
+        const auto *location = &locations[i];
+
+        const int cols = int(location->rect.w / TITLE_SIZE);
+        const int rows = int(location->rect.h / TITLE_SIZE);
+
+        for (int tx = 0; tx < cols; ++tx) {
+            for (int ty = 0; ty < rows; ++ty) {
+                const float x = location->rect.x + (float(tx) * TITLE_SIZE);
+                const float y = location->rect.y + (float(ty) * TITLE_SIZE);
+                instances->append({{x, y}, {TITLE_SIZE, TITLE_SIZE}, location->ground, WHITE, 0});
+            }
+        }
+    }
+
+    auto offset = instances->len;
+
+    // objects
+    Object *player = &objects[player_id];
     Object *attack = &objects[attack_id];
     Object *spell = &objects[spell_id];
 
@@ -185,7 +226,7 @@ vec2 Game::update(Engine *engine, Fixed<Instance> *instances) {
                 spell->speed = 100;
             }
 
-            vec2 velocity =
+            const vec2 velocity =
                 vec2(
                     float(engine->is_key_pressed(Key::d)) - float(engine->is_key_pressed(Key::a)),
                     float(engine->is_key_pressed(Key::s)) - float(engine->is_key_pressed(Key::w)))
@@ -272,13 +313,37 @@ vec2 Game::update(Engine *engine, Fixed<Instance> *instances) {
         instances->append({object.pos, object.size, object.sprite, object.tint, object.angle});
     }
 
-    instances->sort([](const void *a, const void *b) -> int {
-        const auto *A = (const Instance *)a;
-        const auto *B = (const Instance *)b;
-        if (A->position.y < B->position.y) return -1;
-        if (B->position.y < A->position.y) return 1;
-        return 0;
-    });
+    // current location
+    {
+        bool outside = true;
+        for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+            auto *location = &locations[i];
+            if (checkCollisionAABB(player->rect(), location->rect)) {
+                outside = false;
+                show_location.curr_id = i;
+            }
+        }
+        if (outside) {
+            show_location.curr_id = -1;
+        }
+
+        if (show_location.curr_id != show_location.prev_id) {
+            show_location.active = true;
+            show_location.timer.reset();
+            show_location.prev_id = show_location.curr_id;
+        } else {
+        }
+    }
+
+    instances->sort(
+        [](const void *a, const void *b) -> int {
+            const auto *A = (const Instance *)a;
+            const auto *B = (const Instance *)b;
+            if (A->position.y < B->position.y) return -1;
+            if (B->position.y < A->position.y) return 1;
+            return 0;
+        },
+        offset);
 
     return camera;
 }
@@ -287,6 +352,33 @@ void Game::updateUI(Engine *engine, Fixed<Instance> *instances) {
     ScopeArena scope(&arena);
 
     if (engine->is_key_just_pressed(Key::e)) invertory_visible = !invertory_visible;
+
+    if (show_location.active) {
+        if (show_location.timer.advanceAndCheck(engine->dt)) {
+            show_location.active = false;
+        } else {
+            auto height = 20.0F;
+            const char *name;
+
+            if (show_location.curr_id == -1) {
+                name = "Outside";
+            } else {
+                name = locations[show_location.curr_id].name;
+            }
+
+            auto width = engine->measureText(sliceFromStrZ(name), height);
+
+            u8 alpha = 255;
+            if (show_location.timer.elapsed > 1.0F) {
+                alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
+            }
+
+            engine->drawText(instances, sliceFromStrZ(name),
+                             {(float(engine->screen.x) / 2.0F) - (width / 2.0F),
+                              (float(engine->screen.y) / 2.0F) - (height / 2.0F)},
+                             height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+        }
+    }
 
     if (invertory_visible) {
         for (size_t x_i = 0; x_i < 8; x_i++) {
