@@ -145,8 +145,14 @@ enum class Key : u8 {
 
 enum class KeyState : u8 { none, pressed, released };
 
+struct Mod {
+    Slice<const char> name;
+    Dynamic<Slice<const char>> items;
+};
+
 struct Engine {
     HashMap<Rect> sprites;
+    Dynamic<Mod> mods;
     const bool *keyboard_state;
 
     Font default_font;
@@ -172,6 +178,6 @@ struct Engine {
         drawText(renderer, text, position, size, color, default_font);
     }
     static float measureText(Slice<const char> text, float size, Font font);
-    void updateUI(Fixed<Instance> *instances);
+    void updateUI(Fixed<Instance> *instances) const;
     float measureText(Slice<const char> text, float size = 10.0F) const { return measureText(text, size, default_font); }
 };

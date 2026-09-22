@@ -24,6 +24,8 @@ struct Timer {
 };
 
 // Inventory
+Dynamic<Slice<const char>> items;
+
 struct InventorySlot {
     u8 item_id;
     u8 count;
@@ -117,13 +119,28 @@ static struct ShowLocation {
 
 void Game::init(Engine *engine) {
     // globals
-    arena.init(64);
+    arena.init(512);
 
     // engine
     engine->clear_color = colorFromHex(0x8bbbffff);
 
     // invertory
-    inventory[0] = InventorySlot{1, 1};
+    uint items_len = 1;
+    for (auto &mod : engine->mods) {
+        for (auto &_ : mod.items) items_len++;
+    }
+    items.init(&arena, items_len);
+    items.append(&arena, sliceFromStrZ("wheat_seeds"));
+    for (auto &mod : engine->mods) {
+        for (auto &item : mod.items) {
+            auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
+                                        int(item.len), item.ptr);
+            items.append(&arena, {key.len, key.ptr});
+        }
+    }
+    for (u8 i = 0; i < u8(items.len); i++) {
+        inventory[i] = InventorySlot{i, 1};
+    }
 
     // objects
     objects.items = {.len = OBJECTS_MAX, .ptr = objects_raw};
@@ -136,6 +153,7 @@ void Game::init(Engine *engine) {
     player_id = objects.append({
         .direction = {0.0F, 1.0F},
         .timer = Timer::init(0.2F),
+        .pos = {TITLE_SIZE * 16.0F, TITLE_SIZE * 16.0F},
         .size = player_down.get(0).size(),
         .sprite = player_down.get(0),
         .kind = Object::PLAYER,
@@ -389,12 +407,13 @@ void Game::updateUI(Engine *engine, Fixed<Instance> *instances) {
                 instances->append(
                     {position, cell_size, engine->sprites.get("inventory_slot"), WHITE, 0});
                 const auto *invertory_slot = &inventory[(y_i * 8) + x_i];
-                if (invertory_slot->item_id != 0) {
+                if (invertory_slot->count != 0) {
                     assert(invertory_slot->count);
                     assert(invertory_slot->count < 100);
                     auto text = scope.tmp.allocPrint("%d", invertory_slot->count);
-                    instances->append(
-                        {position, cell_size, engine->sprites.get("wheat_seeds"), WHITE, 0});
+                    instances->append({position, cell_size,
+                                       engine->sprites.get(items[invertory_slot->item_id]), WHITE,
+                                       0});
                     const float FONT_SIZE = 10;
                     const vec2 text_offset =
                         position +

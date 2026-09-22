@@ -50,7 +50,7 @@ struct UBO {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena.init(KB(3));
+    arena.init(KB(4));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -166,6 +166,37 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     {
         ScopeArena scope(&arena);
+        int mods_len = 0;
+        char **mods = SDL_GlobDirectory("mods/", "*", SDL_GLOB_CASEINSENSITIVE, &mods_len);
+        defer(SDL_free((void *)mods));
+        SDL_CHECK(mods);
+
+        engine.mods.init(&arena, mods_len);
+
+        for (char *const *it = mods; *it; it++) {
+            engine.mods.append(&arena, {arena.dupeConst(*it), {}});
+        }
+
+        for (auto &mod : engine.mods) {
+            auto path = scope.tmp.allocPrintZ("mods/%*s/", int(mod.name.len), mod.name.ptr);
+
+            int items_len = 0;
+
+            char **items =
+                SDL_GlobDirectory(path.ptr, "*.png", SDL_GLOB_CASEINSENSITIVE, &items_len);
+            defer(SDL_free((void *)items));
+            SDL_CHECK(items);
+
+            mod.items.init(&arena, items_len);
+
+            for (char *const *it = items; *it; it++) {
+                mod.items.append(&arena, arena.dupeConst(getStem(*it)));
+            }
+        }
+    }
+
+    {
+        ScopeArena scope(&arena);
 
         int files_len = 0;
         char **files =
@@ -173,14 +204,36 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         defer(SDL_free((void *)files));
         SDL_CHECK(files);
 
-        engine.sprites = HashMap<Rect>::init(&arena, size_t(files_len) * 2);
+        int mods_files_len = 0;
+        char *const *mods_files =
+            SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
+        SDL_CHECK(mods_files);
 
-        auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len);
+        engine.sprites = HashMap<Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+
+        auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
 
         for (char *const *it = files; *it; it++) {
             const Slice<const char> file = arena.dupeConst(getStem(*it));
             const SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
+            auto *surface = SDL_LoadPNG(path.ptr);
+            SDL_CHECK(surface);
+            scope.tmp.free(path);
+
+            if (surface->format != SDL_PIXELFORMAT_RGBA32) {
+                SDL_Surface *old_surface = surface;
+                surface = SDL_ConvertSurface(old_surface, SDL_PIXELFORMAT_RGBA32);
+                SDL_DestroySurface(old_surface);
+                SDL_CHECK(surface);
+            }
+
+            atlas_items.append(&scope.tmp, {file, surface});
+        }
+
+        for (char *const *it = mods_files; *it; it++) {
+            const Slice<const char> file = arena.dupeConst(getStem(*it));
+            const SliceZ<char> path = scope.tmp.allocPrintZ("mods/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
             scope.tmp.free(path);
@@ -270,7 +323,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     return SDL_APP_CONTINUE;
 }
 
-void Engine::updateUI(Fixed<Instance> *instances) {
+void Engine::updateUI(Fixed<Instance> *instances) const {
     if (show_fps) {
         ScopeArena scope(&arena);
         auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
