@@ -1,0 +1,17 @@
+* Tower
+** [0.3.0] - 2026-09-22
+*** Added
+- Animated player movement and directional sprites.
+- Player attacks.
+- Spell casting.
+- Camera movement and improved 2D rendering.
+- A simple inventory system.
+- Multiple locations, including Home and Town.
+- Location transition indicators.
+- Scalable text rendering and improved font support.
+- Dynamic texture atlas generation.
+- Support for game mods and mod-provided assets.
+- An FPS display.
+*** Changed
+- Split the game into "Game" and "Engine" components.
+- Improved the build system.
