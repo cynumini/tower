@@ -12,6 +12,24 @@ static bool dialog = false;
 static const char *lines[2] = {"Hello!", "My name is Alice."};
 static uint curr_line = 0;
 
+static struct Quest {
+    enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
+    vec2 pos;
+    const char *line[Quest::REWARDED];
+    const char *active_line;
+    const char *completed_line;
+    uint counter;
+} quest = {
+    Quest::AVAILABLE,
+    {},
+    {
+        "Please, kill 10 zombies, and I'll give you 10 gold coins!",
+        "Have you killed them yet?",
+        "Thank you very much! Here, take these 10 gold coins.",
+    },
+    0,
+};
+
 // Timer
 struct Timer {
     float elapsed;
@@ -99,6 +117,12 @@ struct Object {
         invincible = true;
         if (hp == 0) {
             alive = false;
+            if (quest.status == Quest::ACTIVE) {
+                quest.counter += 1;
+                if (quest.counter >= 10) {
+                    quest.status = Quest::COMPLETED;
+                }
+            }
             inventory[0].count += 1;
         }
     }
@@ -131,22 +155,22 @@ static struct ShowLocation {
     Timer timer;
 } show_location = {false, -1, -1, Timer::init(2)};
 
-void Game::init(Unagi *engine) {
+void Game::init(Unagi *unagi) {
     // globals
     arena.init(512);
-    solid = engine->sprites.get("solid");
+    solid = unagi->sprites.get("solid");
 
     // engine
-    engine->clear_color = colorFromHex(0x8bbbffff);
+    unagi->clear_color = colorFromHex(0x8bbbffff);
 
     // invertory
     uint items_len = 1;
-    for (auto &mod : engine->mods) {
+    for (auto &mod : unagi->mods) {
         for (auto &_ : mod.items) items_len++;
     }
     items.init(&arena, items_len);
     items.append(&arena, sliceFromStrZ("wheat_seeds"));
-    for (auto &mod : engine->mods) {
+    for (auto &mod : unagi->mods) {
         for (auto &item : mod.items) {
             auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr, int(item.len),
                                         item.ptr);
@@ -160,10 +184,10 @@ void Game::init(Unagi *engine) {
     // objects
     objects.items = {.len = OBJECTS_MAX, .ptr = objects_raw};
 
-    player_down.init(engine->sprites.get("player_down"), 3);
-    player_up.init(engine->sprites.get("player_up"), 3);
-    player_right.init(engine->sprites.get("player_right"), 3);
-    player_left.init(engine->sprites.get("player_right"), 3, true);
+    player_down.init(unagi->sprites.get("player_down"), 3);
+    player_up.init(unagi->sprites.get("player_up"), 3);
+    player_right.init(unagi->sprites.get("player_right"), 3);
+    player_left.init(unagi->sprites.get("player_right"), 3, true);
 
     player_id = objects.append({
         .direction = {0.0F, 1.0F},
@@ -178,23 +202,23 @@ void Game::init(Unagi *engine) {
 
     attack_id = objects.append({
         .timer = Timer::init(0.1),
-        .size = engine->sprites.get("attack_trail1").size(),
-        .sprite = engine->sprites.get("attack_trail1"),
+        .size = unagi->sprites.get("attack_trail1").size(),
+        .sprite = unagi->sprites.get("attack_trail1"),
         .kind = Object::ATTACK,
         .tint = WHITE,
     });
 
     spell_id = objects.append({
-        .size = engine->sprites.get("spell0").size(),
-        .sprite = engine->sprites.get("spell0"),
+        .size = unagi->sprites.get("spell0").size(),
+        .sprite = unagi->sprites.get("spell0"),
         .kind = Object::SPELL,
         .tint = WHITE,
     });
 
     objects.append({
         .pos = {TITLE_SIZE * 48.0F, TITLE_SIZE * 16.0F},
-        .size = engine->sprites.get("character").size(),
-        .sprite = engine->sprites.get("character"),
+        .size = unagi->sprites.get("character").size(),
+        .sprite = unagi->sprites.get("character"),
         .kind = Object::NPC,
         .alive = true,
         .tint = WHITE,
@@ -208,17 +232,17 @@ void Game::init(Unagi *engine) {
         objects.append({
             .hp = 5,
             .timer = Timer::init(0.2F),
-            .pos = {float(engine->rand(MAX_X)) * TITLE_SIZE,
-                    (float(engine->rand(MAX_Y)) * TITLE_SIZE) - 16},
-            .size = engine->sprites.get("zombie").size(),
-            .sprite = engine->sprites.get("zombie"),
+            .pos = {float(unagi->rand(MAX_X)) * TITLE_SIZE,
+                    (float(unagi->rand(MAX_Y)) * TITLE_SIZE) - 16},
+            .size = unagi->sprites.get("zombie").size(),
+            .sprite = unagi->sprites.get("zombie"),
             .kind = Object::ENEMY,
             .alive = true,
             .tint = WHITE,
         });
     }
-    const Rect grass = engine->sprites.get("grass");
-    const Rect dirt = engine->sprites.get("dirt");
+    const Rect grass = unagi->sprites.get("grass");
+    const Rect dirt = unagi->sprites.get("dirt");
 
     // Location
     locations[0] = {"Home", {0, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, dirt};
@@ -226,6 +250,10 @@ void Game::init(Unagi *engine) {
 }
 
 vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
+    // cheat && system
+    if (unagi->is_key_just_pressed(Key::key_1)) {
+        quest.status = Quest::COMPLETED;
+    }
     if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
     if (unagi->is_key_just_pressed(Key::f3)) unagi->debug_mode = !unagi->debug_mode;
 
@@ -351,13 +379,13 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
                 break;
             }
             case Object::NPC: {
+                quest.pos = {object.pos};
+                quest.pos.x += object.size.x / 2;
                 if (!dialog) {
                     if (checkCollisionAABB(object.interactionArea(), player->rect())) {
                         if (unagi->is_key_just_pressed(Key::a)) {
-                            unagi->log("click");
                         }
                         if (unagi->is_key_just_pressed(Key::space)) {
-                            unagi->log("click");
                             dialog = true;
                             pause = true;
                         }
@@ -405,6 +433,20 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
         },
         offset);
 
+    // quest marker
+    if (quest.status != Quest::REWARDED) {
+        const uint SIZE = 20;
+        Slice<const char> text = sliceFromStrZ("!");
+        auto color = YELLOW;
+        if (quest.status != Quest::AVAILABLE) {
+            text = sliceFromStrZ("?");
+            if (quest.status == Quest::ACTIVE) color = WHITE;
+        }
+        auto pos =
+            vec2(quest.pos.x - (unagi->measureText(text, SIZE) / 2.0F), quest.pos.y - SIZE);
+        unagi->drawText(instances, text, pos, SIZE, color);
+    }
+
     // debug (show collision)
     if (unagi->debug_mode) {
         for (auto &object : objects) {
@@ -447,25 +489,37 @@ void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
 
     if (unagi->is_key_just_pressed(Key::e)) invertory_visible = !invertory_visible;
 
-    if (dialog) {
-        if (curr_line >= ARRAY_LEN(lines)) {
-            dialog = false;
-            pause = false;
-            curr_line = 0;
+    while (dialog) {
+        Slice<const char> text = {};
+        if (quest.status == Quest::REWARDED) {
+            if (curr_line == ARRAY_LEN(lines)) {
+                dialog = pause = false;
+                curr_line = 0;
+                break;
+            }
+            text = sliceFromStrZ(lines[curr_line]);
+            curr_line += unagi->is_key_just_pressed(Key::space);
         } else {
-            vec2 pos = {0.0F, float(unagi->screen.y) * 2.0F / 3.0F};
-            instances->append({.position = pos,
-                               .size = {float(unagi->screen.x), float(unagi->screen.y) / 3.0F},
-                               .uv = solid,
-                               .color = BLACK,
-                               .rotation = 0});
-            unagi->drawText(instances, sliceFromStrZ(lines[curr_line]), pos + vec2(4, 4));
+            text = sliceFromStrZ(quest.line[quest.status]);
             if (unagi->is_key_just_pressed(Key::space)) {
-                curr_line += 1;
+                dialog = pause = false;
+                if (quest.status == Quest::COMPLETED) quest.status = Quest::REWARDED;
+                if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
+                break;
             }
         }
+        vec2 pos = {0.0F, float(unagi->screen.y) * 2.0F / 3.0F};
+        instances->append({
+            .position = pos,
+            .size = {float(unagi->screen.x), float(unagi->screen.y) / 3.0F},
+            .uv = solid,
+            .color = BLACK,
+            .rotation = 0,
+        });
+        unagi->drawText(instances, text, pos + vec2(4, 4));
+        break;
     }
-
+    
     if (show_location.active) {
         if (show_location.timer.advanceAndCheck(unagi->dt)) {
             show_location.active = false;

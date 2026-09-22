@@ -518,7 +518,7 @@ float Unagi::measureText(Slice<const char> text, float size, Font font) {
     for (size_t i = 0; i < text.len; i++) {
         advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
     }
-    return advance - 1;
+    return advance - (size / font.size);
 }
 
 void Font::init(Rect texture) {
@@ -527,6 +527,7 @@ void Font::init(Rect texture) {
         widths[i] = 4;
     }
     widths[' '] = 2;
+    widths['!'] = 1;
     widths[','] = 2;
     widths['.'] = 1;
     widths['0'] = 5;
@@ -538,13 +539,17 @@ void Font::init(Rect texture) {
     widths[':'] = 1;
     widths['?'] = 5;
     widths['A'] = 5;
+    widths['I'] = 3;
     widths['M'] = 7;
     widths['O'] = 5;
     widths['P'] = 5;
     widths['S'] = 5;
+    widths['Z'] = 5;
+    widths['\''] = 1;
     widths['i'] = 1;
     widths['l'] = 1;
     widths['m'] = 5;
+    widths['v'] = 5;
     widths['w'] = 5;
     widths['x'] = 5;
     widths['y'] = 5;
