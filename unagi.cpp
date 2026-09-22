@@ -14,7 +14,7 @@ const uint MAX_INSTANCES = 4096;
 
 static Arena arena;
 
-static Engine engine;
+static Unagi unagi;
 static Game game;
 
 static struct Time {
@@ -54,12 +54,12 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
-    SDL_SetAppMetadata(name, "0.3.0", "cynumini.tower");
+    SDL_SetAppMetadata(name, "0.4.0", "cynumini.tower");
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-    engine.screen = {640, 360};
-    window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, 0);
+    unagi.screen = {640, 360};
+    window = SDL_CreateWindow(name, unagi.screen.x, unagi.screen.y, 0);
     SDL_CHECK(window);
 
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, 0);
@@ -171,13 +171,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         defer(SDL_free((void *)mods));
         SDL_CHECK(mods);
 
-        engine.mods.init(&arena, mods_len);
+        unagi.mods.init(&arena, mods_len);
 
         for (char *const *it = mods; *it; it++) {
-            engine.mods.append(&arena, {arena.dupeConst(*it), {}});
+            unagi.mods.append(&arena, {arena.dupeConst(*it), {}});
         }
 
-        for (auto &mod : engine.mods) {
+        for (auto &mod : unagi.mods) {
             auto path = scope.tmp.allocPrintZ("mods/%*s/", int(mod.name.len), mod.name.ptr);
 
             int items_len = 0;
@@ -209,7 +209,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
         SDL_CHECK(mods_files);
 
-        engine.sprites = HashMap<Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+        unagi.sprites = HashMap<Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
 
         auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
@@ -290,7 +290,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_assert(x_offset + uint(surface->w) <= uint(atlas.size.x));
             SDL_assert(y_offset + uint(surface->h) <= uint(atlas.size.y));
 
-            engine.sprites.put(
+            unagi.sprites.put(
                 &arena, name,
                 {float(x_offset), float(y_offset), float(surface->w), float(surface->h)});
 
@@ -306,10 +306,10 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     instance_transfer_buffer = createGPUTransferBuffer(device, sizeof(Instance) * MAX_INSTANCES);
     SDL_CHECK(instance_transfer_buffer);
 
-    engine.keyboard_state = SDL_GetKeyboardState(0);
-    engine.default_font.init(engine.sprites.get("font"));
+    unagi.keyboard_state = SDL_GetKeyboardState(0);
+    unagi.default_font.init(unagi.sprites.get("font"));
 
-    game.init(&engine);
+    game.init(&unagi);
 
     time.frequency = float(SDL_GetPerformanceFrequency());
     time.counter = SDL_GetPerformanceCounter();
@@ -323,8 +323,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     return SDL_APP_CONTINUE;
 }
 
-void Engine::updateUI(Fixed<Instance> *instances) const {
-    if (show_fps) {
+void Unagi::updateUI(Fixed<Instance> *instances) const {
+    if (debug_mode) {
         ScopeArena scope(&arena);
         auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
         auto buffer2 = scope.tmp.allocPrint("%.2fms", time.ms);
@@ -340,11 +340,11 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     }
     case SDL_EVENT_KEY_DOWN:
         if (!event->key.repeat) {
-            engine.key_state[event->key.scancode] = KeyState::pressed;
+            unagi.key_state[event->key.scancode] = KeyState::pressed;
         }
         break;
     case SDL_EVENT_KEY_UP:
-        engine.key_state[event->key.scancode] = KeyState::released;
+        unagi.key_state[event->key.scancode] = KeyState::released;
         break;
     default: {
         break;
@@ -354,7 +354,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
 }
 
 SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
-    if (engine.running) return SDL_APP_SUCCESS;
+    if (unagi.running) return SDL_APP_SUCCESS;
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
@@ -374,10 +374,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             SDL_CHECK(instances_raw);
 
             Fixed<Instance> instances = {.items = {MAX_INSTANCES, instances_raw}};
-            camera = game.update(&engine, &instances);
+            camera = game.update(&unagi, &instances);
             ui_offset = instances.len;
-            game.updateUI(&engine, &instances);
-            engine.updateUI(&instances);
+            game.updateUI(&unagi, &instances);
+            unagi.updateUI(&instances);
             instances_len = instances.len;
 
             for (auto &instance : instances) {
@@ -399,10 +399,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         SDL_GPUColorTargetInfo color_target_info = {};
         color_target_info.texture = swapchain_texture;
         color_target_info.clear_color = {
-            .r = float(engine.clear_color.r) / 255.0F,
-            .g = float(engine.clear_color.g) / 255.0F,
-            .b = float(engine.clear_color.b) / 255.0F,
-            .a = float(engine.clear_color.a) / 255.0F,
+            .r = float(unagi.clear_color.r) / 255.0F,
+            .g = float(unagi.clear_color.g) / 255.0F,
+            .b = float(unagi.clear_color.b) / 255.0F,
+            .a = float(unagi.clear_color.a) / 255.0F,
         };
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
@@ -421,7 +421,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        UBO ubo = {.screen = engine.screen};
+        UBO ubo = {.screen = unagi.screen};
 
         ubo.camera = camera;
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
@@ -432,14 +432,14 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len - ui_offset, 0, 0, ui_offset);
     }
 
-    memset(engine.key_state, 0, sizeof(engine.key_state));
+    memset(unagi.key_state, 0, sizeof(unagi.key_state));
 
     auto prev = time.counter;
     time.counter = SDL_GetPerformanceCounter();
     time.frames += 1;
-    engine.dt = float(time.counter - prev) / time.frequency;
-    time.seconds += engine.dt;
-    time.ms = engine.dt * 1000;
+    unagi.dt = float(time.counter - prev) / time.frequency;
+    time.seconds += unagi.dt;
+    time.ms = unagi.dt * 1000;
     if (time.seconds >= 0.5F) {
         time.fps = (u16)SDL_roundf((float)time.frames / time.seconds);
         time.frames = 0;
@@ -449,7 +449,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    game.deinit(&engine);
+    game.deinit(&unagi);
 
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
@@ -469,27 +469,31 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
     arena.deinit();
 }
 
-bool Engine::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
+bool Unagi::is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
 
-bool Engine::is_key_just_pressed(Key key) const {
-    return key_state[int(key)] == KeyState::pressed;
+bool Unagi::is_key_just_pressed(Key key, bool consume) {
+    auto result = key_state[int(key)] == KeyState::pressed;
+    if (consume) key_state[int(key)] = KeyState::none;
+    return result;
 }
 
-bool Engine::is_key_just_released(Key key) const {
-    return key_state[int(key)] == KeyState::released;
+bool Unagi::is_key_just_released(Key key, bool consume)  {
+    auto result = key_state[int(key)] == KeyState::released;
+    if (consume) key_state[int(key)] = KeyState::none;
+    return result;
 }
 
-int Engine::rand(int n) { return SDL_rand(n); }
+int Unagi::rand(int n) { return SDL_rand(n); }
 
-void Engine::log(const char *fmt, ...) {
+void Unagi::log(const char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
     va_end(args);
 }
 
-void Engine::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position,
-                      float size, Color color, Font font) {
+void Unagi::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position, float size,
+                     Color color, Font font) {
     float advance = 0;
     for (size_t i = 0; i < text.len; i++) {
         vec2 texture_offset = {0, 0};
@@ -508,11 +512,41 @@ void Engine::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 po
     }
 }
 
-float Engine::measureText(Slice<const char> text, float size, Font font) {
+float Unagi::measureText(Slice<const char> text, float size, Font font) {
     if (text.len == 0) return 0;
     float advance = 0;
     for (size_t i = 0; i < text.len; i++) {
         advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
     }
     return advance - 1;
+}
+
+void Font::init(Rect texture) {
+    size = 10.0F;
+    for (size_t i = 0; i < 256; i++) {
+        widths[i] = 4;
+    }
+    widths[' '] = 2;
+    widths[','] = 2;
+    widths['.'] = 1;
+    widths['0'] = 5;
+    widths['1'] = 3;
+    widths['2'] = 5;
+    widths['6'] = 5;
+    widths['8'] = 5;
+    widths['9'] = 5;
+    widths[':'] = 1;
+    widths['?'] = 5;
+    widths['A'] = 5;
+    widths['M'] = 7;
+    widths['O'] = 5;
+    widths['P'] = 5;
+    widths['S'] = 5;
+    widths['i'] = 1;
+    widths['l'] = 1;
+    widths['m'] = 5;
+    widths['w'] = 5;
+    widths['x'] = 5;
+    widths['y'] = 5;
+    this->texture = texture;
 }

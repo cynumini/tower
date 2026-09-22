@@ -15,33 +15,7 @@ struct Font {
     Rect texture;
     float size;
 
-    void init(Rect texture) {
-        size = 10.0F;
-        for (size_t i = 0; i < 256; i++) {
-            widths[i] = 4;
-        }
-        widths[' '] = 2;
-        widths[','] = 2;
-        widths['.'] = 1;
-        widths['0'] = 5;
-        widths['1'] = 3;
-        widths['2'] = 5;
-        widths['6'] = 5;
-        widths['8'] = 5;
-        widths['9'] = 5;
-        widths[':'] = 1;
-        widths['?'] = 5;
-        widths['M'] = 7;
-        widths['O'] = 5;
-        widths['P'] = 5;
-        widths['S'] = 5;
-        widths['i'] = 1;
-        widths['m'] = 5;
-        widths['w'] = 5;
-        widths['x'] = 5;
-        widths['y'] = 5;
-        this->texture = texture;
-    }
+    void init(Rect texture);
 };
 
 enum class Key : u8 {
@@ -150,7 +124,7 @@ struct Mod {
     Dynamic<Slice<const char>> items;
 };
 
-struct Engine {
+struct Unagi {
     HashMap<Rect> sprites;
     Dynamic<Mod> mods;
     const bool *keyboard_state;
@@ -162,14 +136,14 @@ struct Engine {
     float dt;
 
     bool running;
-    bool show_fps;
+    bool debug_mode;
     Color clear_color;
 
     KeyState key_state[512];
 
     bool is_key_pressed(Key key) const;
-    bool is_key_just_pressed(Key key) const;
-    bool is_key_just_released(Key key) const;
+    bool is_key_just_pressed(Key key, bool consume = true);
+    bool is_key_just_released(Key key, bool consume = true);
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
     static int rand(int n);
     static void drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position,
