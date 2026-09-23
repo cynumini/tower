@@ -16,8 +16,6 @@ static struct Quest {
     enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
     vec2 pos;
     const char *line[Quest::REWARDED];
-    const char *active_line;
-    const char *completed_line;
     uint counter;
 } quest = {
     Quest::AVAILABLE,
@@ -57,7 +55,7 @@ struct InventorySlot {
     u8 count;
 };
 static InventorySlot inventory[8 * 8];
-static bool invertory_visible;
+static bool inventory_visible;
 
 // Animation
 static struct Animation {
@@ -97,7 +95,11 @@ struct Object {
     vec2 pos;
     vec2 size;
     Rect sprite;
-    enum Kind : u8 { NONE, PLAYER, ENEMY, ATTACK, SPELL, NPC } kind;
+    Rect interaction;
+    Rect collision_rel;
+    enum : u8 { NONE };
+    enum Kind : u8 { PLAYER = 1, ENEMY, ATTACK, SPELL, NPC, BUILDING } kind;
+    enum Body : u8 { MOVABLE = 1, STATIC } body;
     u8 frame;
     bool alive;
     bool invincible;
@@ -107,6 +109,17 @@ struct Object {
         const float PADDING = 8.0F;
         assert(kind == NPC);
         return {pos.x - PADDING, pos.y - PADDING, size.x + (PADDING * 2), size.y + (PADDING * 2)};
+    }
+
+    bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
+
+    Rect getCollision() {
+        return {
+            pos.x + collision_rel.x,
+            pos.y + collision_rel.y,
+            collision_rel.w,
+            collision_rel.h,
+        };
     }
 
     void takeDamage(vec2 direction, InventorySlot *inventory) {
@@ -128,7 +141,44 @@ struct Object {
     }
 
     Rect rect() { return {pos.x, pos.y, size.x, size.y}; }
+
+    const char *check() const {
+        if (u8(kind) == NONE) return "object can't have Kind::NONE";
+        if (isSolid() and u8(body) == NONE) return "solid objects can't have Body::NONE";
+        return 0;
+    }
 };
+
+struct Filter {
+    Object *ptr;
+    Object *end_ptr;
+    bool (*predicate)(Object *);
+
+    void skip() {
+        while (ptr != end_ptr and !predicate(ptr)) ptr++;
+    }
+
+    Filter &operator++() {
+        ptr++;
+        skip();
+        return *this;
+    }
+
+    Filter begin() {
+        skip();
+        return *this;
+    }
+
+    Filter end() { return {end_ptr, end_ptr, predicate}; }
+
+    Object &operator*() const { return *ptr; }
+
+    bool operator!=(const Filter &query) const { return ptr != query.ptr; }
+};
+
+static Filter makeFilter(Fixed<Object> object, bool (*predicate)(Object *)) {
+    return Filter{object.begin(), object.end(), predicate};
+}
 
 const u8 OBJECTS_MAX = 255;
 static Object objects_raw[OBJECTS_MAX];
@@ -195,7 +245,9 @@ void Game::init(Unagi *unagi) {
         .pos = {TITLE_SIZE * 16.0F, TITLE_SIZE * 16.0F},
         .size = player_down.get(0).size(),
         .sprite = player_down.get(0),
+        .collision_rel = {7.0F, 45.0F, 10.0F, 3.0F},
         .kind = Object::PLAYER,
+        .body = Object::MOVABLE,
         .alive = true,
         .tint = WHITE,
     });
@@ -219,10 +271,26 @@ void Game::init(Unagi *unagi) {
         .pos = {TITLE_SIZE * 48.0F, TITLE_SIZE * 16.0F},
         .size = unagi->sprites.get("character").size(),
         .sprite = unagi->sprites.get("character"),
+        .collision_rel = {7.0F, 45.0F, 10.0F, 3.0F},
         .kind = Object::NPC,
+        .body = Object::STATIC,
         .alive = true,
         .tint = WHITE,
     });
+
+    {
+        auto house = unagi->sprites.get("house");
+        objects.append({
+            .pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0},
+            .size = house.size(),
+            .sprite = house,
+            .collision_rel = {1.0F, 47.0F, 192.0F, 162.0F},
+            .kind = Object::BUILDING,
+            .body = Object::STATIC,
+            .alive = true,
+            .tint = WHITE,
+        });
+    }
 
     const i32 MAX_X = 64;
     const i32 MAX_Y = 32;
@@ -236,7 +304,10 @@ void Game::init(Unagi *unagi) {
                     (float(unagi->rand(MAX_Y)) * TITLE_SIZE) - 16},
             .size = unagi->sprites.get("zombie").size(),
             .sprite = unagi->sprites.get("zombie"),
+            .collision_rel = {7.0F, 45.0F, 10.0F, 3.0F},
             .kind = Object::ENEMY,
+            .body = Object::MOVABLE,
+
             .alive = true,
             .tint = WHITE,
         });
@@ -247,6 +318,17 @@ void Game::init(Unagi *unagi) {
     // Location
     locations[0] = {"Home", {0, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, dirt};
     locations[1] = {"Town", {TITLE_SIZE * 32, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, grass};
+
+    // Check objects
+    auto id = 0;
+    for (auto &object : objects) {
+        const char *message = object.check();
+        if (message != 0) {
+            unagi->log("id = %d, %s", id, message);
+            assert(message == 0);
+        }
+        id++;
+    }
 }
 
 vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
@@ -372,10 +454,6 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
                 object.pos = player->pos + ((player->size / 2) - (object.size / 2));
                 object.pos += object.direction * vec2(24, 32);
                 if (object.timer.advanceAndCheck(unagi->dt)) object.alive = false;
-
-                break;
-            }
-            case Object::SPELL: {
                 break;
             }
             case Object::NPC: {
@@ -383,21 +461,44 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
                 quest.pos.x += object.size.x / 2;
                 if (!dialog) {
                     if (checkCollisionAABB(object.interactionArea(), player->rect())) {
-                        if (unagi->is_key_just_pressed(Key::a)) {
-                        }
                         if (unagi->is_key_just_pressed(Key::space)) {
                             dialog = true;
                             pause = true;
                         }
                     }
                 }
+                break;
             }
             case Object::NONE:
                 break;
             }
-            object.pos += object.direction * unagi->dt * object.speed;
+
+            if (object.isSolid() and object.body == Object::MOVABLE) {
+                Filter q = makeFilter(
+                    objects, [](Object *other) { return other->isSolid() and other->alive; });
+                vec2 velocity = object.direction * unagi->dt * object.speed;
+                object.pos.x += velocity.x;
+                for (Object &other : q) {
+                    if (&object != &other and
+                        checkCollisionAABB(object.getCollision(), other.getCollision())) {
+                        object.pos.x -= velocity.x;
+                        break;
+                    }
+                }
+                object.pos.y += velocity.y;
+                for (Object &other : q) {
+                    if (&object != &other and
+                        checkCollisionAABB(object.getCollision(), other.getCollision())) {
+                        object.pos.y -= velocity.y;
+                        break;
+                    }
+                }
+            } else {
+                object.pos += object.direction * unagi->dt * object.speed;
+            }
         }
         camera = -player->pos + unagi->screen / 2.0F - player->size / 2.0F;
+        if (object.kind == Object::ATTACK or object.kind == Object::SPELL) continue;
         instances->append({object.pos, object.size, object.sprite, object.tint, object.angle});
     }
 
@@ -414,7 +515,6 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
         if (outside) {
             show_location.curr_id = -1;
         }
-
         if (show_location.curr_id != show_location.prev_id) {
             show_location.active = true;
             show_location.timer.reset();
@@ -425,13 +525,24 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
 
     instances->sort(
         [](const void *a, const void *b) -> int {
-            const auto *A = (const Instance *)a;
-            const auto *B = (const Instance *)b;
-            if (A->position.y < B->position.y) return -1;
-            if (B->position.y < A->position.y) return 1;
+            const auto *a_instance = (const Instance *)a;
+            const auto *b_instance = (const Instance *)b;
+            auto a_y = a_instance->position.y + a_instance->size.y;
+            auto b_y = b_instance->position.y + b_instance->size.y;
+            if (a_y < b_y) return -1;
+            if (b_y < a_y) return 1;
             return 0;
         },
         offset);
+
+    // draw attack and spell
+    if (attack->alive) {
+        instances->append(
+            {attack->pos, attack->size, attack->sprite, attack->tint, attack->angle});
+    }
+    if (spell->alive) {
+        instances->append({spell->pos, spell->size, spell->sprite, spell->tint, spell->angle});
+    }
 
     // quest marker
     if (quest.status != Quest::REWARDED) {
@@ -450,34 +561,36 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
     // debug (show collision)
     if (unagi->debug_mode) {
         for (auto &object : objects) {
-            Color color = {0, 0, 255, 127};
+            if (!object.alive or object.kind == Object::NONE) continue;
+
+            Color color = {191, 0, 255, 127};
             vec2 pos = object.pos;
             vec2 size = object.size;
-            if (!object.alive) continue;
-            switch (object.kind) {
-            case Object::NONE:
-                continue;
-            case Object::PLAYER: {
-                color = {191, 0, 255, 127};
-                break;
-            }
-            case Object::NPC: {
+
+            if (object.kind == Object::NPC) {
                 color = {255, 0, 0, 127};
                 pos = object.interactionArea().position();
                 size = object.interactionArea().size();
-                break;
             }
-            case Object::SPELL:
-            case Object::ENEMY:
-            case Object::ATTACK: {
-                break;
+
+            instances->append({
+                .position = pos,
+                .size = size,
+                .uv = solid,
+                .color = color,
+                .rotation = object.angle,
+            });
+
+            if (object.isSolid()) {
+                auto collision = object.getCollision();
+                instances->append({
+                    .position = collision.position(),
+                    .size = collision.size(),
+                    .uv = solid,
+                    .color = {0, 0, 255, 127},
+                    .rotation = object.angle,
+                });
             }
-            }
-            instances->append({.position = pos,
-                               .size = size,
-                               .uv = solid,
-                               .color = color,
-                               .rotation = object.angle});
         }
     }
 
@@ -487,7 +600,7 @@ vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
 void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
     ScopeArena scope(&arena);
 
-    if (unagi->is_key_just_pressed(Key::e)) invertory_visible = !invertory_visible;
+    if (unagi->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
 
     while (dialog) {
         Slice<const char> text = {};
@@ -519,7 +632,7 @@ void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
         unagi->drawText(instances, text, pos + vec2(4, 4));
         break;
     }
-    
+
     if (show_location.active) {
         if (show_location.timer.advanceAndCheck(unagi->dt)) {
             show_location.active = false;
@@ -547,7 +660,7 @@ void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
         }
     }
 
-    if (invertory_visible) {
+    if (inventory_visible) {
         for (size_t x_i = 0; x_i < 8; x_i++) {
             for (size_t y_i = 0; y_i < 8; y_i++) {
                 const vec2 cell_size = unagi->sprites.get("inventory_slot").size();
