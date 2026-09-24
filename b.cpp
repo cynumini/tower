@@ -7,6 +7,7 @@ int main(int argc, const char *argv[]) {
     const char *const inputs[] = {
         "unagi.cpp",
         "game.cpp",
+        "object.cpp",
         "game.hpp",
         "unagi.hpp",
         "sakana/skn.cpp",
