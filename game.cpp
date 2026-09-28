@@ -103,7 +103,7 @@ static struct ShowLocation {
 
 void Game::init(Unagi *unagi) {
     // globals
-    arena.init(512);
+    arena = Arena::init(512);
 
     solid = unagi->sprites.get("solid");
 
