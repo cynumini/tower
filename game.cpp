@@ -1,12 +1,140 @@
-#include "game.hpp"
-
-#include "unagi.hpp"
+#pragma once
 
 // unity
-#include "object.cpp"
+static struct Quest {
+    enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
+    Vector2f pos;
+    const char *line[Quest::REWARDED];
+    uint counter;
+} quest = {
+    Quest::AVAILABLE,
+    {},
+    {
+        "Please, kill 10 zombies, and I'll give you 10 gold coins!",
+        "Have you killed them yet?",
+        "Thank you very much! Here, take these 10 gold coins.",
+    },
+    0,
+};
+
+// Itesm
+static Dynamic<Slice<const char>> items;
+
+// Invertory
+struct InventorySlot {
+    u8 item_id;
+    u8 count;
+};
+static InventorySlot inventory[8 * 8];
+static bool inventory_visible;
+
+// Timer
+struct Timer {
+    float elapsed;
+    float duration;
+
+    constexpr static Timer init(float duration) noexcept { return {.duration = duration}; };
+
+    void reset() { elapsed = 0; };
+
+    bool advanceAndCheck(float dt) {
+        elapsed += dt;
+        if (elapsed >= duration) {
+            reset();
+            return true;
+        }
+        return false;
+    };
+};
+
+static struct Level {
+    enum class Id : u8 { world, house };
+    Color clear_color;
+} levels[] = {{colorFromHex(0x8bbbffff)}, {BLACK}};
+
+// Object
+struct Object {
+    float speed;
+    float angle;
+    int hp;
+    Vector2f direction;
+    Timer timer;
+    Vector2f pos;
+    Vector2f size;
+    FRectangle sprite;
+    FRectangle interaction_rel;
+    FRectangle collision_rel;
+    enum class Kind : u8 { player, enemy, attack, spell, npc, building } kind;
+    enum class Body : u8 { none, movable, immovable } body;
+    u8 frame;
+    bool alive;
+    bool invincible;
+    Color tint;
+    Level::Id level;
+
+    static Object create(Kind kind, FRectangle sprite, bool alive = false, Vector2f pos = {}) {
+        return {.pos = pos,
+                .size = sprite.size(),
+                .sprite = sprite,
+                .kind = kind,
+                .alive = alive,
+                .tint = WHITE};
+    }
+
+    void addCollision(Body body, FRectangle rect) {
+        this->body = body;
+        collision_rel = rect;
+    }
+
+    bool isInteractable() const { return interaction_rel.w != 0 and interaction_rel.h != 0; }
+
+    FRectangle getInteraction() const {
+        return {
+            {pos.x + interaction_rel.x, pos.y + interaction_rel.y},
+            interaction_rel.w,
+            interaction_rel.h,
+        };
+    }
+
+    bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
+
+    FRectangle getCollision() {
+        return {
+            {pos.x + collision_rel.x, pos.y + collision_rel.y},
+            collision_rel.w,
+            collision_rel.h,
+        };
+    }
+
+    void takeDamage(Vector2f direction, InventorySlot *inventory) {
+        this->direction = direction;
+        const float KNOCKBACK_SPEED = 100;
+        speed = KNOCKBACK_SPEED;
+        hp -= 1;
+        invincible = true;
+        if (hp == 0) {
+            alive = false;
+            if (quest.status == Quest::ACTIVE) {
+                quest.counter += 1;
+                if (quest.counter >= 10) {
+                    quest.status = Quest::COMPLETED;
+                }
+            }
+            inventory[0].count += 1;
+        }
+    }
+
+    FRectangle rect() { return {pos, size.x, size.y}; }
+
+    // const char *check() const {
+    //     if (u8(kind) == NONE) return "object can't have Kind::NONE";
+    //     if (isSolid() and u8(body) == NONE) return "solid objects can't have Body::NONE";
+    //     return 0;
+    // }
+};
 
 // Init
-static Arena arena;
+static Arena game_arena;
 static FRectangle solid;
 static bool pause = false;
 
@@ -101,7 +229,7 @@ static struct ShowLocation {
     Timer timer;
 } show_location = {false, -1, -1, Timer::init(2)};
 
-void Game::init(Unagi *unagi) {
+void Game::init(Engine *unagi) {
     // globals
     arena = Arena::init(512);
 
@@ -200,7 +328,7 @@ void Game::init(Unagi *unagi) {
     // }
 }
 
-Vector2f Game::update(Unagi *unagi, Fixed<Instance> *instances) {
+Vector2f Game::update(Engine *unagi, Fixed<UIInstance> *instances) {
     // update
     if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
 
@@ -221,7 +349,7 @@ Vector2f Game::update(Unagi *unagi, Fixed<Instance> *instances) {
     //     quest.status = Quest::COMPLETED;
     // }
 
-    // if (unagi->is_key_just_pressed(Key::f3)) unagi->debug_mode = !unagi->debug_mode;
+    if (unagi->is_key_just_pressed(Key::f3)) unagi->debug_mode = !unagi->debug_mode;
 
     // if (unagi->is_key_just_pressed(Key::key_2)) {
     //     unagi->clear_color = colorFromHex(0x8bbbffff);
@@ -526,7 +654,7 @@ Vector2f Game::update(Unagi *unagi, Fixed<Instance> *instances) {
     return {};
 }
 
-void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
+void Game::updateUI(Engine *unagi, Fixed<UIInstance> *instances) {
     // ScopeArena scope(&arena);
 
     // if (unagi->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
@@ -617,4 +745,4 @@ void Game::updateUI(Unagi *unagi, Fixed<Instance> *instances) {
     // }
 }
 
-void Game::deinit(Unagi *engine) { arena.deinit(); }
+void Game::deinit(Engine *engine) { arena.deinit(); }
