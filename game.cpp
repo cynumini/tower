@@ -97,7 +97,7 @@ struct Object {
     }
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
-
+    
     FRectangle getCollision() {
         return {
             {pos.x + collision_rel.x, pos.y + collision_rel.y},
@@ -328,7 +328,7 @@ void Game::init(Engine *unagi) {
     // }
 }
 
-Vector2f Game::update(Engine *unagi, Fixed<UIInstance> *instances) {
+Vector2f Game::update(Engine *unagi, Fixed<ui::Instance> *instances) {
     // update
     if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
 
@@ -654,7 +654,7 @@ Vector2f Game::update(Engine *unagi, Fixed<UIInstance> *instances) {
     return {};
 }
 
-void Game::updateUI(Engine *unagi, Fixed<UIInstance> *instances) {
+void Game::updateUI(Engine *unagi, Fixed<ui::Instance> *instances) {
     // ScopeArena scope(&arena);
 
     // if (unagi->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;

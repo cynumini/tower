@@ -1,4 +1,3 @@
-#include <skn_math.cpp>
 #include <skn_sdl.cpp>
 
 #define SDL_MAIN_USE_CALLBACKS 1
@@ -7,20 +6,30 @@
 #include "build/shader.frag.hpp"
 #include "build/shader.vert.hpp"
 
-const uint MAX_INSTANCES = 4096;
+const uint MAX_UI_INSTANCES = 4096;
 
 static Arena arena;
 
 static SDL_Window *window;
 static SDL_GPUDevice *device;
 static SDL_GPUSampler *sampler;
-static SDL_GPUGraphicsPipeline *ui_pipeline;
 
-static SDL_GPUTransferBuffer *instance_transfer_buffer;
-
+namespace ui {
+static SDL_GPUGraphicsPipeline *pipeline;
 static SDL_GPUBuffer *vertex_buffer;
 static SDL_GPUBuffer *index_buffer;
 static SDL_GPUBuffer *instance_buffer;
+
+struct Instance {
+    Vector2f position;
+    Vector2f size;
+    FRectangle uv;
+    Color color;
+    float rotation;
+};
+} // namespace ui
+
+static SDL_GPUTransferBuffer *instance_transfer_buffer;
 
 static Texture atlas;
 
@@ -68,104 +77,7 @@ struct Font {
     }
 };
 
-enum class Key : u8 {
-    a = 4,
-    b = 5,
-    c = 6,
-    d = 7,
-    e = 8,
-    f = 9,
-    g = 10,
-    h = 11,
-    i = 12,
-    j = 13,
-    k = 14,
-    l = 15,
-    m = 16,
-    n = 17,
-    o = 18,
-    p = 19,
-    q = 20,
-    r = 21,
-    s = 22,
-    t = 23,
-    u = 24,
-    v = 25,
-    w = 26,
-    x = 27,
-    y = 28,
-    z = 29,
-    key_1 = 30,
-    key_2 = 31,
-    key_3 = 32,
-    key_4 = 33,
-    key_5 = 34,
-    key_6 = 35,
-    key_7 = 36,
-    key_8 = 37,
-    key_9 = 38,
-    key_0 = 39,
-    enter = 40,
-    escape = 41,
-    backspace = 42,
-    tab = 43,
-    space = 44,
-    minus = 45,
-    equals = 46,
-    leftbracket = 47,
-    rightbracket = 48,
-    backslash = 49,
-    nonushash = 50,
-    semicolon = 51,
-    apostrophe = 52,
-    grave = 53,
-    comma = 54,
-    period = 55,
-    slash = 56,
-    capslock = 57,
-    f1 = 58,
-    f2 = 59,
-    f3 = 60,
-    f4 = 61,
-    f5 = 62,
-    f6 = 63,
-    f7 = 64,
-    f8 = 65,
-    f9 = 66,
-    f10 = 67,
-    f11 = 68,
-    f12 = 69,
-    printscreen = 70,
-    scrolllock = 71,
-    pause = 72,
-    insert = 73,
-    home = 74,
-    pageup = 75,
-    del = 76,
-    end = 77,
-    pagedown = 78,
-    right = 79,
-    left = 80,
-    down = 81,
-    up = 82,
-    numlockclear = 83,
-    kp_divide = 84,
-    kp_multiply = 85,
-    kp_minus = 86,
-    kp_plus = 87,
-    kp_enter = 88,
-    kp_1 = 89,
-    kp_2 = 90,
-    kp_3 = 91,
-    kp_4 = 92,
-    kp_5 = 93,
-    kp_6 = 94,
-    kp_7 = 95,
-    kp_8 = 96,
-    kp_9 = 97,
-    kp_0 = 98,
-    kp_period = 99
-};
+#include "tower.hpp"
 
 enum class KeyState : u8 { none, pressed, released };
 
@@ -182,14 +94,6 @@ static struct Time {
     u16 fps;
     float ms;
 } time;
-
-struct UIInstance {
-    Vector2f position;
-    Vector2f size;
-    FRectangle uv;
-    Color color;
-    float rotation;
-};
 
 static struct Engine {
     Vector2i screen;
@@ -222,8 +126,8 @@ static struct Engine {
     }
     int rand(int n) { return SDL_rand(n); }
 
-    static void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vector2f position,
-                  float size, Color color, Font font) {
+    static void drawText(Fixed<ui::Instance> *renderer, Slice<const char> text, Vector2f position,
+                         float size, Color color, Font font) {
         float advance = 0;
         for (size_t i = 0; i < text.len; i++) {
             Vector2f texture_offset = {0, 0};
@@ -241,7 +145,7 @@ static struct Engine {
         }
     }
 
-    void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vector2f position,
+    void drawText(Fixed<ui::Instance> *renderer, Slice<const char> text, Vector2f position,
                   float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
@@ -258,7 +162,7 @@ static struct Engine {
         return measureText(text, size, default_font);
     }
 
-    void updateUI(Fixed<UIInstance> *instances) const {
+    void updateUI(Fixed<ui::Instance> *instances) const {
         if (debug_mode) {
             ScopeArena scope(&arena);
             auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
@@ -272,8 +176,8 @@ static struct Engine {
 static struct Game {
     static void init(Engine *unagi);
     static void deinit(Engine *unagi);
-    static Vector2f update(Engine *unagi, Fixed<UIInstance> *instances);
-    static void updateUI(Engine *unagi, Fixed<UIInstance> *instance);
+    static Vector2f update(Engine *unagi, Fixed<ui::Instance> *instances);
+    static void updateUI(Engine *unagi, Fixed<ui::Instance> *instance);
 } game;
 
 #include "game.cpp"
@@ -333,7 +237,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
             {0, sizeof(Vector2f), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
-            {1, sizeof(UIInstance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
+            {1, sizeof(ui::Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
         createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
 
@@ -341,13 +245,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             // vertex
             {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
             // instance
-            {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(UIInstance, position)},
-            {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(UIInstance, size)},
-            {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(UIInstance, uv)},
+            {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, position)},
+            {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, size)},
+            {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, uv)},
             {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-             offsetof(UIInstance, uv) + sizeof(Vector2f)},
-            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(UIInstance, color)},
-            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(UIInstance, rotation)}};
+             offsetof(ui::Instance, uv) + sizeof(Vector2f)},
+            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(ui::Instance, color)},
+            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(ui::Instance, rotation)}};
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
         createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
 
@@ -365,22 +269,22 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             }};
         createinfo.target_info.color_target_descriptions = &color_target_description;
         createinfo.target_info.num_color_targets = 1;
-        ui_pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
+        ui::pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
     }
-    SDL_CHECK(ui_pipeline);
+    SDL_CHECK(ui::pipeline);
 
     Vector2f vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     i16 indices[6]{0, 1, 2, 0, 2, 3};
 
-    vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
-    SDL_CHECK(vertex_buffer);
+    ui::vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
+    SDL_CHECK(ui::vertex_buffer);
 
-    index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
-    SDL_CHECK(index_buffer);
+    ui::index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
+    SDL_CHECK(ui::index_buffer);
 
-    instance_buffer =
-        createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(UIInstance) * MAX_INSTANCES);
-    SDL_CHECK(instance_buffer);
+    ui::instance_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX,
+                                          sizeof(ui::Instance) * MAX_UI_INSTANCES);
+    SDL_CHECK(ui::instance_buffer);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
@@ -403,8 +307,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_memcpy(memory, vertices, sizeof(vertices));
             SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
         }
-        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, vertex_buffer, sizeof(vertices));
-        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), index_buffer,
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, ui::vertex_buffer, sizeof(vertices));
+        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), ui::index_buffer,
                           sizeof(indices));
     }
 
@@ -549,7 +453,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
 
     instance_transfer_buffer =
-        createGPUTransferBuffer(device, sizeof(UIInstance) * MAX_INSTANCES);
+        createGPUTransferBuffer(device, sizeof(ui::Instance) * MAX_UI_INSTANCES);
     SDL_CHECK(instance_transfer_buffer);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
@@ -604,12 +508,12 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         defer(SDL_EndGPUCopyPass(copy_pass));
         {
-            UIInstance *instances_raw =
-                (UIInstance *)SDL_MapGPUTransferBuffer(device, instance_transfer_buffer, true);
+            ui::Instance *instances_raw =
+                (ui::Instance *)SDL_MapGPUTransferBuffer(device, instance_transfer_buffer, true);
             defer(SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer));
             SDL_CHECK(instances_raw);
 
-            auto instances = Fixed<UIInstance>::init({MAX_INSTANCES, instances_raw});
+            auto instances = Fixed<ui::Instance>::init({MAX_UI_INSTANCES, instances_raw});
             camera = game.update(&engine, &instances);
             ui_offset = instances.len;
             game.updateUI(&engine, &instances);
@@ -621,8 +525,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             }
         }
         if (instances_len) {
-            uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, instance_buffer,
-                              sizeof(UIInstance) * instances_len);
+            uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, ui::instance_buffer,
+                              sizeof(ui::Instance) * instances_len);
         }
     }
 
@@ -645,12 +549,13 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, 0);
         defer(SDL_EndGPURenderPass(render_pass));
 
-        SDL_BindGPUGraphicsPipeline(render_pass, ui_pipeline);
+        SDL_BindGPUGraphicsPipeline(render_pass, ui::pipeline);
 
-        SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {instance_buffer, 0}};
+        SDL_GPUBufferBinding buffer_bindings[2] = {{ui::vertex_buffer, 0},
+                                                   {ui::instance_buffer, 0}};
         SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
 
-        const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
+        const SDL_GPUBufferBinding buffer_binding = {ui::index_buffer, 0};
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
         const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
@@ -660,13 +565,12 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         UBO ubo = {.screen = engine.screen};
 
         ubo.camera = camera;
-         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
+        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, ui_offset, 0, 0, 0);
 
         ubo.camera = {};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len - ui_offset, 0, 0,
-        ui_offset);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len - ui_offset, 0, 0, ui_offset);
     }
 
     memset(engine.key_state, 0, sizeof(engine.key_state));
@@ -692,11 +596,11 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
 
-    SDL_ReleaseGPUBuffer(device, instance_buffer);
-    SDL_ReleaseGPUBuffer(device, index_buffer);
-    SDL_ReleaseGPUBuffer(device, vertex_buffer);
+    SDL_ReleaseGPUBuffer(device, ui::instance_buffer);
+    SDL_ReleaseGPUBuffer(device, ui::index_buffer);
+    SDL_ReleaseGPUBuffer(device, ui::vertex_buffer);
 
-    SDL_ReleaseGPUGraphicsPipeline(device, ui_pipeline);
+    SDL_ReleaseGPUGraphicsPipeline(device, ui::pipeline);
     SDL_ReleaseGPUSampler(device, sampler);
     SDL_ReleaseWindowFromGPUDevice(device, window);
 
