@@ -3,19 +3,19 @@
 #include <skn_math.cpp>
 
 struct Instance {
-    vec2 position;
-    vec2 size;
-    Rect uv;
+    Vector2f position;
+    Vector2f size;
+    FRectangle uv;
     Color color;
     float rotation;
 };
 
 struct Font {
     u8 widths[256];
-    Rect texture;
+    FRectangle texture;
     float size;
 
-    void init(Rect texture);
+    void init(FRectangle texture);
 };
 
 enum class Key : u8 {
@@ -125,13 +125,13 @@ struct Mod {
 };
 
 struct Unagi {
-    HashMap<Rect> sprites;
+    HashMap<FRectangle> sprites;
     Dynamic<Mod> mods;
     const bool *keyboard_state;
 
     Font default_font;
 
-    ivec2 screen;
+    Vector2i screen;
 
     float dt;
 
@@ -146,9 +146,9 @@ struct Unagi {
     bool is_key_just_released(Key key, bool consume = true);
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
     static int rand(int n);
-    static void drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position,
+    static void drawText(Fixed<Instance> *renderer, Slice<const char> text, Vector2f position,
                          float size, Color color, Font font);
-    void drawText(Fixed<Instance> *renderer, Slice<const char> text,  vec2 position, float size = 10.0F, Color color = WHITE) const {
+    void drawText(Fixed<Instance> *renderer, Slice<const char> text,  Vector2f position, float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
     static float measureText(Slice<const char> text, float size, Font font);

@@ -4,7 +4,7 @@
 
 static struct Quest {
     enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
-    vec2 pos;
+    Vector2f pos;
     const char *line[Quest::REWARDED];
     uint counter;
 } quest = {
@@ -58,13 +58,13 @@ struct Object {
     float speed;
     float angle;
     int hp;
-    vec2 direction;
+    Vector2f direction;
     Timer timer;
-    vec2 pos;
-    vec2 size;
-    Rect sprite;
-    Rect interaction_rel;
-    Rect collision_rel;
+    Vector2f pos;
+    Vector2f size;
+    FRectangle sprite;
+    FRectangle interaction_rel;
+    FRectangle collision_rel;
     enum class Kind : u8 { player, enemy, attack, spell, npc, building } kind;
     enum class Body : u8 { none, movable, immovable } body;
     u8 frame;
@@ -73,21 +73,26 @@ struct Object {
     Color tint;
     Level::Id level;
 
-    static Object create(Kind kind, Rect sprite, bool alive = false, vec2 pos = {}) {
-        return {.size = sprite.size(), .sprite = sprite, .kind = kind, .tint = WHITE};
+    static Object create(Kind kind, FRectangle sprite, bool alive = false, Vector2f pos = {}) {
+        return {.pos = pos,
+                .size = sprite.size(),
+                .sprite = sprite,
+                .kind = kind,
+                .alive = alive,
+                .tint = WHITE};
     }
 
-    void addCollision(Body body, Rect rect) {
+    void addCollision(Body body, FRectangle rect) {
         this->body = body;
         collision_rel = rect;
     }
 
     bool isInteractable() const { return interaction_rel.w != 0 and interaction_rel.h != 0; }
 
-    Rect getInteraction() const {
+    FRectangle getInteraction() const {
         return {
-            pos.x + interaction_rel.x,
-            pos.y + interaction_rel.y,
+            {pos.x + interaction_rel.x,
+             pos.y + interaction_rel.y},
             interaction_rel.w,
             interaction_rel.h,
         };
@@ -95,16 +100,16 @@ struct Object {
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
 
-    Rect getCollision() {
+    FRectangle getCollision() {
         return {
-            pos.x + collision_rel.x,
-            pos.y + collision_rel.y,
+            {pos.x + collision_rel.x,
+             pos.y + collision_rel.y},
             collision_rel.w,
             collision_rel.h,
         };
     }
 
-    void takeDamage(vec2 direction, InventorySlot *inventory) {
+    void takeDamage(Vector2f direction, InventorySlot *inventory) {
         this->direction = direction;
         const float KNOCKBACK_SPEED = 100;
         speed = KNOCKBACK_SPEED;
@@ -122,7 +127,7 @@ struct Object {
         }
     }
 
-    Rect rect() { return {pos.x, pos.y, size.x, size.y}; }
+    FRectangle rect() { return {pos, size.x, size.y}; }
 
     // const char *check() const {
     //     if (u8(kind) == NONE) return "object can't have Kind::NONE";

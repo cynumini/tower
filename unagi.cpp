@@ -44,8 +44,8 @@ struct AtlasItem {
 };
 
 struct UBO {
-    ivec2 screen;
-    vec2 camera;
+    Vector2i screen;
+    Vector2f camera;
 };
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
@@ -89,7 +89,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         SDL_CHECK(createinfo.fragment_shader);
 
         const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-            {0, sizeof(vec2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
+            {0, sizeof(Vector2f), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
             {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
         createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
@@ -101,7 +101,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, position)},
             {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, size)},
             {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv)},
-            {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv) + sizeof(vec2)},
+            {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, uv) + sizeof(Vector2f)},
             {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)},
             {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, rotation)}};
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
@@ -125,7 +125,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
     SDL_CHECK(pipeline);
 
-    vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    Vector2f vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     i16 indices[6]{0, 1, 2, 0, 2, 3};
 
     vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
@@ -209,7 +209,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
         SDL_CHECK(mods_files);
 
-        unagi.sprites = HashMap<Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+        unagi.sprites = HashMap<FRectangle>::init(&arena, size_t(files_len + mods_files_len) * 2);
 
         auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
@@ -292,12 +292,12 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
             unagi.sprites.put(
                 &arena, name,
-                {float(x_offset), float(y_offset), float(surface->w), float(surface->h)});
+                {{float(x_offset), float(y_offset)}, float(surface->w), float(surface->h)});
 
             y_max = max(uint(surface->h), y_max);
 
             atlas.uploadToGPU(copy_pass, transfer_buffer,
-                              {x_offset, y_offset, (uint)surface->w, (uint)surface->h});
+                              {{x_offset, y_offset}, (uint)surface->w, (uint)surface->h});
 
             x_offset += surface->w;
         }
@@ -360,7 +360,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
 
-    vec2 camera = {};
+    Vector2f camera = {};
     size_t ui_offset = 0;
     size_t instances_len = 0;
 
@@ -373,7 +373,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer));
             SDL_CHECK(instances_raw);
 
-            Fixed<Instance> instances = {.items = {MAX_INSTANCES, instances_raw}};
+            auto instances = Fixed<Instance>::init({MAX_INSTANCES, instances_raw});
             camera = game.update(&unagi, &instances);
             ui_offset = instances.len;
             game.updateUI(&unagi, &instances);
@@ -477,7 +477,7 @@ bool Unagi::is_key_just_pressed(Key key, bool consume) {
     return result;
 }
 
-bool Unagi::is_key_just_released(Key key, bool consume)  {
+bool Unagi::is_key_just_released(Key key, bool consume) {
     auto result = key_state[int(key)] == KeyState::released;
     if (consume) key_state[int(key)] = KeyState::none;
     return result;
@@ -492,11 +492,11 @@ void Unagi::log(const char *fmt, ...) {
     va_end(args);
 }
 
-void Unagi::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 position, float size,
-                     Color color, Font font) {
+void Unagi::drawText(Fixed<Instance> *renderer, Slice<const char> text, Vector2f position,
+                     float size, Color color, Font font) {
     float advance = 0;
     for (size_t i = 0; i < text.len; i++) {
-        vec2 texture_offset = {0, 0};
+        Vector2f texture_offset = {0, 0};
         const u8 c = text.ptr[i] - ' ';
         texture_offset = {
             .x = float(c % 16) * font.size,
@@ -504,8 +504,7 @@ void Unagi::drawText(Fixed<Instance> *renderer, Slice<const char> text, vec2 pos
         };
         renderer->append({{position.x + advance, position.y},
                           {size, size},
-                          Rect{font.texture.x + texture_offset.x,
-                               font.texture.y + texture_offset.y, font.size, font.size},
+                          FRectangle{font.texture + texture_offset, font.size, font.size},
                           color,
                           0.0F});
         advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
@@ -521,7 +520,7 @@ float Unagi::measureText(Slice<const char> text, float size, Font font) {
     return advance - (size / font.size);
 }
 
-void Font::init(Rect texture) {
+void Font::init(FRectangle texture) {
     size = 10.0F;
     for (size_t i = 0; i < 256; i++) {
         widths[i] = 4;

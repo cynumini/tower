@@ -7,7 +7,7 @@
 
 // Init
 static Arena arena;
-static Rect solid;
+static FRectangle solid;
 static bool pause = false;
 
 Level::Id current_level = Level::Id::world;
@@ -20,26 +20,26 @@ static uint curr_line = 0;
 // Animation
 static struct Animation {
     u8 frames;
-    Rect origin;
+    FRectangle origin;
     bool flip_x;
 
-    void init(Rect texture, u8 frames, bool flip_x = false) {
+    void init(FRectangle texture, u8 frames, bool flip_x = false) {
         this->flip_x = flip_x;
         this->frames = frames;
         this->origin = {
-            .x = texture.x,
-            .y = texture.y,
-            .w = texture.w / float(frames),
-            .h = texture.h,
+            {
+                texture.x,
+                texture.y,
+            },
+            texture.w / float(frames),
+            texture.h,
         };
     }
 
-    Rect get(u8 index) const {
+    FRectangle get(u8 index) const {
         assert(index < frames);
-        Rect result = {.x = origin.x + (origin.w * float(index)),
-                       .y = origin.y,
-                       .w = origin.w,
-                       .h = origin.h};
+        FRectangle result = {
+            {origin.x + (origin.w * float(index)), origin.y}, origin.w, origin.h};
         if (flip_x) result.x += result.w, result.w *= -1;
         return result;
     }
@@ -90,8 +90,8 @@ const float TITLE_SIZE = 24.0F;
 
 static struct Location {
     const char *name;
-    Rect rect;
-    Rect ground;
+    FRectangle rect;
+    FRectangle ground;
 } locations[2];
 
 static struct ShowLocation {
@@ -132,7 +132,7 @@ void Game::init(Unagi *unagi) {
     player_left.init(unagi->sprites.get("player_right"), 3, true);
 
     // objects
-    objects.items = {.len = OBJECTS_MAX, .ptr = objects_raw};
+    objects = {{0, objects_raw}, OBJECTS_MAX};
 
     using Kind = Object::Kind;
     using Body = Object::Body;
@@ -141,7 +141,7 @@ void Game::init(Unagi *unagi) {
                                            {TITLE_SIZE * 16.0F, TITLE_SIZE * 16.0F}));
     player->timer = Timer::init(0.2F);
     player->direction = {0.0F, 1.0F};
-    player->addCollision(Body::movable, {7.0F, 45.0F, 10.0F, 3.0F});
+    player->addCollision(Body::movable, {{7.0F, 45.0F}, 10.0F, 3.0F});
 
     attack = objects.append(Object::create(Kind::attack, unagi->sprites.get("attack_trail1")));
     attack->timer = Timer::init(0.1F);
@@ -152,19 +152,19 @@ void Game::init(Unagi *unagi) {
         auto *object =
             objects.append(Object::create(Kind::npc, unagi->sprites.get("character"), true,
                                           {TITLE_SIZE * 48.0F, TITLE_SIZE * 16.0F}));
-        object->addCollision(Body::immovable, {7.0F, 45.0F, 10.0F, 3.0F});
+        object->addCollision(Body::immovable, {{7.0F, 45.0F}, 10.0F, 3.0F});
 
         const float PADDING = 8.0F;
         object->interaction_rel =
-            Rect::fromVec({-PADDING, -PADDING}, {object->size + (PADDING * 2)});
+            FRectangle::fromVec({-PADDING, -PADDING}, {object->size + (PADDING * 2)});
     }
 
     {
         auto house = unagi->sprites.get("house");
         auto *object = objects.append(Object::create(Kind::building, house, true));
-        object->addCollision(Body::immovable, {1.0F, 47.0F, 192.0F, 162.0F});
+        object->addCollision(Body::immovable, {{1.0F, 47.0F}, 192.0F, 162.0F});
         object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
-        object->interaction_rel = {80.0F, 208.0F, 30.0F, 2.0F};
+        object->interaction_rel = {{80.0F, 208.0F}, 30.0F, 2.0F};
     }
 
     const i32 MAX_X = 64;
@@ -176,7 +176,7 @@ void Game::init(Unagi *unagi) {
             objects.append(Object::create(Kind::enemy, unagi->sprites.get("zombie"), true,
                                           {float(unagi->rand(MAX_X)) * TITLE_SIZE,
                                            (float(unagi->rand(MAX_Y)) * TITLE_SIZE) - 24}));
-        object->addCollision(Body::movable, {7.0F, 45.0F, 10.0F, 3.0F});
+        object->addCollision(Body::movable, {{7.0F, 45.0F}, 10.0F, 3.0F});
         object->hp = 5;
         object->timer = Timer::init(0.2F);
     }
@@ -200,7 +200,7 @@ void Game::init(Unagi *unagi) {
     // }
 }
 
-vec2 Game::update(Unagi *unagi, Fixed<Instance> *instances) {
+Vector2f Game::update(Unagi *unagi, Fixed<Instance> *instances) {
     // update
     if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
 
