@@ -1,6 +1,12 @@
 #pragma once
 
-#include <skn.cpp>
+#include <skn_sdl.cpp>
+
+static SDL_GPUDevice *device;
+static SDL_Window *window;
+static SDL_GPUSampler *sampler;
+
+static Texture atlas;
 
 enum class Key : u8 {
     a = 4,

@@ -97,7 +97,7 @@ struct Object {
     }
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
-    
+o
     FRectangle getCollision() {
         return {
             {pos.x + collision_rel.x, pos.y + collision_rel.y},
@@ -159,7 +159,7 @@ static struct Animation {
                 texture.x,
                 texture.y,
             },
-            texture.w / float(frames),
+            texture.w / frames,
             texture.h,
         };
     }
@@ -167,7 +167,10 @@ static struct Animation {
     FRectangle get(u8 index) const {
         assert(index < frames);
         FRectangle result = {
-            {origin.x + (origin.w * float(index)), origin.y}, origin.w, origin.h};
+            {origin.x + (origin.w * index), origin.y},
+            origin.w,
+            origin.h,
+        };
         if (flip_x) result.x += result.w, result.w *= -1;
         return result;
     }
@@ -328,12 +331,7 @@ void Game::init(Engine *unagi) {
     // }
 }
 
-Vector2f Game::update(Engine *unagi, Fixed<ui::Instance> *instances) {
-    // update
-    if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
-
-    // draw
-    unagi->clear_color = levels[size_t(current_level)].clear_color;
+Vector2f Game::update(Engine *unagi, Fixed<UI::Instance> *instances) {
 
     // // TODO: way to exit house
     // // TODO: move NPC to house
@@ -348,8 +346,6 @@ Vector2f Game::update(Engine *unagi, Fixed<ui::Instance> *instances) {
     // if (unagi->is_key_just_pressed(Key::key_1)) {
     //     quest.status = Quest::COMPLETED;
     // }
-
-    if (unagi->is_key_just_pressed(Key::f3)) unagi->debug_mode = !unagi->debug_mode;
 
     // if (unagi->is_key_just_pressed(Key::key_2)) {
     //     unagi->clear_color = colorFromHex(0x8bbbffff);
@@ -654,7 +650,14 @@ Vector2f Game::update(Engine *unagi, Fixed<ui::Instance> *instances) {
     return {};
 }
 
-void Game::updateUI(Engine *unagi, Fixed<ui::Instance> *instances) {
+void Game::updateUI(Engine *unagi, Fixed<UI::Instance> *instances) {
+    // update
+    if (unagi->is_key_just_pressed(Key::escape)) unagi->running = true;
+
+    // draw
+    unagi->clear_color = levels[size_t(current_level)].clear_color;
+
+    if (unagi->is_key_just_pressed(Key::f3)) unagi->debug_mode = !unagi->debug_mode;
     // ScopeArena scope(&arena);
 
     // if (unagi->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;

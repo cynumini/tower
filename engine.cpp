@@ -3,40 +3,13 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#include "build/shader.frag.hpp"
-#include "build/shader.vert.hpp"
-
-const uint MAX_UI_INSTANCES = 4096;
-
 static Arena arena;
 
-static SDL_Window *window;
-static SDL_GPUDevice *device;
-static SDL_GPUSampler *sampler;
+#include "tower.hpp"
 
-namespace ui {
-static SDL_GPUGraphicsPipeline *pipeline;
-static SDL_GPUBuffer *vertex_buffer;
-static SDL_GPUBuffer *index_buffer;
-static SDL_GPUBuffer *instance_buffer;
-
-struct Instance {
-    Vector2f position;
-    Vector2f size;
-    FRectangle uv;
-    Color color;
-    float rotation;
-};
-} // namespace ui
+#include "ui_pipeline.cpp"
 
 static SDL_GPUTransferBuffer *instance_transfer_buffer;
-
-static Texture atlas;
-
-struct UBO {
-    Vector2i screen;
-    Vector2f camera;
-};
 
 struct Font {
     u8 widths[256];
@@ -76,8 +49,6 @@ struct Font {
         this->texture = texture;
     }
 };
-
-#include "tower.hpp"
 
 enum class KeyState : u8 { none, pressed, released };
 
@@ -126,12 +97,12 @@ static struct Engine {
     }
     int rand(int n) { return SDL_rand(n); }
 
-    static void drawText(Fixed<ui::Instance> *renderer, Slice<const char> text, Vector2f position,
+    static void drawText(Fixed<UI::Instance> *renderer, Slice<const char> text, Vector2f position,
                          float size, Color color, Font font) {
         float advance = 0;
         for (size_t i = 0; i < text.len; i++) {
             Vector2f texture_offset = {0, 0};
-            const u8 c = text.ptr[i] - ' ';
+            const u16 c = text.ptr[i] - ' ';
             texture_offset = {
                 .x = float(c % 16) * font.size,
                 .y = float(c / 16) * font.size, // NOLINT
@@ -139,13 +110,12 @@ static struct Engine {
             renderer->append({{position.x + advance, position.y},
                               {size, size},
                               FRectangle{font.texture + texture_offset, font.size, font.size},
-                              color,
-                              0.0F});
+                              color});
             advance += (float(font.widths[u8(text.ptr[i])]) + 1) * (size / font.size);
         }
     }
 
-    void drawText(Fixed<ui::Instance> *renderer, Slice<const char> text, Vector2f position,
+    void drawText(Fixed<UI::Instance> *renderer, Slice<const char> text, Vector2f position,
                   float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
@@ -162,7 +132,7 @@ static struct Engine {
         return measureText(text, size, default_font);
     }
 
-    void updateUI(Fixed<ui::Instance> *instances) const {
+    void updateUI(Fixed<UI::Instance> *instances) const {
         if (debug_mode) {
             ScopeArena scope(&arena);
             auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
@@ -176,8 +146,8 @@ static struct Engine {
 static struct Game {
     static void init(Engine *unagi);
     static void deinit(Engine *unagi);
-    static Vector2f update(Engine *unagi, Fixed<ui::Instance> *instances);
-    static void updateUI(Engine *unagi, Fixed<ui::Instance> *instance);
+    static Vector2f update(Engine *unagi, Fixed<UI::Instance> *instances);
+    static void updateUI(Engine *unagi, Fixed<UI::Instance> *instance);
 } game;
 
 #include "game.cpp"
@@ -221,70 +191,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(Texture::create(device, {4096, 4096}, &atlas));
 
-    {
-        SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
-        createinfo.vertex_shader =
-            createGPUShader(device, shader_vert_code_spv, shader_vert_code_dxil,
-                            SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
-        createinfo.fragment_shader =
-            createGPUShader(device, shader_frag_code_spv, shader_frag_code_dxil,
-                            SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
-        SDL_CHECK(createinfo.vertex_shader);
-        SDL_CHECK(createinfo.fragment_shader);
-
-        defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
-        defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
-
-        const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-            {0, sizeof(Vector2f), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
-            {1, sizeof(ui::Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
-        createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
-        createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
-
-        SDL_GPUVertexAttribute vertex_attributes[] = {
-            // vertex
-            {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
-            // instance
-            {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, position)},
-            {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, size)},
-            {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(ui::Instance, uv)},
-            {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2,
-             offsetof(ui::Instance, uv) + sizeof(Vector2f)},
-            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(ui::Instance, color)},
-            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(ui::Instance, rotation)}};
-        createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
-        createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
-
-        const SDL_GPUColorTargetDescription color_target_description = {
-            .format = SDL_GetGPUSwapchainTextureFormat(device, window),
-            .blend_state = {
-                .src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA,
-                .dst_color_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-                .color_blend_op = SDL_GPU_BLENDOP_ADD,
-                .src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE,
-                .dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-                .alpha_blend_op = SDL_GPU_BLENDOP_ADD,
-                .enable_blend = true,
-
-            }};
-        createinfo.target_info.color_target_descriptions = &color_target_description;
-        createinfo.target_info.num_color_targets = 1;
-        ui::pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
-    }
-    SDL_CHECK(ui::pipeline);
-
-    Vector2f vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
-    i16 indices[6]{0, 1, 2, 0, 2, 3};
-
-    ui::vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
-    SDL_CHECK(ui::vertex_buffer);
-
-    ui::index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
-    SDL_CHECK(ui::index_buffer);
-
-    ui::instance_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX,
-                                          sizeof(ui::Instance) * MAX_UI_INSTANCES);
-    SDL_CHECK(ui::instance_buffer);
+    ui.init(shader_format);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
@@ -293,24 +200,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
     defer(SDL_EndGPUCopyPass(copy_pass));
 
-    {
-        auto *transfer_buffer =
-            createGPUTransferBuffer(device, sizeof(vertices) + sizeof(indices));
-        SDL_CHECK(transfer_buffer);
-        defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
-
-        {
-            u8 *memory = (u8 *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
-            defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
-            SDL_CHECK(memory);
-
-            SDL_memcpy(memory, vertices, sizeof(vertices));
-            SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
-        }
-        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, ui::vertex_buffer, sizeof(vertices));
-        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), ui::index_buffer,
-                          sizeof(indices));
-    }
+    ui.uploadBuffer(copy_pass);
 
     {
         ScopeArena scope(&arena);
@@ -407,7 +297,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         uint x_offset = 0;
         uint y_offset = 0;
-        uint y_max = 0;
+        int y_max = 0;
 
         for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
@@ -443,7 +333,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                 &arena, name,
                 {{float(x_offset), float(y_offset)}, float(surface->w), float(surface->h)});
 
-            y_max = max(uint(surface->h), y_max);
+            y_max = max(surface->h, y_max);
 
             atlas.uploadToGPU(copy_pass, transfer_buffer,
                               {{x_offset, y_offset}, (uint)surface->w, (uint)surface->h});
@@ -453,7 +343,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
 
     instance_transfer_buffer =
-        createGPUTransferBuffer(device, sizeof(ui::Instance) * MAX_UI_INSTANCES);
+        createGPUTransferBuffer(device, sizeof(UI::Instance) * ui.MAX_INSTANCES);
     SDL_CHECK(instance_transfer_buffer);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
@@ -500,33 +390,18 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
 
-    Vector2f camera = {};
-    size_t ui_offset = 0;
-    size_t instances_len = 0;
-
     {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
         defer(SDL_EndGPUCopyPass(copy_pass));
-        {
-            ui::Instance *instances_raw =
-                (ui::Instance *)SDL_MapGPUTransferBuffer(device, instance_transfer_buffer, true);
-            defer(SDL_UnmapGPUTransferBuffer(device, instance_transfer_buffer));
-            SDL_CHECK(instances_raw);
 
-            auto instances = Fixed<ui::Instance>::init({MAX_UI_INSTANCES, instances_raw});
-            camera = game.update(&engine, &instances);
-            ui_offset = instances.len;
+        {
+            auto instances = ui.beginUpload(instance_transfer_buffer);
+            defer(ui.endUpload(copy_pass, instance_transfer_buffer, instances.len));
+
             game.updateUI(&engine, &instances);
             engine.updateUI(&instances);
-            instances_len = instances.len;
 
-            for (auto &instance : instances) {
-                instance.uv /= 4096.0F;
-            }
-        }
-        if (instances_len) {
-            uploadToGPUBuffer(copy_pass, instance_transfer_buffer, 0, ui::instance_buffer,
-                              sizeof(ui::Instance) * instances_len);
+            for (auto &instance : instances) instance.uv /= 4096.0F;
         }
     }
 
@@ -546,31 +421,11 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         };
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
+
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, 0);
         defer(SDL_EndGPURenderPass(render_pass));
 
-        SDL_BindGPUGraphicsPipeline(render_pass, ui::pipeline);
-
-        SDL_GPUBufferBinding buffer_bindings[2] = {{ui::vertex_buffer, 0},
-                                                   {ui::instance_buffer, 0}};
-        SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
-
-        const SDL_GPUBufferBinding buffer_binding = {ui::index_buffer, 0};
-        SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
-
-        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
-                                                                      .sampler = sampler};
-        SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
-
-        UBO ubo = {.screen = engine.screen};
-
-        ubo.camera = camera;
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, ui_offset, 0, 0, 0);
-
-        ubo.camera = {};
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len - ui_offset, 0, 0, ui_offset);
+        ui.draw(command_buffer, render_pass, engine.screen);
     }
 
     memset(engine.key_state, 0, sizeof(engine.key_state));
@@ -590,17 +445,14 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    // game.deinit(&unagi);
+    game.deinit(&engine);
 
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
 
-    SDL_ReleaseGPUBuffer(device, ui::instance_buffer);
-    SDL_ReleaseGPUBuffer(device, ui::index_buffer);
-    SDL_ReleaseGPUBuffer(device, ui::vertex_buffer);
+    ui.deinit();
 
-    SDL_ReleaseGPUGraphicsPipeline(device, ui::pipeline);
     SDL_ReleaseGPUSampler(device, sampler);
     SDL_ReleaseWindowFromGPUDevice(device, window);
 

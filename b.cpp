@@ -3,18 +3,12 @@
 int main(int argc, const char *argv[]) {
     auto arena = Arena::init(MB(1));
     REBUILD_AND_RESTART_ON_CHANGES(&arena, argc, argv);
-
     const char *output = "./build/tower";
     const char *inputs[] = {
         "engine.cpp",
-        // "unagi.cpp",
-        // "game.cpp",
-        // "object.cpp",
-        // "game.hpp",
-        // "unagi.hpp",
-        // "sakana/skn.cpp",
-        // "sakana/skn_math.cpp",
-        // "sakana/skn_sdl.cpp",
+        "game.cpp",
+        "tower.hpp",
+        "ui_pipeline.cpp",
         shadercrossHpp(&arena, "shader.frag.hlsl", "./build/shader.frag.hpp", "shader_frag_code"),
         shadercrossHpp(&arena, "shader.vert.hlsl", "./build/shader.vert.hpp", "shader_vert_code"),
     };
@@ -36,12 +30,5 @@ int main(int argc, const char *argv[]) {
 
         run(&arena, args);
     }
-
-    // Args tidy_args = {};
-    // addArg(&tidy_args, "clang-tidy");
-    // addArg(&tidy_args, inputs[0]); // engine
-    // addArg(&tidy_args, inputs[1]); // game
-    // run(tidy_args);
-
     return 0;
 }
