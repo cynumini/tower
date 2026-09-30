@@ -9,8 +9,11 @@ int main(int argc, const char *argv[]) {
         "game.cpp",
         "tower.hpp",
         "ui_pipeline.cpp",
-        shadercrossHpp(&arena, "shader.frag.hlsl", "./build/shader.frag.hpp", "shader_frag_code"),
-        shadercrossHpp(&arena, "shader.vert.hlsl", "./build/shader.vert.hpp", "shader_vert_code"),
+        "world_pipeline.cpp",
+        shadercrossHpp(&arena, "ui.frag.hlsl", "./build/ui.frag.hpp", "ui_frag_code"),
+        shadercrossHpp(&arena, "ui.vert.hlsl", "./build/ui.vert.hpp", "ui_vert_code"),
+        shadercrossHpp(&arena, "world.frag.hlsl", "./build/world.frag.hpp", "world_frag_code"),
+        shadercrossHpp(&arena, "world.vert.hlsl", "./build/world.vert.hpp", "world_vert_code"),
     };
     if (needsUpdate(output, inputs)) {
         auto args = Dynamic<const char *>::init(&arena, 32);

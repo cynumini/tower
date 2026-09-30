@@ -2,20 +2,24 @@
 
 #include "tower.hpp"
 
-#include "build/ui.frag.hpp"
-#include "build/ui.vert.hpp"
+#include "build/world.frag.hpp"
+#include "build/world.vert.hpp"
 
-static struct UI {
+enum class Face : u32 { x_pos, x_neg, y_pos, y_neg, z_pos, z_neg };
+
+static struct World {
     const uint MAX_INSTANCES = 4096;
 
     struct Instance {
-        Vector2f position;
+        Vector3f position;
         Vector2f size;
         FRectangle uv;
         Color color;
+        Face face;
     };
 
     struct UBO {
+        Matrix view;
         Matrix projection;
     };
 
@@ -29,13 +33,13 @@ static struct UI {
     void init(SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
-            createGPUShader(device, ui_vert_code_spv, ui_vert_code_dxil,
+            createGPUShader(device, world_vert_code_spv, world_vert_code_dxil,
                             SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
         defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
         SDL_assert(createinfo.vertex_shader);
 
         createinfo.fragment_shader =
-            createGPUShader(device, ui_frag_code_spv, ui_frag_code_dxil,
+            createGPUShader(device, world_frag_code_spv, world_frag_code_dxil,
                             SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
         defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
         SDL_assert(createinfo.fragment_shader);
@@ -50,17 +54,19 @@ static struct UI {
             // vertex
             {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},
             // instance
-            {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, position)},
+            {1, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Instance, position)},
             {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, size)},
             {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, uv)},
-            {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)}};
+            {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)},
+            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offsetof(Instance, face)}};
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
         createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
 
         // depth
         createinfo.depth_stencil_state = {
-            .enable_depth_test = false,
-            .enable_depth_write = false,
+            .compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL, // TODO: why not just less?
+            .enable_depth_test = true,
+            .enable_depth_write = true,
         };
 
         const SDL_GPUColorTargetDescription color_target_description = {
@@ -81,12 +87,13 @@ static struct UI {
         createinfo.target_info.has_depth_stencil_target = true;
         createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
 
+
         pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
         SDL_assert(pipeline);
     }
-
+    
     void uploadBuffer(SDL_GPUCopyPass *copy_pass) {
-        Vector2f vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+        Vector2f vertices[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
         i16 indices[6]{0, 1, 2, 0, 2, 3};
 
         vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
@@ -154,8 +161,13 @@ static struct UI {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        UBO ubo = {.projection = Matrix::ortho(0, screen.x, screen.y, 0, 0, 1)};
+        float pitch = deg2rad(60);
+        float yaw = deg2rad(45.0F);
+
+        UBO ubo = {Matrix::rotationX(pitch) * Matrix::rotationZ(-yaw),
+                   Matrix::ortho(-screen.x / 2.0F, screen.x / 2.0F, screen.y / 2.0F,
+                                 -screen.y / 2.0F, -10000, 10000)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
     }
-} ui;
+} world;

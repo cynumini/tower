@@ -7,7 +7,10 @@ static Arena arena;
 
 #include "tower.hpp"
 
+static SDL_GPUTexture *depth;
+
 #include "ui_pipeline.cpp"
+#include "world_pipeline.cpp"
 
 static SDL_GPUTransferBuffer *instance_transfer_buffer;
 
@@ -192,6 +195,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     SDL_CHECK(Texture::create(device, {4096, 4096}, &atlas));
 
     ui.init(shader_format);
+    world.init(shader_format);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     defer(SDL_SubmitGPUCommandBuffer(command_buffer));
@@ -201,6 +205,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     defer(SDL_EndGPUCopyPass(copy_pass));
 
     ui.uploadBuffer(copy_pass);
+    world.uploadBuffer(copy_pass);
 
     {
         ScopeArena scope(&arena);
@@ -343,8 +348,25 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
 
     instance_transfer_buffer =
-        createGPUTransferBuffer(device, sizeof(UI::Instance) * ui.MAX_INSTANCES);
+        createGPUTransferBuffer(device, max(sizeof(UI::Instance) * ui.MAX_INSTANCES,
+                                            sizeof(World::Instance) * world.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
+
+    {
+        SDL_GPUTextureCreateInfo depth_info = {
+            .type = SDL_GPU_TEXTURETYPE_2D,
+            .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+            .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+            .width = uint(engine.screen.x),
+            .height = uint(engine.screen.y),
+            .layer_count_or_depth = 1,
+            .num_levels = 1,
+            .sample_count = SDL_GPU_SAMPLECOUNT_1,
+
+        };
+        depth = SDL_CreateGPUTexture(device, &depth_info);
+        SDL_CHECK(depth);
+    }
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
     engine.default_font.init(engine.sprites.get("font"));
@@ -403,6 +425,40 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
             for (auto &instance : instances) instance.uv /= 4096.0F;
         }
+
+        {
+            auto instances = world.beginUpload(instance_transfer_buffer);
+            defer(world.endUpload(copy_pass, instance_transfer_buffer, instances.len));
+
+            // const size_t size = 1;
+            // u8 map[size][size][size] = {};
+            // map[0][0][0] = 1;
+
+            Vector3f pos[6] = {
+                {-16, 0, 0},  // X+
+                {16, 0, 0}, // X-
+                {0, -16, 0},  // Y+
+                {0, 16, 0}, // Y-
+                {0, 0, -16},  // Z+
+                {0, 0, 16}, // Z-
+            };
+            FRectangle texture[6] = {
+                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
+                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
+                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
+            };
+
+            {
+                for (u32 i = 0; i < 6; i++) {
+                    instances.append({pos[i], {32, 32}, texture[i], WHITE, Face(i)});
+                }
+            }
+
+            // game.updateUI(&engine, &instances);
+            // engine.updateUI(&instances);
+
+            for (auto &instance : instances) instance.uv /= 4096.0F;
+        }
     }
 
     SDL_GPUTexture *swapchain_texture = 0;
@@ -422,9 +478,18 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
 
-        auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1, 0);
+        SDL_GPUDepthStencilTargetInfo depth_stencil_target_info = {
+            .texture = depth,
+            .clear_depth = 1.0F,
+            .load_op = SDL_GPU_LOADOP_CLEAR,
+            .store_op = SDL_GPU_STOREOP_DONT_CARE,
+        };
+
+        auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1,
+                                                   &depth_stencil_target_info);
         defer(SDL_EndGPURenderPass(render_pass));
 
+        world.draw(command_buffer, render_pass, engine.screen);
         ui.draw(command_buffer, render_pass, engine.screen);
     }
 
@@ -450,7 +515,9 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
     SDL_ReleaseGPUTexture(device, atlas.ptr);
+    SDL_ReleaseGPUTexture(device, depth);
 
+    world.deinit();
     ui.deinit();
 
     SDL_ReleaseGPUSampler(device, sampler);

@@ -97,7 +97,7 @@ struct Object {
     }
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
-o
+
     FRectangle getCollision() {
         return {
             {pos.x + collision_rel.x, pos.y + collision_rel.y},
