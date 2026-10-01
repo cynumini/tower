@@ -49,6 +49,8 @@ struct Font {
         widths['w'] = 5;
         widths['x'] = 5;
         widths['y'] = 5;
+        widths['Y'] = 5;
+        widths['W'] = 9;
         this->texture = texture;
     }
 };
@@ -82,22 +84,26 @@ static struct Engine {
     Color clear_color;
 
     bool is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
+
     bool is_key_just_pressed(Key key, bool consume = true) {
         auto result = key_state[int(key)] == KeyState::pressed;
         if (consume) key_state[int(key)] = KeyState::none;
         return result;
     }
+
     bool is_key_just_released(Key key, bool consume = true) {
         auto result = key_state[int(key)] == KeyState::released;
         if (consume) key_state[int(key)] = KeyState::none;
         return result;
     }
+
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...) {
         va_list args;
         va_start(args, fmt);
         SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
         va_end(args);
     }
+
     int rand(int n) { return SDL_rand(n); }
 
     static void drawText(Fixed<UI::Instance> *renderer, Slice<const char> text, Vector2f position,
@@ -123,6 +129,11 @@ static struct Engine {
         drawText(renderer, text, position, size, color, default_font);
     }
 
+    void drawText(Fixed<UI::Instance> *renderer, Slice<char> text, Vector2f position,
+                  float size = 10.0F, Color color = WHITE) const {
+        drawText(renderer, {text.len, text.ptr}, position, size, color, default_font);
+    }
+
     static float measureText(Slice<const char> text, float size, Font font) {
         if (text.len == 0) return 0;
         float advance = 0;
@@ -135,13 +146,127 @@ static struct Engine {
         return measureText(text, size, default_font);
     }
 
-    void updateUI(Fixed<UI::Instance> *instances) const {
+    void drawTextF(Arena *a, Fixed<UI::Instance> *instances, Vector2f pos, const char *fmt, ...)
+        __attribute__((format(gnu_printf, 5, 6))) {
+        va_list ap;
+        va_start(ap, fmt);
+        auto slice = a->vAllocPrintZ(fmt, ap);
+        va_end(ap);
+
+        drawText(instances, slice.withoutZero(), pos);
+        a->free(slice);
+    }
+
+    void updateUI(Fixed<UI::Instance> *instances) {
         if (debug_mode) {
             ScopeArena scope(&arena);
-            auto buffer1 = scope.tmp.allocPrint("FPS: %d", time.fps);
-            auto buffer2 = scope.tmp.allocPrint("%.2fms", time.ms);
-            drawText(instances, {buffer1.len, buffer1.ptr}, {2, 2});
-            drawText(instances, {buffer2.len, buffer2.ptr}, {2, 14});
+            float offset_y = 2.0F;
+
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "FPS: %d", time.fps);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "%.2fms", time.ms);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "Pitch: %.0f", world.camera.pitch);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "Yaw: %.0f", world.camera.yaw);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "Roll: %.0f", world.camera.roll);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y},
+                      "Camera: x = %.2f, y = %.2f, z = %.2f", world.camera.pos.x,
+                      world.camera.pos.y, world.camera.pos.z);
+            offset_y += 12;
+
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "UI instances: %d/%d", ui.last_len,
+                      ui.MAX_INSTANCES);
+            offset_y += 12;
+            drawTextF(&scope.tmp, instances, {2, offset_y}, "World instances: %d/%d",
+                      world.last_len, world.MAX_INSTANCES);
+            offset_y += 12;
+        }
+    }
+
+    static constexpr int MAP_SIZE = 16;
+    
+    static inline bool checkFaceVisible(u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE], Vector3i pos) {
+        if (pos.x < 0 or pos.y < 0 or pos.z < 0) return true;
+        if (pos.x >= MAP_SIZE or pos.y >= MAP_SIZE or pos.z >= MAP_SIZE) return true;
+        return map[pos.x][pos.y][pos.z] == 0;
+    }
+
+    void updateWorld(Fixed<World::Instance> *instances) {
+        float yaw =
+            float(is_key_just_released(Key::kp_6)) - float(is_key_just_released(Key::kp_4));
+        float pitch =
+            float(is_key_just_released(Key::kp_2)) - float(is_key_just_released(Key::kp_8));
+        float roll =
+            float(is_key_just_released(Key::kp_7)) - float(is_key_just_released(Key::kp_9));
+
+        world.camera.yaw += yaw * 5;
+        world.camera.pitch += pitch * 5;
+        world.camera.roll += roll * 5;
+
+        Vector3f velocity = {
+            float(is_key_just_released(Key::right)) - float(is_key_just_released(Key::left)),
+            float(is_key_just_released(Key::up)) - float(is_key_just_released(Key::down)),
+            float(is_key_just_released(Key::pageup)) - float(is_key_just_released(Key::pagedown)),
+        };
+
+        float c = SDL_cos(deg2rad(world.camera.yaw));
+        float s = SDL_sin(deg2rad(world.camera.yaw));
+
+        float x = velocity.x;
+        float y = velocity.y;
+
+        velocity.x = x * c - y * s;
+        velocity.y = y * c + x * s;
+
+        world.camera.pos += velocity;
+
+        u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE] = {};
+        for (size_t x = 0; x < MAP_SIZE; x++) {
+            for (size_t y = 0; y < MAP_SIZE; y++) {
+                for (size_t z = 0; z < MAP_SIZE; z++) {
+                    map[x][y][z] = (x + y + z) % 4 + 1;
+                }
+            }
+        }
+
+        for (int x = 0; x < MAP_SIZE; x++) {
+            for (int y = 0; y < MAP_SIZE; y++) {
+                for (int z = 0; z < MAP_SIZE; z++) {
+                    FRectangle texture = {};
+                    if (map[x][y][z] == 1) {
+                        texture = sprites.get("dirt");
+                    } else if (map[x][y][z] == 2) {
+                        texture = sprites.get("grass");
+                    } else if (map[x][y][z] == 2) {
+                        texture = sprites.get("water");
+                    } else if (map[x][y][z] == 3) {
+                        texture = sprites.get("wood_floor");
+                    } else if (map[x][y][z] == 4) {
+                        texture = sprites.get("wall");
+                    } else {
+                        continue;
+                    }
+
+                    Vector3f position = {float(x), float(y), float(z)};
+                    const Vector3i axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+
+                    for (int axis = 0; axis < 3; axis++)
+                        for (int i = 0; i < 2; i++) {
+                            int o = 1 - i * 2;
+                            Vector3i offset = axes[axis] * o;
+
+                            if (checkFaceVisible(map, Vector3i{x, y, z} + offset))
+                                instances->append({position + Vector3f(offset) * 0.5F,
+                                                   {1, 1},
+                                                   texture,
+                                                   WHITE,
+                                                   Face(axis * 2 + i)});
+                        }
+                }
+            }
         }
     }
 } engine;
@@ -429,45 +554,20 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         defer(SDL_EndGPUCopyPass(copy_pass));
 
         {
-            auto instances = ui.beginUpload(instance_transfer_buffer);
-            defer(ui.endUpload(copy_pass, instance_transfer_buffer, instances.len));
+            auto instances = world.beginUpload(instance_transfer_buffer);
+            defer(world.endUpload(copy_pass, instance_transfer_buffer, instances.len));
 
-            game.updateUI(&engine, &instances);
-            engine.updateUI(&instances);
+            engine.updateWorld(&instances);
 
             for (auto &instance : instances) instance.uv /= 4096.0F;
         }
 
         {
-            auto instances = world.beginUpload(instance_transfer_buffer);
-            defer(world.endUpload(copy_pass, instance_transfer_buffer, instances.len));
+            auto instances = ui.beginUpload(instance_transfer_buffer);
+            defer(ui.endUpload(copy_pass, instance_transfer_buffer, instances.len));
 
-            // const size_t size = 1;
-            // u8 map[size][size][size] = {};
-            // map[0][0][0] = 1;
-
-            Vector3f pos[6] = {
-                {-0.5, 0, 0}, // X+
-                {0.5, 0, 0},  // X-
-                {0, -0.5, 0}, // Y+
-                {0, 0.5, 0},  // Y-
-                {0, 0, -0.5}, // Z+
-                {0, 0, 0.5},  // Z-
-            };
-            FRectangle texture[6] = {
-                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
-                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
-                engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
-            };
-
-            {
-                for (u32 i = 0; i < 6; i++) {
-                    instances.append({pos[i], {1, 1}, texture[i], WHITE, Face(i)});
-                }
-            }
-
-            // game.updateUI(&engine, &instances);
-            // engine.updateUI(&instances);
+            game.updateUI(&engine, &instances);
+            engine.updateUI(&instances);
 
             for (auto &instance : instances) instance.uv /= 4096.0F;
         }

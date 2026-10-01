@@ -8,7 +8,7 @@
 enum class Face : u32 { x_pos, x_neg, y_pos, y_neg, z_pos, z_neg };
 
 static struct World {
-    const uint MAX_INSTANCES = 4096;
+    const uint MAX_INSTANCES = 2048;
 
     struct Instance {
         Vector3f position;
@@ -28,9 +28,20 @@ static struct World {
     SDL_GPUBuffer *index_buffer;
     SDL_GPUBuffer *buffer;
 
-    size_t len;
+    uint len;
+    uint last_len;
 
     Vector2f size;
+
+    struct Camera {
+        float pitch = 60;
+        float yaw = 45;
+        float roll = 0;
+
+        Vector3f pos;
+    };
+
+    Camera camera;
 
     void resize(Vector2i screen) {
         const float sqrt2 = 1.41421356237;
@@ -172,13 +183,14 @@ static struct World {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        float pitch = deg2rad(60);
-        float yaw = deg2rad(45.0F);
-
-        UBO ubo = {Matrix::rotationX(pitch) * Matrix::rotationZ(-yaw),
-                   Matrix::ortho(-size.x / 2.0F, size.x / 2.0F, size.y / 2.0F, -size.y / 2.0F,
-                                 -1000, 1000)};
+        UBO ubo = {Matrix::rotationX(deg2rad(camera.pitch)) *
+                       Matrix::rotationZ(deg2rad(camera.yaw)) *
+            Matrix::rotationY(deg2rad(camera.roll)) * Matrix::translation(-camera.pos),
+                   Matrix::ortho(-size.x / 2.0F, size.x / 2.0F, -size.y / 2.0F, size.y / 2.0F,
+                                 1000, -1000)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
+
+        last_len = len;
     }
 } world;

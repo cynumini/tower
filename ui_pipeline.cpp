@@ -6,7 +6,7 @@
 #include "build/ui.vert.hpp"
 
 static struct UI {
-    const uint MAX_INSTANCES = 4096;
+    const uint MAX_INSTANCES = 128;
 
     struct Instance {
         Vector2f position;
@@ -24,7 +24,8 @@ static struct UI {
     SDL_GPUBuffer *index_buffer;
     SDL_GPUBuffer *buffer;
 
-    size_t len;
+    uint len;
+    uint last_len;
 
     Vector2f size;
 
@@ -168,5 +169,7 @@ static struct UI {
         UBO ubo = {.projection = Matrix::ortho(0, size.x, size.y, 0, 0, 1)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
+
+        last_len = len;
     }
 } ui;
