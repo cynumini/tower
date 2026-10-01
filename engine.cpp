@@ -160,6 +160,28 @@ struct AtlasItem {
     SDL_Surface *surface;
 };
 
+void resize(int width, int height) {
+    engine.screen.x = width;
+    engine.screen.y = height;
+
+    world.resize(engine.screen);
+    ui.resize(engine.screen);
+
+    if (depth) SDL_ReleaseGPUTexture(device, depth);
+    SDL_GPUTextureCreateInfo depth_info = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+        .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        .width = uint(width),
+        .height = uint(height),
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = SDL_GPU_SAMPLECOUNT_1,
+    };
+    depth = SDL_CreateGPUTexture(device, &depth_info);
+    SDL_assert(depth);
+}
+
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
     arena = Arena::init(KB(5));
@@ -170,9 +192,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-    engine.screen = {640, 360};
+    engine.screen = {1280, 720};
 
-    window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, 0);
+    window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
     SDL_CHECK(window);
 
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, 0);
@@ -352,21 +374,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                                             sizeof(World::Instance) * world.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
 
-    {
-        SDL_GPUTextureCreateInfo depth_info = {
-            .type = SDL_GPU_TEXTURETYPE_2D,
-            .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
-            .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-            .width = uint(engine.screen.x),
-            .height = uint(engine.screen.y),
-            .layer_count_or_depth = 1,
-            .num_levels = 1,
-            .sample_count = SDL_GPU_SAMPLECOUNT_1,
-
-        };
-        depth = SDL_CreateGPUTexture(device, &depth_info);
-        SDL_CHECK(depth);
-    }
+    resize(engine.screen.x, engine.screen.y);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
     engine.default_font.init(engine.sprites.get("font"));
@@ -387,6 +395,10 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     switch (event->type) {
+    case SDL_EVENT_WINDOW_RESIZED: {
+        resize(event->window.data1, event->window.data2);
+        break;
+    }
     case SDL_EVENT_QUIT: {
         return SDL_APP_SUCCESS;
     }
@@ -435,12 +447,12 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             // map[0][0][0] = 1;
 
             Vector3f pos[6] = {
-                {-16, 0, 0},  // X+
-                {16, 0, 0}, // X-
-                {0, -16, 0},  // Y+
-                {0, 16, 0}, // Y-
-                {0, 0, -16},  // Z+
-                {0, 0, 16}, // Z-
+                {-0.5, 0, 0}, // X+
+                {0.5, 0, 0},  // X-
+                {0, -0.5, 0}, // Y+
+                {0, 0.5, 0},  // Y-
+                {0, 0, -0.5}, // Z+
+                {0, 0, 0.5},  // Z-
             };
             FRectangle texture[6] = {
                 engine.sprites.get("wood_floor"), engine.sprites.get("wood_floor"),
@@ -450,7 +462,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
             {
                 for (u32 i = 0; i < 6; i++) {
-                    instances.append({pos[i], {32, 32}, texture[i], WHITE, Face(i)});
+                    instances.append({pos[i], {1, 1}, texture[i], WHITE, Face(i)});
                 }
             }
 
@@ -489,8 +501,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
                                                    &depth_stencil_target_info);
         defer(SDL_EndGPURenderPass(render_pass));
 
-        world.draw(command_buffer, render_pass, engine.screen);
-        ui.draw(command_buffer, render_pass, engine.screen);
+        world.draw(command_buffer, render_pass);
+        ui.draw(command_buffer, render_pass);
     }
 
     memset(engine.key_state, 0, sizeof(engine.key_state));

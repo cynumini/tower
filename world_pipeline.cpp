@@ -30,6 +30,19 @@ static struct World {
 
     size_t len;
 
+    Vector2f size;
+
+    void resize(Vector2i screen) {
+        const float sqrt2 = 1.41421356237;
+        const float diagonal_blocks = 24.0F;
+        size = {sqrt2 * diagonal_blocks, sqrt2 * (diagonal_blocks * 9.0F / 16.0F)};
+        if (float(screen.x) / float(screen.y) < 16.0F / 9.0F) {
+            size.y = screen.y * size.x / screen.x;
+        } else {
+            size.x = screen.x * size.y / screen.y;
+        }
+    }
+
     void init(SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
@@ -87,11 +100,10 @@ static struct World {
         createinfo.target_info.has_depth_stencil_target = true;
         createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
 
-
         pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
         SDL_assert(pipeline);
     }
-    
+
     void uploadBuffer(SDL_GPUCopyPass *copy_pass) {
         Vector2f vertices[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
         i16 indices[6]{0, 1, 2, 0, 2, 3};
@@ -147,8 +159,7 @@ static struct World {
         }
     }
 
-    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
-              Vector2i screen) {
+    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
@@ -165,8 +176,8 @@ static struct World {
         float yaw = deg2rad(45.0F);
 
         UBO ubo = {Matrix::rotationX(pitch) * Matrix::rotationZ(-yaw),
-                   Matrix::ortho(-screen.x / 2.0F, screen.x / 2.0F, screen.y / 2.0F,
-                                 -screen.y / 2.0F, -10000, 10000)};
+                   Matrix::ortho(-size.x / 2.0F, size.x / 2.0F, size.y / 2.0F, -size.y / 2.0F,
+                                 -1000, 1000)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
     }

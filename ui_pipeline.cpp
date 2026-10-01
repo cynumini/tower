@@ -26,7 +26,19 @@ static struct UI {
 
     size_t len;
 
+    Vector2f size;
+
+    void resize(Vector2i screen) {
+        size = {640, 360};
+        if (float(screen.x) / float(screen.y) < 16.0F / 9.0F) {
+            size.y = screen.y * size.x / screen.x;
+        } else {
+            size.x = screen.x * size.y / screen.y;
+        }
+    }
+
     void init(SDL_GPUShaderFormat shader_format) {
+
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
             createGPUShader(device, ui_vert_code_spv, ui_vert_code_dxil,
@@ -140,8 +152,7 @@ static struct UI {
         }
     }
 
-    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
-              Vector2i screen) {
+    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
@@ -154,7 +165,7 @@ static struct UI {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        UBO ubo = {.projection = Matrix::ortho(0, screen.x, screen.y, 0, 0, 1)};
+        UBO ubo = {.projection = Matrix::ortho(0, size.x, size.y, 0, 0, 1)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
     }
