@@ -187,7 +187,7 @@ static struct Engine {
     }
 
     static constexpr int MAP_SIZE = 16;
-    
+
     static inline bool checkFaceVisible(u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE], Vector3i pos) {
         if (pos.x < 0 or pos.y < 0 or pos.z < 0) return true;
         if (pos.x >= MAP_SIZE or pos.y >= MAP_SIZE or pos.z >= MAP_SIZE) return true;
@@ -195,13 +195,9 @@ static struct Engine {
     }
 
     void updateWorld(Fixed<World::Instance> *instances) {
-        float yaw =
-            float(is_key_just_released(Key::kp_6)) - float(is_key_just_released(Key::kp_4));
-        float pitch =
-            float(is_key_just_released(Key::kp_2)) - float(is_key_just_released(Key::kp_8));
-        float roll =
-            float(is_key_just_released(Key::kp_7)) - float(is_key_just_released(Key::kp_9));
-
+        float yaw = is_key_just_released(Key::kp_6) - is_key_just_released(Key::kp_4);
+        float pitch = is_key_just_released(Key::kp_2) - is_key_just_released(Key::kp_8);
+        float roll = is_key_just_released(Key::kp_7) - is_key_just_released(Key::kp_9);
         world.camera.yaw += yaw * 5;
         world.camera.pitch += pitch * 5;
         world.camera.roll += roll * 5;
@@ -212,21 +208,13 @@ static struct Engine {
             float(is_key_just_released(Key::pageup)) - float(is_key_just_released(Key::pagedown)),
         };
 
-        float c = SDL_cos(deg2rad(world.camera.yaw));
-        float s = SDL_sin(deg2rad(world.camera.yaw));
-
-        float x = velocity.x;
-        float y = velocity.y;
-
-        velocity.x = x * c - y * s;
-        velocity.y = y * c + x * s;
-
         world.camera.pos += velocity;
 
         u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE] = {};
+
         for (size_t x = 0; x < MAP_SIZE; x++) {
             for (size_t y = 0; y < MAP_SIZE; y++) {
-                for (size_t z = 0; z < MAP_SIZE; z++) {
+                for (size_t z = 0; z < 1; z++) {
                     map[x][y][z] = (x + y + z) % 4 + 1;
                 }
             }
@@ -249,25 +237,24 @@ static struct Engine {
                     } else {
                         continue;
                     }
-
-                    Vector3f position = {float(x), float(y), float(z)};
                     const Vector3i axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-
                     for (int axis = 0; axis < 3; axis++)
                         for (int i = 0; i < 2; i++) {
-                            int o = 1 - i * 2;
-                            Vector3i offset = axes[axis] * o;
-
-                            if (checkFaceVisible(map, Vector3i{x, y, z} + offset))
-                                instances->append({position + Vector3f(offset) * 0.5F,
-                                                   {1, 1},
-                                                   texture,
-                                                   WHITE,
-                                                   Face(axis * 2 + i)});
+                            const auto pos = Vector3i(x, y, z);
+                            const auto offset = axes[axis] * (1 - i * 2);
+                            if (!checkFaceVisible(map, pos + offset)) continue;
+                            instances->append({Vector3f(offset) * 0.5F + pos,
+                                               {1, 1},
+                                               texture,
+                                               WHITE,
+                                               Face(axis * 2 + i)});
                         }
                 }
             }
         }
+
+        instances->append(
+            {{0, 0, 1.5}, {1, 2}, sprites.get("character"), WHITE, Face::billboard});
     }
 } engine;
 

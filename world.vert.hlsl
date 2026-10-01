@@ -2,6 +2,7 @@ cbuffer UBO : register(b0, space1)
 {
     float4x4 view;
     float4x4 projection;
+    float yaw;
 };
 
 struct Input {
@@ -32,15 +33,22 @@ Output main(Input input) {
         case 3: position = float3( p.x, 0,  p.y); break; // Y-
         case 4: position = float3( p.x,  p.y, 0); break; // Z+
         case 5: position = float3(-p.x,  p.y, 0); break; // Z-
-    }
+        case 6: {
+            float2 direction = float2(cos(yaw), sin(yaw));
 
+            position = float3(direction * p.x, p.y);
+            break;
+        }
+    }
 
     output.position = mul(
         mul(float4(position + input.instance_position, 1), view),
         projection
     );
 
-    output.uv = input.uv.xy + (input.vertex_position + float2(0.5F, 0.5F)) * input.uv.zw;
+    float2 uv = input.vertex_position + float2(0.5F, 0.5F);
+    output.uv = input.uv.xy + float2(uv.x, 1.0F - uv.y) * input.uv.zw;
+
     output.color_out = input.color_in;
 
     return output;

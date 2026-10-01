@@ -5,7 +5,7 @@
 #include "build/world.frag.hpp"
 #include "build/world.vert.hpp"
 
-enum class Face : u32 { x_pos, x_neg, y_pos, y_neg, z_pos, z_neg };
+enum class Face : u32 { x_pos, x_neg, y_pos, y_neg, z_pos, z_neg, billboard };
 
 static struct World {
     const uint MAX_INSTANCES = 2048;
@@ -21,6 +21,7 @@ static struct World {
     struct UBO {
         Matrix view;
         Matrix projection;
+        float yaw;
     };
 
     SDL_GPUGraphicsPipeline *pipeline;
@@ -185,9 +186,9 @@ static struct World {
 
         UBO ubo = {Matrix::rotationX(deg2rad(camera.pitch)) *
                        Matrix::rotationZ(deg2rad(camera.yaw)) *
-            Matrix::rotationY(deg2rad(camera.roll)) * Matrix::translation(-camera.pos),
+                       Matrix::rotationY(deg2rad(camera.roll)) * Matrix::translation(-camera.pos),
                    Matrix::ortho(-size.x / 2.0F, size.x / 2.0F, -size.y / 2.0F, size.y / 2.0F,
-                                 1000, -1000)};
+                                 1000, -1000), deg2rad(camera.yaw)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
 
