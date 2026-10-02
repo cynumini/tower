@@ -35,10 +35,9 @@ Output main(Input input) {
         case 5: position = float3(-p.x,  p.y, 0); break; // Z-
         case 6: {
             float2 direction = float2(cos(yaw), sin(yaw));
-
             position = float3(direction * p.x, p.y);
             break;
-        }
+        } // billboard
     }
 
     output.position = mul(

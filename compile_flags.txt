@@ -7,4 +7,4 @@
 -Wno-missing-designated-field-initializers
 -Wno-unused-function
 -fno-exceptions
--Wno-invalid-offsetof
+-Wno-c99-designator

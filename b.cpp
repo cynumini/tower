@@ -5,9 +5,9 @@ int main(int argc, const char *argv[]) {
     REBUILD_AND_RESTART_ON_CHANGES(&arena, argc, argv);
     const char *output = "./build/tower";
     const char *inputs[] = {
-        "engine.cpp",
+        "main.cpp",
         "game.cpp",
-        "tower.hpp",
+        "shared.cpp",
         "ui_pipeline.cpp",
         "world_pipeline.cpp",
         shadercrossHpp(&arena, "ui.frag.hlsl", "./build/ui.frag.hpp", "ui_frag_code"),

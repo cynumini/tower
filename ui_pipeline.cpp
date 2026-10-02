@@ -1,60 +1,57 @@
 #pragma once
 
-#include "tower.hpp"
+#include <skn_sdl.cpp>
+
+#include "shared.cpp"
 
 #include "build/ui.frag.hpp"
 #include "build/ui.vert.hpp"
 
 static struct UI {
-    const uint MAX_INSTANCES = 128;
+    using Instance = UIInstance;
 
-    struct Instance {
-        Vector2f position;
-        Vector2f size;
-        FRectangle uv;
-        Color color;
-    };
-
-    struct UBO {
-        Matrix projection;
-    };
+    static constexpr uint MAX_INSTANCES = 256;
 
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *vertex_buffer;
     SDL_GPUBuffer *index_buffer;
     SDL_GPUBuffer *buffer;
 
-    uint len;
-    uint last_len;
+    uint instances_len;
+    uint prev_instances_len;
 
-    Vector2f size;
+    float logical_w, logical_h;
 
-    void resize(Vector2i screen) {
-        size = {640, 360};
-        if (float(screen.x) / float(screen.y) < 16.0F / 9.0F) {
-            size.y = screen.y * size.x / screen.x;
+    struct UBO {
+        Mat4 projection;
+    } ubo;
+
+    void resize(float w, float h) {
+        logical_w = 640, logical_h = 360;
+        if (w / h < 16.0F / 9.0F) {
+            logical_h = h * logical_w / w;
         } else {
-            size.x = screen.x * size.y / screen.y;
+            logical_w = w * logical_h / h;
         }
+        ubo.projection = Mat4::ortho(0, logical_w, logical_h, 0, 0, 1);
     }
 
-    void init(SDL_GPUShaderFormat shader_format) {
-
+    void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
-            createGPUShader(device, ui_vert_code_spv, ui_vert_code_dxil,
+            createGPUShader(device, {ui_vert_code_spv, ui_vert_code_dxil},
                             SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
         defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
         SDL_assert(createinfo.vertex_shader);
 
         createinfo.fragment_shader =
-            createGPUShader(device, ui_frag_code_spv, ui_frag_code_dxil,
+            createGPUShader(device, {ui_frag_code_spv, ui_frag_code_dxil},
                             SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
         defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
         SDL_assert(createinfo.fragment_shader);
 
         const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-            {0, sizeof(Vector2f), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
+            {0, sizeof(Vec2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
             {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
         createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
@@ -70,7 +67,6 @@ static struct UI {
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
         createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
 
-        // depth
         createinfo.depth_stencil_state = {
             .enable_depth_test = false,
             .enable_depth_write = false,
@@ -92,14 +88,14 @@ static struct UI {
         createinfo.target_info.num_color_targets = 1;
 
         createinfo.target_info.has_depth_stencil_target = true;
-        createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
+        createinfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D16_UNORM;
 
         pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
         SDL_assert(pipeline);
     }
 
-    void uploadBuffer(SDL_GPUCopyPass *copy_pass) {
-        Vector2f vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    void uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
+        Vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
         i16 indices[6]{0, 1, 2, 0, 2, 3};
 
         vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
@@ -130,30 +126,39 @@ static struct UI {
                           sizeof(indices));
     }
 
-    void deinit() {
+    void release(SDL_GPUDevice *device) {
         SDL_ReleaseGPUBuffer(device, buffer);
         SDL_ReleaseGPUBuffer(device, index_buffer);
         SDL_ReleaseGPUBuffer(device, vertex_buffer);
         SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
 
-    Fixed<Instance> beginUpload(SDL_GPUTransferBuffer *transfer_buffer) {
+    struct Upload {
+        Fixed<Instance> instances;
+        float width, height;
+    };
+
+    Upload beginUpload(SDL_GPUDevice *device, SDL_GPUTransferBuffer *transfer_buffer) {
         Instance *instances_raw =
             (Instance *)SDL_MapGPUTransferBuffer(device, transfer_buffer, true);
         SDL_assert(instances_raw);
-        return Fixed<Instance>::init({MAX_INSTANCES, instances_raw});
+
+        return {Fixed<Instance>::init({MAX_INSTANCES, instances_raw}), logical_w, logical_h};
     }
 
-    void endUpload(SDL_GPUCopyPass *copy_pass, SDL_GPUTransferBuffer *transfer_buffer,
-                   size_t len) {
-        this->len = len;
+    void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,
+                   SDL_GPUTransferBuffer *transfer_buffer, size_t instances_len) {
+        this->instances_len = instances_len;
         SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
-        if (this->len) {
-            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, buffer, sizeof(Instance) * len);
+
+        if (this->instances_len) {
+            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, buffer,
+                              sizeof(Instance) * instances_len);
         }
     }
 
-    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass) {
+    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
+              SDL_GPUTexture *atlas, SDL_GPUSampler *sampler) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
@@ -162,14 +167,13 @@ static struct UI {
         const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
+        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas,
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        UBO ubo = {.projection = Matrix::ortho(0, size.x, size.y, 0, 0, 1)};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, len, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len, 0, 0, 0);
 
-        last_len = len;
+        prev_instances_len = instances_len;
     }
 } ui;
