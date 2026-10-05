@@ -7,5 +7,7 @@ struct Input {
 };
 
 float4 main(Input input) : SV_Target {
-    return atlas.Sample(atlas_sampler, input.uv) * input.color;
+    float4 color = atlas.Sample(atlas_sampler, input.uv) * input.color;
+    if (color.a < 0.01) discard;
+    return color;
 }

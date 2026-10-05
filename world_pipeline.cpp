@@ -69,14 +69,14 @@ static struct World {
             {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, uv)},
             {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)},
             {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offsetof(Instance, face)},
-            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, angle)}};
+            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, rotation)}};
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
         createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
 
         createinfo.depth_stencil_state = {
             .compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL, // TODO: why not just less?
             .enable_depth_test = true,
-            .enable_depth_write = true,
+           .enable_depth_write = true,
         };
 
         const SDL_GPUColorTargetDescription color_target_description = {

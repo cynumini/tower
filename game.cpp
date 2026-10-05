@@ -130,7 +130,6 @@ struct Object {
 };
 
 // Init
-// static Arena game_arena;
 static Rect solid;
 static bool pause = false;
 static bool interaction_frame = false;
@@ -282,9 +281,7 @@ static struct Game {
             auto *object = objects.append(Object::create(
                 Kind::npc, engine->sprites.get("character"), true, {48.0F, 16.0F}));
             object->addCollision(Body::immovable, {{0.0F, 0.0F}, {1.0F, 1.0F}});
-
-            const float PADDING = 1.0F;
-            object->interaction_rel = Rect({-PADDING, -PADDING}, {PADDING * 2});
+            object->interaction_rel = Rect({0, 0}, {2, 2});
         }
 
         // {
@@ -316,8 +313,8 @@ static struct Game {
         blocks[int(Block::wood_floor)] = engine->sprites.get("wood_floor");
         blocks[int(Block::wall)] = engine->sprites.get("wall");
         // Location
-        locations[0] = {"Home", {0, 0, 32, 32}, Block::dirt};
-        locations[1] = {"Town", {32, 0, 32, 32}, Block::grass};
+        locations[0] = {"Home", {16, 16, 32, 32}, Block::dirt};
+        locations[1] = {"Town", {48, 16, 32, 32}, Block::grass};
     }
 
     static constexpr int MAP_SIZE = 64;
@@ -374,11 +371,14 @@ static struct Game {
             for (u8 i = 0; i < u8(ARRAY_LEN(locations)); ++i) {
                 const auto *location = &locations[i];
 
-                const int cols = int(location->rect.w + location->rect.x);
-                const int rows = int(location->rect.h + location->rect.y);
+                auto x_start = location->rect.x - location->rect.w / 2;
+                auto x_end = x_start + location->rect.w;
 
-                for (int tx = location->rect.x; tx < cols; ++tx) {
-                    for (int ty = location->rect.y; ty < rows; ++ty) {
+                auto y_start = location->rect.y - location->rect.h / 2;
+                auto y_end = y_start + location->rect.h;
+
+                for (int tx = x_start; tx < x_end; ++tx) {
+                    for (int ty = y_start; ty < y_end; ++ty) {
                         map[tx][ty][0] = int(location->block);
                     }
                 }
@@ -386,11 +386,9 @@ static struct Game {
             break;
         }
         case Level::Id::house: {
-            for (int tx = 0; tx < 16; tx++) {
-                for (int ty = 0; ty < 16; ty++) {
-                    const float x = float(tx);
-                    const float y = float(ty);
-                    map[tx][ty][0] = int(Block::wood_floor);
+            for (int x = 0; x < 16; x++) {
+                for (int y = 0; y < 16; y++) {
+                    map[x][y][0] = int(Block::wood_floor);
                 }
             }
             break;
@@ -413,7 +411,8 @@ static struct Game {
                                                {1, 1},
                                                texture,
                                                WHITE,
-                                               Face(axis * 2 + i)});
+                                               Face(axis * 2 + i),
+                                               0});
                         }
                 }
             }
@@ -440,7 +439,8 @@ static struct Game {
                                                    float(engine->is_key_pressed(Key::a)),
                                                float(engine->is_key_pressed(Key::w)) -
                                                    float(engine->is_key_pressed(Key::s)))
-                                              .normalize();
+                                              .normalize()
+                                              .rotate(deg2rad(engine->camera.yaw));
 
                     u8 frame = 0;
                     if (velocity.length() > 0.0F) {
@@ -457,22 +457,21 @@ static struct Game {
 
                         object.direction = velocity;
                         object.speed = 4;
-
-                        if (object.direction.y > 0) {
-                            object.sprite = player_up.get(frame);
-                        } else if (object.direction.y < 0) {
-                            object.sprite = player_down.get(frame);
-                        } else if (object.direction.x > 0) {
-                            object.sprite = player_right.get(frame);
-                        } else if (object.direction.x < 0) {
-                            object.sprite = player_left.get(frame);
-                        }
-
-                        object.direction = velocity.rotate(deg2rad(engine->camera.yaw));
                     } else {
                         object.speed = 0;
                         object.frame = 0;
                         object.timer.reset();
+                    }
+
+                    auto d = object.direction.rotate(deg2rad(-engine->camera.yaw));
+                    if (d.y > 0) {
+                        object.sprite = player_up.get(frame);
+                    } else if (d.y < 0) {
+                        object.sprite = player_down.get(frame);
+                    } else if (d.x > 0) {
+                        object.sprite = player_right.get(frame);
+                    } else if (d.x < 0) {
+                        object.sprite = player_left.get(frame);
                     }
 
                     break;
@@ -494,7 +493,8 @@ static struct Game {
                     }
 
                     if (attack->alive and
-                        checkCollisionSAT(attack->rect(), attack->angle, object.rect(), 0) and
+                        checkCollisionSAT(attack->rect(), attack->angle, object.getCollision(),
+                                          0) and
                         !object.invincible) {
                         object.takeDamage(attack->direction, inventory);
                     }
@@ -514,10 +514,9 @@ static struct Game {
                     break;
                 }
                 case Object::Kind::npc: {
-                    quest.pos = {object.pos};
-                    quest.pos.x += object.size.x / 2;
+                    quest.pos = object.pos;
                     if (!dialog) {
-                        if (checkCollisionAABB(object.getInteraction(), player->rect())) {
+                        if (checkCollisionAABB(object.getInteraction(), player->getCollision())) {
                             if (engine->is_key_just_pressed(Key::space)) {
                                 dialog = true;
                                 pause = true;
@@ -601,7 +600,7 @@ static struct Game {
             bool outside = true;
             for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
                 auto *location = &locations[i];
-                if (checkCollisionAABB(player->rect(), location->rect)) {
+                if (checkCollisionAABB(player->getCollision(), location->rect)) {
                     outside = false;
                     show_location.curr_id = i;
                 }
@@ -617,61 +616,72 @@ static struct Game {
             }
         }
 
-        // // quest marker
-        // if (quest.status != Quest::REWARDED) {
-        //     const uint SIZE = 20;
-        //     Slice<const char> text = sliceFromStrZ("!");
-        //     auto color = YELLOW;
-        //     if (quest.status != Quest::AVAILABLE) {
-        //         text = sliceFromStrZ("?");
-        //         if (quest.status == Quest::ACTIVE) color = WHITE;
-        //     }
-        //     auto pos =
-        //         Vec2(quest.pos.x - (engine->measureText(text, SIZE) / 2.0F), quest.pos.y -
-        //         SIZE);
-        //     engine->drawText(instances, text, pos, SIZE, color);
-        // }
+        // quest marker
+        if (quest.status != Quest::REWARDED) {
+            const uint SIZE = 10;
+            char sign = '!';
+            auto color = YELLOW;
+            if (quest.status != Quest::AVAILABLE) {
+                sign = '?';
+                if (quest.status == Quest::ACTIVE) color = WHITE;
+            }
+            engine->drawWorldSymbol(instances, Vec3(quest.pos, 2.75), sign, SIZE, color,
+                                    engine->default_font);
+        }
 
-        // // debug (show collision)
-        // if (unagi->debug_mode) {
-        //     for (auto &object : objects) {
-        //         if (!object.alive or object.kind == Object::NONE) continue;
+        // debug (show collision)
+        if (engine->debug_mode) {
+            auto home = locations->rect;
+            instances->append({
+                .position = Vec3(home.position(), 0),
+                .size = home.size(),
+                .uv = solid,
+                .color = 0xff00FF7f,
+                .face = Face::z_pos,
+                .rotation = 0,
+            });
 
-        //         // Color color = {191, 0, 255, 127};
-        //         // vec2 pos = object.pos;
-        //         // vec2 size = object.size;
+            for (auto &object : objects) {
+                if (!object.alive) continue;
 
-        //         // instances->append({
-        //         //     .position = pos,
-        //         //     .size = size,
-        //         //     .uv = solid,
-        //         //     .color = color,
-        //         //     .rotation = object.angle,
-        //         // });
+                if (object.kind == Object::Kind::attack) {
+                    instances->append({
+                        .position = Vec3(object.pos, 1.5),
+                        .size = object.size,
+                        .uv = solid,
+                        .color = 0xff00FF7f,
+                        .face = Face::z_pos,
+                        .rotation = object.angle,
 
-        //         if (object.isInteractable()) {
-        //             auto collision = object.getInteraction();
-        //             instances->append({
-        //                 .position = collision.position(),
-        //                 .size = collision.size(),
-        //                 .uv = solid,
-        //                 .color = {255, 0, 0, 127},
-        //                 .rotation = object.angle,
-        //             });
-        //         }
+                    });
+                }
 
-        //         if (object.isSolid()) {
-        //             auto collision = object.getCollision();
-        //             instances->append({
-        //                 .position = collision.position(),
-        //                 .size = collision.size(),
-        //                 .uv = solid,
-        //                 .color = {0, 0, 255, 127},
-        //                 .rotation = object.angle,
-        //             });
-        //         }
-        //     }
-        // }
+                if (object.isInteractable()) {
+                    auto collision = object.getInteraction();
+                    instances->append({
+                        .position = Vec3(object.pos, 1.5),
+                        .size = collision.size(),
+                        .uv = solid,
+                        .color = 0xff00007f,
+                        .face = Face::z_pos,
+                        .rotation = object.angle,
+
+                    });
+                }
+
+                if (object.isSolid()) {
+                    auto collision = object.getCollision();
+                    instances->append({
+                        .position = {collision.position(), 1.5},
+                        .size = collision.size(),
+                        .uv = solid,
+                        .color = 0x0000ff7f,
+                        .face = Face::z_pos,
+                        .rotation = object.angle,
+                    });
+                }
+            }
+        }
 
         // return camera;
         return {};

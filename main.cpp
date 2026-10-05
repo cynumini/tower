@@ -59,7 +59,6 @@ void Engine::updateUI(Fixed<UIInstance> *instances, int width, int height) {
         drawTextF(&scope.tmp, instances, {2, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
                   camera.pos.x, camera.pos.y, camera.pos.z);
         offset_y += 12;
-
         drawTextF(&scope.tmp, instances, {2, offset_y}, "UI instances: %d/%d",
                   ui.prev_instances_len, ui.MAX_INSTANCES);
         offset_y += 12;

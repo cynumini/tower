@@ -121,7 +121,7 @@ struct WorldInstance {
     Rect uv;
     Color color;
     Face face;
-    float angle;
+    float rotation;
 };
 
 struct Mod {
@@ -200,6 +200,21 @@ static struct Engine {
         va_end(ap);
         drawText(instances, slice.withoutZero(), pos);
         a->free(slice);
+    }
+
+    void drawWorldSymbol(Fixed<WorldInstance> *instances, Vec3 pos, char c, float size,
+                         Color color, Font font) {
+        const u16 i = c - ' ';
+        Vec2 texture_offset = {float(i % 16) * font.size, int(i / 16.F) * font.size};
+        float width = font.widths[int(c)];
+        instances->append({
+            .position = pos,
+            .size = {width / 10.F, size / 10.F},
+            Rect{font.texture.position() + texture_offset, {float(width), font.size}},
+            .color = color,
+            .face = Face::billboard,
+            .rotation = 0,
+        });
     }
 
     __attribute__((format(printf, 1, 2))) static void log(const char *fmt, ...);
