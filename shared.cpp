@@ -121,6 +121,7 @@ struct WorldInstance {
     Rect uv;
     Color color;
     Face face;
+    float angle;
 };
 
 struct Mod {

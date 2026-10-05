@@ -10,7 +10,7 @@
 static struct World {
     using Instance = WorldInstance;
 
-    static constexpr uint MAX_INSTANCES = 2048;
+    static constexpr uint MAX_INSTANCES = 8192;
 
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *vertex_buffer;
@@ -26,8 +26,6 @@ static struct World {
         float yaw;
     } ubo;
 
-
-
     void resize(float w, float h) {
         constexpr float sqrt2 = 1.41421356237F;
         constexpr float diagonal_blocks = 24.0F;
@@ -39,7 +37,7 @@ static struct World {
             logical_w = w * logical_h / h;
         }
         ubo.projection = Mat4::ortho(-logical_w / 2.0F, logical_w / 2.0F, -logical_h / 2.0F,
-                                     logical_h / 2.0F, 1000.0F, -1000.0F);
+                                     logical_h / 2.0F, 100.0F, -100.0F);
     }
 
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
@@ -70,7 +68,8 @@ static struct World {
             {2, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Instance, size)},
             {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, uv)},
             {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)},
-            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offsetof(Instance, face)}};
+            {5, 1, SDL_GPU_VERTEXELEMENTFORMAT_UINT, offsetof(Instance, face)},
+            {6, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT, offsetof(Instance, angle)}};
         createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
         createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
 
@@ -174,7 +173,8 @@ static struct World {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        ubo.view = Mat4::rotationX(deg2rad(camera->pitch)) * Mat4::rotationZ(deg2rad(camera->yaw)) *
+        ubo.view = Mat4::rotationX(deg2rad(camera->pitch)) *
+                   Mat4::rotationZ(deg2rad(camera->yaw)) *
                    Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
         ubo.yaw = deg2rad(camera->yaw);
 

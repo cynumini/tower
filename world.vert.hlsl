@@ -12,6 +12,7 @@ struct Input {
     float4 uv                : TEXCOORD3;
     float4 color_in          : TEXCOORD4;
     uint   face              : TEXCOORD5;
+    float  angle             : TEXCOORD6;
 };
 
 struct Output {
@@ -19,6 +20,12 @@ struct Output {
     float2 uv        : TEXCOORD0;
     float4 color_out : TEXCOORD1;
 };
+
+float2 rotate(float2 v, float rad) {
+    float c = cos(rad);
+    float s = sin(rad);
+    return float2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
 
 Output main(Input input) {
     Output output;
@@ -39,6 +46,8 @@ Output main(Input input) {
             break;
         } // billboard
     }
+
+    position.xy = rotate(position.xy, input.angle);
 
     output.position = mul(
         mul(float4(position + input.instance_position, 1), view),

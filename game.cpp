@@ -21,7 +21,7 @@ static struct Quest {
     0,
 };
 
-// Itesm
+// Items
 static Dynamic<Slice<const char>> items;
 
 // Invertory
@@ -78,7 +78,7 @@ struct Object {
 
     static Object create(Kind kind, Rect sprite, bool alive = false, Vec2 pos = {}) {
         return {.pos = pos,
-                .size = sprite.size(),
+                .size = sprite.size() / 32,
                 .sprite = sprite,
                 .kind = kind,
                 .alive = alive,
@@ -110,7 +110,7 @@ struct Object {
 
     void takeDamage(Vec2 direction, InventorySlot *inventory) {
         this->direction = direction;
-        const float KNOCKBACK_SPEED = 100;
+        const float KNOCKBACK_SPEED = 10;
         speed = KNOCKBACK_SPEED;
         hp -= 1;
         invincible = true;
@@ -127,18 +127,13 @@ struct Object {
     }
 
     Rect rect() { return {pos, {size.x, size.y}}; }
-
-    // const char *check() const {
-    //     if (u8(kind) == NONE) return "object can't have Kind::NONE";
-    //     if (isSolid() and u8(body) == NONE) return "solid objects can't have Body::NONE";
-    //     return 0;
-    // }
 };
 
 // Init
-static Arena game_arena;
+// static Arena game_arena;
 static Rect solid;
 static bool pause = false;
+static bool interaction_frame = false;
 
 Level::Id current_level = Level::Id::world;
 
@@ -211,18 +206,21 @@ const u8 OBJECTS_MAX = 255;
 static Object objects_raw[OBJECTS_MAX];
 static Fixed<Object> objects;
 
+// Bloks
+enum class Block : u8 { air, dirt, grass, water, wood_floor, wall };
+
+Rect blocks[U8_MAX] = {};
+
 // ids
 static Object *player;
 static Object *attack;
 static Object *spell;
 
 // Locations
-const float TITLE_SIZE = 24.0F;
-
 static struct Location {
     const char *name;
     Rect rect;
-    Rect ground;
+    Block block;
 } locations[2];
 
 static struct ShowLocation {
@@ -234,19 +232,18 @@ static struct ShowLocation {
 
 static struct Game {
 
-    void init(Engine *unagi) {
+    void init(Engine *engine) {
         // globals
-
-        solid = unagi->sprites.get("solid");
+        solid = engine->sprites.get("solid");
 
         // invertory
         uint items_len = 1;
-        for (auto &mod : unagi->mods) {
+        for (auto &mod : engine->mods) {
             for (auto &_ : mod.items) items_len++;
         }
         items.init(&arena, items_len);
         items.append(&arena, sliceFromStrZ("wheat_seeds"));
-        for (auto &mod : unagi->mods) {
+        for (auto &mod : engine->mods) {
             for (auto &item : mod.items) {
                 auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
                                             int(item.len), item.ptr);
@@ -258,10 +255,10 @@ static struct Game {
         }
 
         // animations
-        player_down.init(unagi->sprites.get("player_down"), 3);
-        player_up.init(unagi->sprites.get("player_up"), 3);
-        player_right.init(unagi->sprites.get("player_right"), 3);
-        player_left.init(unagi->sprites.get("player_right"), 3, true);
+        player_down.init(engine->sprites.get("player_down"), 3);
+        player_up.init(engine->sprites.get("player_up"), 3);
+        player_right.init(engine->sprites.get("player_right"), 3);
+        player_left.init(engine->sprites.get("player_right"), 3, true);
 
         // objects
         objects = {{0, objects_raw}, OBJECTS_MAX};
@@ -269,70 +266,61 @@ static struct Game {
         using Kind = Object::Kind;
         using Body = Object::Body;
 
-        player = objects.append(Object::create(Kind::player, player_down.get(0), true,
-                                               {TITLE_SIZE * 16.0F, TITLE_SIZE * 16.0F}));
+        player = objects.append(
+            Object::create(Kind::player, player_down.get(0), true, {16.0F, 16.0F}));
         player->timer = Timer::init(0.2F);
         player->direction = {0.0F, 1.0F};
-        player->addCollision(Body::movable, {{7.0F, 45.0F}, {10.0F, 3.0F}});
+        player->addCollision(Body::movable, {{0.0F, 0.0F}, {1.0F, 1.0F}});
 
         attack =
-            objects.append(Object::create(Kind::attack, unagi->sprites.get("attack_trail1")));
+            objects.append(Object::create(Kind::attack, engine->sprites.get("attack_trail1")));
         attack->timer = Timer::init(0.1F);
 
-        spell = objects.append(Object::create(Kind::spell, unagi->sprites.get("spell0")));
+        spell = objects.append(Object::create(Kind::spell, engine->sprites.get("spell0")));
 
         {
-            auto *object =
-                objects.append(Object::create(Kind::npc, unagi->sprites.get("character"), true,
-                                              {TITLE_SIZE * 48.0F, TITLE_SIZE * 16.0F}));
-            object->addCollision(Body::immovable, {{7.0F, 45.0F}, {10.0F, 3.0F}});
+            auto *object = objects.append(Object::create(
+                Kind::npc, engine->sprites.get("character"), true, {48.0F, 16.0F}));
+            object->addCollision(Body::immovable, {{0.0F, 0.0F}, {1.0F, 1.0F}});
 
-            const float PADDING = 8.0F;
-            object->interaction_rel = Rect({-PADDING, -PADDING}, {object->size + (PADDING * 2)});
+            const float PADDING = 1.0F;
+            object->interaction_rel = Rect({-PADDING, -PADDING}, {PADDING * 2});
         }
 
-        {
-            auto house = unagi->sprites.get("house");
-            auto *object = objects.append(Object::create(Kind::building, house, true));
-            object->addCollision(Body::immovable, {{1.0F, 47.0F}, {192.0F, 162.0F}});
-            object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
-            object->interaction_rel = {{80.0F, 208.0F}, {30.0F, 2.0F}};
-        }
+        // {
+        //     auto house = engine->sprites.get("house");
+        //     auto *object = objects.append(Object::create(Kind::building, house, true));
+        //     object->addCollision(Body::immovable, {{1.0F, 47.0F}, {192.0F, 162.0F}});
+        //     object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
+        //     object->interaction_rel = {{80.0F, 208.0F}, {30.0F, 2.0F}};
+        // }
 
         const i32 MAX_X = 64;
         const i32 MAX_Y = 32;
 
         const u8 ENEMY_COUNT = 50;
         for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto *object =
-                objects.append(Object::create(Kind::enemy, unagi->sprites.get("zombie"), true,
-                                              {float(unagi->rand(MAX_X)) * TITLE_SIZE,
-                                               (float(unagi->rand(MAX_Y)) * TITLE_SIZE) - 24}));
-            object->addCollision(Body::movable, {{7.0F, 45.0F}, {10.0F, 3.0F}});
+            auto *object = objects.append(
+                Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
+                               {float(engine->rand(MAX_X)), (float(engine->rand(MAX_Y)))}));
+            object->addCollision(Body::movable, {{0, 0}, {1.0F, 1.0F}});
             object->hp = 5;
             object->timer = Timer::init(0.2F);
         }
 
-        // const Rect grass = unagi->sprites.get("grass");
-        // const Rect dirt = unagi->sprites.get("dirt");
-
-        // // Location
-        // locations[0] = {"Home", {0, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, dirt};
-        // locations[1] = {"Town", {TITLE_SIZE * 32, 0, TITLE_SIZE * 32, TITLE_SIZE * 32}, grass};
-
-        // // Check objects
-        // auto id = 0;
-        // for (auto &object : objects) {
-        //     const char *message = object.check();
-        //     if (message != 0) {
-        //         unagi->log("id = %d, %s", id, message);
-        //         assert(message == 0);
-        //     }
-        //     id++;
-        // }
+        // Bloks
+        blocks[int(Block::air)] = {};
+        blocks[int(Block::dirt)] = engine->sprites.get("dirt");
+        blocks[int(Block::grass)] = engine->sprites.get("grass");
+        blocks[int(Block::water)] = engine->sprites.get("water");
+        blocks[int(Block::wood_floor)] = engine->sprites.get("wood_floor");
+        blocks[int(Block::wall)] = engine->sprites.get("wall");
+        // Location
+        locations[0] = {"Home", {0, 0, 32, 32}, Block::dirt};
+        locations[1] = {"Town", {32, 0, 32, 32}, Block::grass};
     }
 
-    static constexpr int MAP_SIZE = 16;
+    static constexpr int MAP_SIZE = 64;
 
     static inline bool checkFaceVisible(u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE], Vec3 pos) {
         if (pos.x < 0 or pos.y < 0 or pos.z < 0) return true;
@@ -343,55 +331,78 @@ static struct Game {
     Vec2 update(Engine *engine, Fixed<WorldInstance> *instances) {
 
         float yaw =
-            engine->is_key_just_released(Key::kp_6) - engine->is_key_just_released(Key::kp_4);
+            engine->is_key_just_released(Key::kp_4) - engine->is_key_just_released(Key::kp_6);
         float pitch =
             engine->is_key_just_released(Key::kp_2) - engine->is_key_just_released(Key::kp_8);
         float roll =
             engine->is_key_just_released(Key::kp_7) - engine->is_key_just_released(Key::kp_9);
 
-        engine->camera.yaw += yaw * 90;
+        engine->camera.yaw += yaw * 45;
         engine->camera.yaw = int(engine->camera.yaw) % 360;
         engine->camera.pitch += pitch * 5;
         engine->camera.roll += roll * 5;
 
-        Vec3 velocity = {
-            float(engine->is_key_just_released(Key::right)) -
-                float(engine->is_key_just_released(Key::left)),
-            float(engine->is_key_just_released(Key::up)) -
-                float(engine->is_key_just_released(Key::down)),
-            float(engine->is_key_just_released(Key::pageup)) -
-                float(engine->is_key_just_released(Key::pagedown)),
-        };
+        // TODO: way to exit house
+        // TODO: move NPC to house
+        // TODO: don't spawn zombie into house
+        // TODO: show debug collision only realted to current level
 
-        engine->camera.pos += velocity;
+        // cheat && system
+        if (engine->is_key_just_pressed(Key::key_1)) {
+            quest.status = Quest::COMPLETED;
+        }
+
+        if (engine->is_key_just_pressed(Key::key_2)) {
+            engine->clear_color = 0x8bbbffff;
+            current_level = Level::Id::world;
+            player->level = current_level;
+        }
+        if (engine->is_key_just_pressed(Key::key_3)) {
+            engine->clear_color = BLACK;
+            current_level = Level::Id::house;
+            player->level = current_level;
+            attack->level = current_level;
+            spell->level = current_level;
+            player->pos = Vec2(8, 15) - (player->size / 2);
+        }
 
         u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE] = {};
 
-        for (size_t x = 0; x < MAP_SIZE; x++) {
-            for (size_t y = 0; y < MAP_SIZE; y++) {
-                for (size_t z = 0; z < 1; z++) {
-                    map[x][y][z] = (x + y + z) % 4 + 1;
+        // map
+        switch (current_level) {
+        case Level::Id::world: {
+            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); ++i) {
+                const auto *location = &locations[i];
+
+                const int cols = int(location->rect.w + location->rect.x);
+                const int rows = int(location->rect.h + location->rect.y);
+
+                for (int tx = location->rect.x; tx < cols; ++tx) {
+                    for (int ty = location->rect.y; ty < rows; ++ty) {
+                        map[tx][ty][0] = int(location->block);
+                    }
                 }
             }
+            break;
+        }
+        case Level::Id::house: {
+            for (int tx = 0; tx < 16; tx++) {
+                for (int ty = 0; ty < 16; ty++) {
+                    const float x = float(tx);
+                    const float y = float(ty);
+                    map[tx][ty][0] = int(Block::wood_floor);
+                }
+            }
+            break;
+        }
         }
 
         for (int x = 0; x < MAP_SIZE; x++) {
             for (int y = 0; y < MAP_SIZE; y++) {
                 for (int z = 0; z < MAP_SIZE; z++) {
-                    Rect texture = {};
-                    if (map[x][y][z] == 1) {
-                        texture = engine->sprites.get("dirt");
-                    } else if (map[x][y][z] == 2) {
-                        texture = engine->sprites.get("grass");
-                    } else if (map[x][y][z] == 2) {
-                        texture = engine->sprites.get("water");
-                    } else if (map[x][y][z] == 3) {
-                        texture = engine->sprites.get("wood_floor");
-                    } else if (map[x][y][z] == 4) {
-                        texture = engine->sprites.get("wall");
-                    } else {
-                        continue;
-                    }
+                    if (Block(map[x][y][z]) == Block::air) continue;
+                    Rect texture = blocks[map[x][y][z]];
+
                     const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
                     for (int axis = 0; axis < 3; axis++)
                         for (int i = 0; i < 2; i++) {
@@ -408,269 +419,203 @@ static struct Game {
             }
         }
 
-        instances->append(
-            {{0, 0, 1.5}, {1, 2}, engine->sprites.get("character"), WHITE, Face::billboard});
+        for (auto &object : objects) {
+            //     assert(object.kind != Object::NONE);
+            if (!object.alive) continue;
+            if (object.level != current_level) continue;
+            if (!pause) {
+                switch (object.kind) {
+                case Object::Kind::player: {
+                    if (engine->is_key_just_pressed(Key::space)) {
+                        attack->alive = true;
+                    }
+                    if (engine->is_key_just_pressed(Key::f)) {
+                        spell->alive = true;
+                        spell->pos = object.pos;
+                        spell->direction = player->direction;
+                        spell->speed = 8;
+                    }
 
-        // // TODO: way to exit house
-        // // TODO: move NPC to house
-        // // TODO: don't spawn zombie into house
-        // // TODO: show debug collision only realted to current level
-        // // objects
-        // Object *player = &objects[player_id];
-        // Object *attack = &objects[attack_id];
-        // Object *spell = &objects[spell_id];
+                    const Vec2 velocity = Vec2(float(engine->is_key_pressed(Key::d)) -
+                                                   float(engine->is_key_pressed(Key::a)),
+                                               float(engine->is_key_pressed(Key::w)) -
+                                                   float(engine->is_key_pressed(Key::s)))
+                                              .normalize();
 
-        // // cheat && system
-        // if (unagi->is_key_just_pressed(Key::key_1)) {
-        //     quest.status = Quest::COMPLETED;
-        // }
+                    u8 frame = 0;
+                    if (velocity.length() > 0.0F) {
+                        if (object.timer.advanceAndCheck(engine->dt)) {
+                            object.frame += 1;
+                            object.frame %= 4;
+                        };
+                        frame = object.frame;
+                        if (frame == 2) {
+                            frame = 0;
+                        } else if (frame == 3) {
+                            frame = 2;
+                        }
 
-        // if (unagi->is_key_just_pressed(Key::key_2)) {
-        //     unagi->clear_color = colorFromHex(0x8bbbffff);
-        //     current_level = Level::world;
-        //     player->level = current_level;
-        // }
-        // if (unagi->is_key_just_pressed(Key::key_3)) {
-        //     unagi->clear_color = BLACK;
-        //     current_level = Level::house;
-        //     player->level = current_level;
-        //     attack->level = current_level;
-        //     spell->level = current_level;
-        //     player->pos = vec2(TITLE_SIZE * 8, TITLE_SIZE * 15) - (player->size / 2);
-        // }
+                        object.direction = velocity;
+                        object.speed = 4;
 
-        // // map
-        // switch (current_level) {
-        // case Level::world: {
-        //     for (u8 i = 0; i < u8(ARRAY_LEN(locations)); ++i) {
-        //         const auto *location = &locations[i];
+                        if (object.direction.y > 0) {
+                            object.sprite = player_up.get(frame);
+                        } else if (object.direction.y < 0) {
+                            object.sprite = player_down.get(frame);
+                        } else if (object.direction.x > 0) {
+                            object.sprite = player_right.get(frame);
+                        } else if (object.direction.x < 0) {
+                            object.sprite = player_left.get(frame);
+                        }
 
-        //         const int cols = int(location->rect.w / TITLE_SIZE);
-        //         const int rows = int(location->rect.h / TITLE_SIZE);
+                        object.direction = velocity.rotate(deg2rad(engine->camera.yaw));
+                    } else {
+                        object.speed = 0;
+                        object.frame = 0;
+                        object.timer.reset();
+                    }
 
-        //         for (int tx = 0; tx < cols; ++tx) {
-        //             for (int ty = 0; ty < rows; ++ty) {
-        //                 const float x = location->rect.x + (float(tx) * TITLE_SIZE);
-        //                 const float y = location->rect.y + (float(ty) * TITLE_SIZE);
-        //                 instances->append(
-        //                     {{x, y}, {TITLE_SIZE, TITLE_SIZE}, location->ground, WHITE, 0});
-        //             }
-        //         }
-        //     }
-        //     break;
-        // }
-        // case Level::house: {
-        //     for (int tx = 0; tx < 16; tx++) {
-        //         for (int ty = 0; ty < 16; ty++) {
-        //             const float x = float(tx) * TITLE_SIZE;
-        //             const float y = float(ty) * TITLE_SIZE;
-        //             instances->append({{x, y},
-        //                                {TITLE_SIZE, TITLE_SIZE},
-        //                                unagi->sprites.get("wood_floor"),
-        //                                WHITE,
-        //                                0});
-        //         }
-        //     }
-        //     break;
-        // }
-        // }
+                    break;
+                }
+                case Object::Kind::enemy: {
+                    if (object.speed > 0.0F) {
+                        const float KNOCKBACK_FRICTION = 40;
+                        object.speed -= KNOCKBACK_FRICTION * engine->dt;
+                    } else {
+                        object.speed = 0.0F;
+                    }
 
-        // auto offset = instances->len;
+                    if (object.invincible) {
+                        object.tint = RED;
+                        if (object.timer.advanceAndCheck(engine->dt)) {
+                            object.invincible = false;
+                            object.tint = WHITE;
+                        }
+                    }
 
-        // vec2 camera = {};
+                    if (attack->alive and
+                        checkCollisionSAT(attack->rect(), attack->angle, object.rect(), 0) and
+                        !object.invincible) {
+                        object.takeDamage(attack->direction, inventory);
+                    }
 
-        // for (auto &object : objects) {
-        //     assert(object.kind != Object::NONE);
-        //     if (!object.alive) continue;
-        //     if (object.level != current_level) continue;
-        //     if (!pause) {
-        //         switch (object.kind) {
+                    if (spell->alive and checkCollisionAABB(spell->rect(), object.rect()) and
+                        !object.invincible) {
+                        object.takeDamage(spell->direction, inventory);
+                        spell->alive = false;
+                    }
+                    break;
+                }
+                case Object::Kind::attack: {
+                    object.direction = player->direction;
+                    object.angle = atan2f(player->direction.y, player->direction.x);
+                    object.pos = player->pos + object.direction;
+                    if (object.timer.advanceAndCheck(engine->dt)) object.alive = false;
+                    break;
+                }
+                case Object::Kind::npc: {
+                    quest.pos = {object.pos};
+                    quest.pos.x += object.size.x / 2;
+                    if (!dialog) {
+                        if (checkCollisionAABB(object.getInteraction(), player->rect())) {
+                            if (engine->is_key_just_pressed(Key::space)) {
+                                dialog = true;
+                                pause = true;
+                                interaction_frame = true;
+                            }
+                        }
+                    }
+                    break;
+                }
+                case Object::Kind::spell:
+                    break;
+                case Object::Kind::building:
+                    // TODO: building move player to second level
+                    break;
+                }
 
-        //         case Object::PLAYER: {
-        //             if (unagi->is_key_just_pressed(Key::space, false)) {
-        //                 attack->alive = true;
-        //             }
-        //             if (unagi->is_key_just_pressed(Key::f)) {
-        //                 spell->alive = true;
-        //                 spell->pos = object.pos + (object.size / 2) - (spell->size / 2);
-        //                 spell->direction = player->direction;
-        //                 spell->speed = 100;
-        //             }
+                if (object.isSolid() and object.body == Object::Body::movable) {
+                    Filter q = makeFilter(objects, [](Object *other) {
+                        return other->isSolid() and other->alive and
+                               other->level == current_level;
+                    });
+                    Vec2 velocity = object.direction * engine->dt * object.speed;
+                    object.pos.x += velocity.x;
+                    for (Object &other : q) {
+                        if (&object != &other and
+                            checkCollisionAABB(object.getCollision(), other.getCollision())) {
+                            object.pos.x -= velocity.x;
+                            break;
+                        }
+                    }
+                    object.pos.y += velocity.y;
+                    for (Object &other : q) {
+                        if (&object != &other and
+                            checkCollisionAABB(object.getCollision(), other.getCollision())) {
+                            object.pos.y -= velocity.y;
+                            break;
+                        }
+                    }
+                } else {
+                    object.pos += object.direction * engine->dt * object.speed;
+                }
+            }
+        }
 
-        //             const vec2 velocity = vec2(float(unagi->is_key_pressed(Key::d)) -
-        //                                            float(unagi->is_key_pressed(Key::a)),
-        //                                        float(unagi->is_key_pressed(Key::s)) -
-        //                                            float(unagi->is_key_pressed(Key::w)))
-        //                                       .normalize();
+        for (auto &object : objects) {
+            if (!object.alive) continue;
+            bool use_default = true;
+            switch (object.kind) {
+            case Object::Kind::player:
+            case Object::Kind::enemy:
+                break;
+            case Object::Kind::attack: {
+                use_default = false;
+                instances->append({{object.pos, 1.5},
+                                   object.size,
+                                   object.sprite,
+                                   object.tint,
+                                   Face::z_pos,
+                                   object.angle});
+                break;
+            }
+            case Object::Kind::spell:
+            case Object::Kind::npc:
+            case Object::Kind::building:
+                break;
+            }
+            if (use_default) {
+                instances->append({{object.pos, 1.5},
+                                   object.size,
+                                   object.sprite,
+                                   object.tint,
+                                   Face::billboard,
+                                   0.0F});
+            }
+        }
 
-        //             u8 frame = 0;
-        //             if (velocity.length() > 0.0F) {
-        //                 if (object.timer.advanceAndCheck(unagi->dt)) {
-        //                     object.frame += 1;
-        //                     object.frame %= 4;
-        //                 };
-        //                 frame = object.frame;
-        //                 if (frame == 2) {
-        //                     frame = 0;
-        //                 } else if (frame == 3) {
-        //                     frame = 2;
-        //                 }
+        engine->camera.pos = {player->pos, 1.5};
 
-        //                 object.direction = velocity;
-        //                 object.speed = 100;
-        //             } else {
-        //                 object.speed = 0;
-        //                 object.frame = 0;
-        //                 object.timer.reset();
-        //             }
-
-        //             if (object.direction.y < 0) {
-        //                 object.sprite = player_up.get(frame);
-        //             } else if (object.direction.y > 0) {
-        //                 object.sprite = player_down.get(frame);
-        //             } else if (object.direction.x > 0) {
-        //                 object.sprite = player_right.get(frame);
-        //             } else if (object.direction.x < 0) {
-        //                 object.sprite = player_left.get(frame);
-        //             }
-
-        //             break;
-        //         }
-        //         case Object::ENEMY: {
-        //             if (object.speed > 0.0F) {
-        //                 const float KNOCKBACK_FRICTION = 250;
-        //                 object.speed -= KNOCKBACK_FRICTION * unagi->dt;
-        //             } else {
-        //                 object.speed = 0.0F;
-        //             }
-
-        //             if (object.invincible) {
-        //                 object.tint = RED;
-        //                 if (object.timer.advanceAndCheck(unagi->dt)) {
-        //                     object.invincible = false;
-        //                     object.tint = WHITE;
-        //                 }
-        //             }
-
-        //             if (attack->alive and
-        //                 checkCollisionSAT(attack->rect(), attack->angle, object.rect(), 0) and
-        //                 !object.invincible) {
-        //                 object.takeDamage(attack->direction, inventory);
-        //             }
-
-        //             if (spell->alive and checkCollisionAABB(spell->rect(), object.rect()) and
-        //                 !object.invincible) {
-        //                 object.takeDamage(spell->direction, inventory);
-        //                 spell->alive = false;
-        //             }
-        //             break;
-        //         }
-        //         case Object::ATTACK: {
-        //             object.direction = player->direction;
-        //             object.angle = atan2f(player->direction.y, player->direction.x);
-        //             object.pos = player->pos + ((player->size / 2) - (object.size / 2));
-        //             object.pos += object.direction * vec2(24, 32);
-        //             if (object.timer.advanceAndCheck(unagi->dt)) object.alive = false;
-        //             break;
-        //         }
-        //         case Object::NPC: {
-        //             quest.pos = {object.pos};
-        //             quest.pos.x += object.size.x / 2;
-        //             if (!dialog) {
-        //                 if (checkCollisionAABB(object.getInteraction(), player->rect())) {
-        //                     if (unagi->is_key_just_pressed(Key::space)) {
-        //                         dialog = true;
-        //                         pause = true;
-        //                     }
-        //                 }
-        //             }
-        //             break;
-        //         }
-        //         case Object::NONE:
-        //             break;
-        //         case Object::SPELL:
-        //             break;
-        //         case Object::BUILDING: {
-        //             // TODO: building move player to second level
-        //             break;
-        //         }
-        //         }
-
-        //         if (object.isSolid() and object.body == Object::MOVABLE) {
-        //             Filter q = makeFilter(objects, [](Object *other) {
-        //                 return other->isSolid() and other->alive and other->level ==
-        //                 current_level;
-        //             });
-        //             vec2 velocity = object.direction * unagi->dt * object.speed;
-        //             object.pos.x += velocity.x;
-        //             for (Object &other : q) {
-        //                 if (&object != &other and
-        //                     checkCollisionAABB(object.getCollision(), other.getCollision())) {
-        //                     object.pos.x -= velocity.x;
-        //                     break;
-        //                 }
-        //             }
-        //             object.pos.y += velocity.y;
-        //             for (Object &other : q) {
-        //                 if (&object != &other and
-        //                     checkCollisionAABB(object.getCollision(), other.getCollision())) {
-        //                     object.pos.y -= velocity.y;
-        //                     break;
-        //                 }
-        //             }
-        //         } else {
-        //             object.pos += object.direction * unagi->dt * object.speed;
-        //         }
-        //     }
-        //     camera = -player->pos + unagi->screen / 2.0F - player->size / 2.0F;
-        //     if (object.kind == Object::ATTACK or object.kind == Object::SPELL) continue;
-
-        //     instances->append({object.pos, object.size, object.sprite, object.tint,
-        //     object.angle});
-        // }
-
-        // // current location
-        // {
-        //     bool outside = true;
-        //     for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
-        //         auto *location = &locations[i];
-        //         if (checkCollisionAABB(player->rect(), location->rect)) {
-        //             outside = false;
-        //             show_location.curr_id = i;
-        //         }
-        //     }
-        //     if (outside) {
-        //         show_location.curr_id = -1;
-        //     }
-        //     if (show_location.curr_id != show_location.prev_id) {
-        //         show_location.active = true;
-        //         show_location.timer.reset();
-        //         show_location.prev_id = show_location.curr_id;
-        //     } else {
-        //     }
-        // }
-
-        // instances->sort(
-        //     [](const void *a, const void *b) -> int {
-        //         const auto *a_instance = (const Instance *)a;
-        //         const auto *b_instance = (const Instance *)b;
-        //         auto a_y = a_instance->position.y + a_instance->size.y;
-        //         auto b_y = b_instance->position.y + b_instance->size.y;
-        //         if (a_y < b_y) return -1;
-        //         if (b_y < a_y) return 1;
-        //         return 0;
-        //     },
-        //     offset);
-
-        // // draw attack and spell
-        // if (attack->alive) {
-        //     instances->append(
-        //         {attack->pos, attack->size, attack->sprite, attack->tint, attack->angle});
-        // }
-        // if (spell->alive) {
-        //     instances->append({spell->pos, spell->size, spell->sprite, spell->tint,
-        //     spell->angle});
-        // }
+        // current location
+        {
+            bool outside = true;
+            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+                auto *location = &locations[i];
+                if (checkCollisionAABB(player->rect(), location->rect)) {
+                    outside = false;
+                    show_location.curr_id = i;
+                }
+            }
+            if (outside) {
+                show_location.curr_id = -1;
+            }
+            if (show_location.curr_id != show_location.prev_id) {
+                show_location.active = true;
+                show_location.timer.reset();
+                show_location.prev_id = show_location.curr_id;
+            } else {
+            }
+        }
 
         // // quest marker
         // if (quest.status != Quest::REWARDED) {
@@ -682,9 +627,9 @@ static struct Game {
         //         if (quest.status == Quest::ACTIVE) color = WHITE;
         //     }
         //     auto pos =
-        //         vec2(quest.pos.x - (unagi->measureText(text, SIZE) / 2.0F), quest.pos.y -
+        //         Vec2(quest.pos.x - (engine->measureText(text, SIZE) / 2.0F), quest.pos.y -
         //         SIZE);
-        //     unagi->drawText(instances, text, pos, SIZE, color);
+        //     engine->drawText(instances, text, pos, SIZE, color);
         // }
 
         // // debug (show collision)
@@ -732,7 +677,8 @@ static struct Game {
         return {};
     }
 
-    void updateUI(Engine *engine, Fixed<UIInstance> *instances, int width, int height) {
+    void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
+                  int render_height) {
         ScopeArena scope(&arena);
         // update
         // draw
@@ -740,70 +686,70 @@ static struct Game {
 
         if (engine->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
 
-        // while (dialog) {
-        //     Slice<const char> text = {};
-        //     if (quest.status == Quest::REWARDED) {
-        //         if (curr_line == ARRAY_LEN(lines)) {
-        //             dialog = pause = false;
-        //             curr_line = 0;
-        //             break;
-        //         }
-        //         text = sliceFromStrZ(lines[curr_line]);
-        //         curr_line += unagi->is_key_just_pressed(Key::space);
-        //     } else {
-        //         text = sliceFromStrZ(quest.line[quest.status]);
-        //         if (unagi->is_key_just_pressed(Key::space)) {
-        //             dialog = pause = false;
-        //             if (quest.status == Quest::COMPLETED) quest.status = Quest::REWARDED;
-        //             if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
-        //             break;
-        //         }
-        //     }
-        //     vec2 pos = {0.0F, float(unagi->screen.y) * 2.0F / 3.0F};
-        //     instances->append({
-        //         .position = pos,
-        //         .size = {float(unagi->screen.x), float(unagi->screen.y) / 3.0F},
-        //         .uv = solid,
-        //         .color = BLACK,
-        //         .rotation = 0,
-        //     });
-        //     unagi->drawText(instances, text, pos + vec2(4, 4));
-        //     break;
-        // }
+        while (dialog) {
+            Slice<const char> text = {};
+            if (quest.status == Quest::REWARDED) {
+                if (curr_line == ARRAY_LEN(lines)) {
+                    dialog = pause = false;
+                    curr_line = 0;
+                    break;
+                }
+                text = sliceFromStrZ(lines[curr_line]);
+                curr_line += engine->is_key_just_pressed(Key::space) and (not interaction_frame);
+            } else {
+                text = sliceFromStrZ(quest.line[quest.status]);
+                if (engine->is_key_just_pressed(Key::space) and (not interaction_frame)) {
+                    dialog = pause = false;
+                    if (quest.status == Quest::COMPLETED) quest.status = Quest::REWARDED;
+                    if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
+                    break;
+                }
+            }
+            Vec2 pos = {0.0F, float(render_height) * 2.0F / 3.0F};
+            instances->append({
+                .position = pos,
+                .size = {float(render_width), float(render_height) / 3.0F},
+                .uv = solid,
+                .color = BLACK,
+            });
+            engine->drawText(instances, text, pos + Vec2(4, 4));
+            break;
+        }
 
-        // if (show_location.active) {
-        //     if (show_location.timer.advanceAndCheck(unagi->dt)) {
-        //         show_location.active = false;
-        //     } else {
-        //         auto height = 20.0F;
-        //         const char *name;
+        if (show_location.active) {
+            if (show_location.timer.advanceAndCheck(engine->dt)) {
+                show_location.active = false;
+            } else {
+                auto height = 20.0F;
+                const char *name;
 
-        //         if (show_location.curr_id == -1) {
-        //             name = "Outside";
-        //         } else {
-        //             name = locations[show_location.curr_id].name;
-        //         }
+                if (show_location.curr_id == -1) {
+                    name = "Outside";
+                } else {
+                    name = locations[show_location.curr_id].name;
+                }
 
-        //         auto width = unagi->measureText(sliceFromStrZ(name), height);
+                auto width = engine->measureText(sliceFromStrZ(name), height);
 
-        //         u8 alpha = 255;
-        //         if (show_location.timer.elapsed > 1.0F) {
-        //             alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
-        //         }
+                u8 alpha = 255;
+                if (show_location.timer.elapsed > 1.0F) {
+                    alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
+                }
 
-        //         unagi->drawText(instances, sliceFromStrZ(name),
-        //                         {(float(unagi->screen.x) / 2.0F) - (width / 2.0F),
-        //                          (float(unagi->screen.y) / 2.0F) - (height / 2.0F)},
-        //                         height, {WHITE.r, WHITE.g, WHITE.b, alpha});
-        //     }
-        // }
+                engine->drawText(instances, sliceFromStrZ(name),
+                                 {(float(render_width) / 2.0F) - (width / 2.0F),
+                                  (float(render_height) / 2.0F) - (height / 2.0F)},
+                                 height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+            }
+        }
 
         if (inventory_visible) {
             for (size_t x_i = 0; x_i < 8; x_i++) {
                 for (size_t y_i = 0; y_i < 8; y_i++) {
                     const Vec2 cell_size = engine->sprites.get("inventory_slot").size();
-                    const Vec2 position = Vec2{float(x_i), float(y_i)} * cell_size +
-                        (Vec2{float(width), float(height)} - (cell_size * 8.0F));
+                    const Vec2 position =
+                        Vec2{float(x_i), float(y_i)} * cell_size +
+                        (Vec2{float(render_width), float(render_height)} - (cell_size * 8.0F));
                     instances->append(
                         {position, cell_size, engine->sprites.get("inventory_slot"), WHITE});
                     const auto *invertory_slot = &inventory[(y_i * 8) + x_i];
@@ -816,12 +762,17 @@ static struct Game {
                                            WHITE});
                         const float FONT_SIZE = 10;
                         const Vec2 text_offset =
-                            position + (cell_size - Vec2(engine->measureText({text.len, text.ptr}),
-                                                         FONT_SIZE));
+                            position +
+                            (cell_size -
+                             Vec2(engine->measureText({text.len, text.ptr}), FONT_SIZE));
                         engine->drawText(instances, text, text_offset);
                     }
                 }
             }
+        }
+
+        if (interaction_frame) {
+            interaction_frame = false;
         }
     }
 
