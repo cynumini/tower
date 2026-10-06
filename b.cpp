@@ -7,6 +7,7 @@ int main(int argc, const char *argv[]) {
     const char *inputs[] = {
         "main.cpp",
         "game.cpp",
+        "map.cpp",
         "shared.cpp",
         "ui_pipeline.cpp",
         "world_pipeline.cpp",
@@ -30,6 +31,7 @@ int main(int argc, const char *argv[]) {
         args.append(&arena, "-lSDL3_image");
 
         args.append(&arena, "-g");
+        // args.append(&arena, "-O3");
 
         run(&arena, args);
     }

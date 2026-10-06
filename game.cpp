@@ -5,6 +5,8 @@
 
 #include "shared.cpp"
 
+#include "map.cpp"
+
 static struct Quest {
     enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
     Vec2 pos;
@@ -51,11 +53,6 @@ struct Timer {
     };
 };
 
-static struct Level {
-    enum class Id : u8 { world, house };
-    Color clear_color;
-} levels[] = {{0x8bbbffff}, {BLACK}};
-
 // Object
 struct Object {
     float speed;
@@ -74,7 +71,6 @@ struct Object {
     bool alive;
     bool invincible;
     Color tint;
-    Level::Id level;
 
     static Object create(Kind kind, Rect sprite, bool alive = false, Vec2 pos = {}) {
         return {.pos = pos,
@@ -133,8 +129,6 @@ struct Object {
 static Rect solid;
 static bool pause = false;
 static bool interaction_frame = false;
-
-Level::Id current_level = Level::Id::world;
 
 // Dialog
 static bool dialog = false;
@@ -205,22 +199,13 @@ const u8 OBJECTS_MAX = 255;
 static Object objects_raw[OBJECTS_MAX];
 static Fixed<Object> objects;
 
-// Bloks
-enum class Block : u8 { air, dirt, grass, water, wood_floor, wall };
-
-Rect blocks[U8_MAX] = {};
+// Mpas
+static Map map;
 
 // ids
 static Object *player;
 static Object *attack;
 static Object *spell;
-
-// Locations
-static struct Location {
-    const char *name;
-    Rect rect;
-    Block block;
-} locations[2];
 
 static struct ShowLocation {
     bool active;
@@ -230,10 +215,11 @@ static struct ShowLocation {
 } show_location = {false, -1, -1, Timer::init(2)};
 
 static struct Game {
-
     void init(Engine *engine) {
+
         // globals
         solid = engine->sprites.get("solid");
+        engine->clear_color = 0x8bbbffff;
 
         // invertory
         uint items_len = 1;
@@ -305,27 +291,10 @@ static struct Game {
             object->timer = Timer::init(0.2F);
         }
 
-        // Bloks
-        blocks[int(Block::air)] = {};
-        blocks[int(Block::dirt)] = engine->sprites.get("dirt");
-        blocks[int(Block::grass)] = engine->sprites.get("grass");
-        blocks[int(Block::water)] = engine->sprites.get("water");
-        blocks[int(Block::wood_floor)] = engine->sprites.get("wood_floor");
-        blocks[int(Block::wall)] = engine->sprites.get("wall");
-        // Location
-        locations[0] = {"Home", {16, 16, 32, 32}, Block::dirt};
-        locations[1] = {"Town", {48, 16, 32, 32}, Block::grass};
+        map.init(engine);
     }
 
-    static constexpr int MAP_SIZE = 64;
-
-    static inline bool checkFaceVisible(u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE], Vec3 pos) {
-        if (pos.x < 0 or pos.y < 0 or pos.z < 0) return true;
-        if (pos.x >= MAP_SIZE or pos.y >= MAP_SIZE or pos.z >= MAP_SIZE) return true;
-        return map[int(pos.x)][int(pos.y)][int(pos.z)] == 0;
-    }
-
-    Vec2 update(Engine *engine, Fixed<WorldInstance> *instances) {
+    void update(Engine *engine, Fixed<WorldInstance> *instances) {
 
         float yaw =
             engine->is_key_just_released(Key::kp_4) - engine->is_key_just_released(Key::kp_6);
@@ -345,83 +314,12 @@ static struct Game {
         // TODO: show debug collision only realted to current level
 
         // cheat && system
-        if (engine->is_key_just_pressed(Key::key_1)) {
-            quest.status = Quest::COMPLETED;
-        }
+        if (engine->is_key_just_pressed(Key::key_1)) quest.status = Quest::COMPLETED;
 
-        if (engine->is_key_just_pressed(Key::key_2)) {
-            engine->clear_color = 0x8bbbffff;
-            current_level = Level::Id::world;
-            player->level = current_level;
-        }
-        if (engine->is_key_just_pressed(Key::key_3)) {
-            engine->clear_color = BLACK;
-            current_level = Level::Id::house;
-            player->level = current_level;
-            attack->level = current_level;
-            spell->level = current_level;
-            player->pos = Vec2(8, 15) - (player->size / 2);
-        }
-
-        u8 map[MAP_SIZE][MAP_SIZE][MAP_SIZE] = {};
-
-        // map
-        switch (current_level) {
-        case Level::Id::world: {
-            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); ++i) {
-                const auto *location = &locations[i];
-
-                auto x_start = location->rect.x - location->rect.w / 2;
-                auto x_end = x_start + location->rect.w;
-
-                auto y_start = location->rect.y - location->rect.h / 2;
-                auto y_end = y_start + location->rect.h;
-
-                for (int tx = x_start; tx < x_end; ++tx) {
-                    for (int ty = y_start; ty < y_end; ++ty) {
-                        map[tx][ty][0] = int(location->block);
-                    }
-                }
-            }
-            break;
-        }
-        case Level::Id::house: {
-            for (int x = 0; x < 16; x++) {
-                for (int y = 0; y < 16; y++) {
-                    map[x][y][0] = int(Block::wood_floor);
-                }
-            }
-            break;
-        }
-        }
-
-        for (int x = 0; x < MAP_SIZE; x++) {
-            for (int y = 0; y < MAP_SIZE; y++) {
-                for (int z = 0; z < MAP_SIZE; z++) {
-                    if (Block(map[x][y][z]) == Block::air) continue;
-                    Rect texture = blocks[map[x][y][z]];
-
-                    const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-                    for (int axis = 0; axis < 3; axis++)
-                        for (int i = 0; i < 2; i++) {
-                            const auto pos = Vec3(x, y, z);
-                            const auto offset = axes[axis] * (1 - i * 2);
-                            if (!checkFaceVisible(map, pos + offset)) continue;
-                            instances->append({Vec3(offset) * 0.5F + pos,
-                                               {1, 1},
-                                               texture,
-                                               WHITE,
-                                               Face(axis * 2 + i),
-                                               0});
-                        }
-                }
-            }
-        }
+        map.update(engine, instances, {player->pos, 1.5});
 
         for (auto &object : objects) {
-            //     assert(object.kind != Object::NONE);
             if (!object.alive) continue;
-            if (object.level != current_level) continue;
             if (!pause) {
                 switch (object.kind) {
                 case Object::Kind::player: {
@@ -499,7 +397,8 @@ static struct Game {
                         object.takeDamage(attack->direction, inventory);
                     }
 
-                    if (spell->alive and checkCollisionAABB(spell->rect(), object.rect()) and
+                    if (spell->alive and
+                        checkCollisionAABB(spell->rect(), object.getCollision()) and
                         !object.invincible) {
                         object.takeDamage(spell->direction, inventory);
                         spell->alive = false;
@@ -534,10 +433,8 @@ static struct Game {
                 }
 
                 if (object.isSolid() and object.body == Object::Body::movable) {
-                    Filter q = makeFilter(objects, [](Object *other) {
-                        return other->isSolid() and other->alive and
-                               other->level == current_level;
-                    });
+                    Filter q = makeFilter(
+                        objects, [](Object *other) { return other->isSolid() and other->alive; });
                     Vec2 velocity = object.direction * engine->dt * object.speed;
                     object.pos.x += velocity.x;
                     for (Object &other : q) {
@@ -631,15 +528,15 @@ static struct Game {
 
         // debug (show collision)
         if (engine->debug_mode) {
-            auto home = locations->rect;
-            instances->append({
-                .position = Vec3(home.position(), 0),
-                .size = home.size(),
-                .uv = solid,
-                .color = 0xff00FF7f,
-                .face = Face::z_pos,
-                .rotation = 0,
-            });
+            // auto home = locations->rect;
+            // instances->append({
+            //     .position = Vec3(home.position(), 0),
+            //     .size = home.size(),
+            //     .uv = solid,
+            //     .color = 0xff00FF7f,
+            //     .face = Face::z_pos,
+            //     .rotation = 0,
+            // });
 
             for (auto &object : objects) {
                 if (!object.alive) continue;
@@ -682,9 +579,6 @@ static struct Game {
                 }
             }
         }
-
-        // return camera;
-        return {};
     }
 
     void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
@@ -692,7 +586,6 @@ static struct Game {
         ScopeArena scope(&arena);
         // update
         // draw
-        engine->clear_color = levels[size_t(current_level)].clear_color;
 
         if (engine->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
 

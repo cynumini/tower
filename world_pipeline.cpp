@@ -10,7 +10,7 @@
 static struct World {
     using Instance = WorldInstance;
 
-    static constexpr uint MAX_INSTANCES = 8192;
+    static constexpr uint MAX_INSTANCES = 256 * 256 * 3;
 
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *vertex_buffer;

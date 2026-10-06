@@ -94,7 +94,7 @@ void resize(int width, int height) {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena = Arena::init(KB(5));
+    arena = Arena::init(MB(33));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -268,7 +268,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                 &arena, name,
                 {{float(x_offset), float(y_offset)}, {float(surface->w), float(surface->h)}});
 
-            y_max = max(surface->h, y_max);
+            y_max = std::max(surface->h, y_max);
 
             atlas.uploadToGPU(copy_pass, transfer_buffer, x_offset, y_offset, surface->w,
                               surface->h);
@@ -278,7 +278,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
 
     instance_transfer_buffer =
-        createGPUTransferBuffer(device, max(sizeof(UIInstance) * ui.MAX_INSTANCES,
+        createGPUTransferBuffer(device, std::max(sizeof(UIInstance) * ui.MAX_INSTANCES,
                                             sizeof(WorldInstance) * world.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
 
