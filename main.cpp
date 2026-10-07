@@ -46,23 +46,23 @@ void Engine::updateUI(Fixed<UIInstance> *instances, int width, int height) {
         ScopeArena scope(&arena);
         float offset_y = 2.0F;
 
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "FPS: %d", time.fps);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "FPS: %d", time.fps);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "%.2fms", time.ms);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "%.2fms", time.ms);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Pitch: %.0f", camera.pitch);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Pitch: %.0f", camera.pitch);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Yaw: %.0f", camera.yaw);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Yaw: %.0f", camera.yaw);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Roll: %.0f", camera.roll);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Roll: %.0f", camera.roll);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
                   camera.pos.x, camera.pos.y, camera.pos.z);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "UI instances: %d/%d",
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "UI instances: %d/%d",
                   ui.prev_instances_len, ui.MAX_INSTANCES);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "World instances: %d/%d",
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World instances: %d/%d",
                   world.prev_instances_len, world.MAX_INSTANCES);
         offset_y += 12;
     }
@@ -73,7 +73,11 @@ struct AtlasItem {
     SDL_Surface *surface;
 };
 
+static int last_width;
+static int last_height;
+
 void resize(int width, int height) {
+    if (last_width == width and last_height == height) return;
     world.resize(width, height);
     ui.resize(width, height);
 
@@ -90,6 +94,9 @@ void resize(int width, int height) {
     };
     depth = SDL_CreateGPUTexture(device, &depth_info);
     SDL_assert(depth);
+
+    last_width = width;
+    last_height = height;
 }
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
@@ -118,7 +125,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     SDL_CHECK(SDL_ClaimWindowForGPUDevice(device, window));
 
     {
-        const SDL_GPUSamplerCreateInfo createinfo{};
+        SDL_GPUSamplerCreateInfo createinfo = {};
+        createinfo.min_filter = SDL_GPU_FILTER_NEAREST;
+        createinfo.mag_filter = SDL_GPU_FILTER_NEAREST;
+        createinfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+        createinfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        createinfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
         sampler = SDL_CreateGPUSampler(device, &createinfo);
     }
     SDL_CHECK(sampler);
@@ -279,7 +292,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     instance_transfer_buffer =
         createGPUTransferBuffer(device, std::max(sizeof(UIInstance) * ui.MAX_INSTANCES,
-                                            sizeof(WorldInstance) * world.MAX_INSTANCES));
+                                                 sizeof(WorldInstance) * world.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
 
     resize(screen_width, screen_height);
@@ -360,8 +373,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
     SDL_GPUTexture *swapchain_texture = 0;
 
-    SDL_CHECK(
-        SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture, 0, 0));
+    uint width = 0, height = 0;
+    SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
+                                                    &width, &height));
+    resize(width, height);
 
     if (swapchain_texture) {
         SDL_GPUColorTargetInfo color_target_info = {};
@@ -386,7 +401,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
                                                    &depth_stencil_target_info);
         defer(SDL_EndGPURenderPass(render_pass));
 
-        world.draw(command_buffer, render_pass, atlas.ptr, sampler, &engine.camera);
+        world.draw(command_buffer, render_pass, atlas, sampler, &engine.camera);
         ui.draw(command_buffer, render_pass, atlas.ptr, sampler);
     }
 

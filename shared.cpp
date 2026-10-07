@@ -209,8 +209,8 @@ static struct Engine {
         float width = font.widths[int(c)];
         instances->append({
             .position = pos,
-            .size = {width / 10.F, size / 10.F},
-            Rect{font.texture.position() + texture_offset, {float(width), font.size}},
+            .size = {width * (size / font.size) / 10.F, size / 10.F},
+            Rect{font.texture.position() + texture_offset, {width, font.size}},
             .color = color,
             .face = Face::billboard,
             .rotation = 0,

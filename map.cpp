@@ -6,7 +6,7 @@
 #include <skn_math.cpp>
 
 // Bloks
-enum class Block : u8 { air, dirt, grass, water, wood_floor, wall, deep };
+enum class Block : u8 { air, dirt, grass, water, wood_floor, wall, deep, stone };
 
 Rect blocks[U8_MAX] = {};
 
@@ -23,32 +23,40 @@ struct Cell {
 };
 
 struct Map {
-    static constexpr int MAP_MAX_X = 256;
-    static constexpr int MAP_MAX_Y = 256;
-    static constexpr int MAP_MAX_Z = 256;
+    static constexpr int MAP_SIZE_X = 256;
+    static constexpr int MAP_SIZE_Y = 256;
+    static constexpr int MAP_SIZE_Z = 256;
+    static constexpr int MAP_MIN_X = -MAP_SIZE_X / 2;
+    static constexpr int MAP_MIN_Y = -MAP_SIZE_Y / 2;
+    static constexpr int MAP_MIN_Z = 0;
+    static constexpr int MAP_MAX_X = MAP_SIZE_X / 2 - 1;
+    static constexpr int MAP_MAX_Y = MAP_SIZE_Y / 2 - 1;
+    static constexpr int MAP_MAX_Z = 255;
     Slice<Cell> data = {};
     uint current_level = 0;
 
-    inline Cell get(u32 x, u32 y, u32 z) {
-        return data[x * MAP_MAX_Y * MAP_MAX_Z + y * MAP_MAX_Z + z];
+    inline Cell get(int x, int y, int z) {
+        x += 128, y += 128, z += 128;
+        return data[x * MAP_SIZE_Y * MAP_SIZE_Z + y * MAP_SIZE_Z + z];
     }
 
-    inline void set(u32 x, u32 y, u32 z, Cell cell) {
-        data[x * MAP_MAX_Y * MAP_MAX_Z + y * MAP_MAX_Z + z] = cell;
+    inline void set(int x, int y, int z, Cell cell) {
+        x += 128, y += 128, z += 128;
+        data[x * MAP_SIZE_Y * MAP_SIZE_Z + y * MAP_SIZE_Z + z] = cell;
     }
 
     inline bool checkFaceVisible(int x, int y, int z) {
-        if (x < 0 or y < 0 or z < 0) return true;
-        if (x >= MAP_MAX_X or y >= MAP_MAX_Y or z >= MAP_MAX_Z) return true;
+        if (x < MAP_MIN_X or y < MAP_MIN_Y or z < MAP_MIN_Z) return true;
+        if (x > MAP_MAX_X or y > MAP_MAX_Y or z > MAP_MAX_Z) return true;
         return get(x, y, z).block == Block::air;
     }
 
     void init(Engine *engine) {
-        data = arena.alloc<Cell>(MAP_MAX_X * MAP_MAX_Y * MAP_MAX_Z);
+        data = arena.alloc<Cell>(MAP_SIZE_X * MAP_SIZE_Y * MAP_SIZE_Z);
 
         // location
-        locations[0] = {"Home", {32, 32, 64, 64}, Block::dirt};
-        locations[1] = {"Town", {96, 32, 64, 64}, Block::grass};
+        locations[0] = {"Home", {0, 0, 32, 32}, Block::dirt};
+        locations[1] = {"Town", {32, 0, 32, 32}, Block::grass};
 
         // bloks
         blocks[int(Block::air)] = {};
@@ -58,128 +66,84 @@ struct Map {
         blocks[int(Block::wood_floor)] = engine->sprites.get("wood_floor");
         blocks[int(Block::wall)] = engine->sprites.get("wall");
         blocks[int(Block::deep)] = engine->sprites.get("deep");
+        blocks[int(Block::stone)] = engine->sprites.get("stone");
 
         // map
-        for (uint x = 0; x < MAP_MAX_X; x++) {
-            for (uint y = 0; y < MAP_MAX_X; y++) {
-                set(x, y, 0, {Block::deep, Block::deep});
+
+        for (int x = MAP_MIN_X; x <= MAP_MAX_X; x++) {
+            for (int y = MAP_MIN_Y; y <= MAP_MAX_Y; y++) {
+                for (int z = MAP_MIN_Z; z <= MAP_MAX_Z; z++) {
+                    if (z == 0)
+                        set(x, y, z, {Block::deep, Block::deep});
+                    else if (z < 60)
+                        set(x, y, z, {Block::stone, Block::stone});
+                    else if (z < 63)
+                        set(x, y, z, {Block::dirt, Block::dirt});
+                    else if (z < 64)
+                        set(x, y, z, {Block::dirt, Block::grass});
+n                }
             }
         }
-        for (uint x = 0; x < MAP_MAX_X; x++) {
-            for (uint y = 0; y < MAP_MAX_X; y++) {
-                if ((x + y) % 1 != 0) continue;
-                Cell cell = {Block(engine->rand(7)), Block(engine->rand(7))};
-                set(x, y, 1, cell);
+        for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+            const auto *location = &locations[i];
+
+            auto x_start = location->rect.x - location->rect.w / 2;
+            auto x_end = x_start + location->rect.w;
+
+            auto y_start = location->rect.y - location->rect.h / 2;
+            auto y_end = y_start + location->rect.h;
+
+            for (int x = x_start; x < x_end; x++) {
+                for (int y = y_start; y < y_end; y++) {
+                    set(x, y, 63, {location->block, location->block});
+                }
             }
         }
-        // for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
-        //     const auto *location = &locations[i];
-
-        //     auto x_start = location->rect.x - location->rect.w / 2;
-        //     auto x_end = x_start + location->rect.w;
-
-        //     auto y_start = location->rect.y - location->rect.h / 2;
-        //     auto y_end = y_start + location->rect.h;
-
-        //     for (int x = x_start; x < x_end; x++) {
-        //         for (int y = y_start; y < y_end; y++) {
-        //             set(x, y, 0, u8(location->block));
-        //         }
-        //     }
     }
 
     void update(Engine *engine, Fixed<WorldInstance> *instances, Vec3 player_pos) {
-        int distance = 32;
-        int x_start = std::max(int(player_pos.x) - distance, 0);
+        current_level = int(player_pos.z);
+
+        const int distance = 32;
+
+        int x_start = std::max(int(player_pos.x) - distance, MAP_MIN_X);
         int x_end = std::min(int(player_pos.x) + distance, MAP_MAX_X);
 
-        int y_start = std::max(int(player_pos.y) - distance, 0);
+        int y_start = std::max(int(player_pos.y) - distance, MAP_MIN_Y);
         int y_end = std::min(int(player_pos.y) + distance, MAP_MAX_Y);
+
+        int z_start = std::max(int(player_pos.z) - distance, MAP_MIN_Z);
+        int z_end = std::min(int(player_pos.z) + distance, MAP_MAX_Z);
 
         for (int x = x_start; x < x_end; x++) {
             for (int y = y_start; y < y_end; y++) {
-                Cell floor = get(x, y, current_level);
+                for (int z = z_start; z < z_end; z++) {
+                    Cell cell = get(x, y, z);
+                    if (cell.block == Block::air) continue;
+                    Rect block = blocks[int(cell.block)];
+                    Rect top = blocks[int(cell.top)];
 
-                Cell cell = get(x, y, current_level + 1);
-                Rect top[2] = {blocks[u8(floor.top)], blocks[u8(cell.top)]};
-                Rect block[2] = {blocks[u8(floor.block)], blocks[u8(cell.block)]};
+                    if (checkFaceVisible(x, y, z + 1))
+                        instances->append(
+                            {Vec3(x, y, z + 0.5F), {1, 1}, top, WHITE, Face::z_pos, 0});
 
-                // cell top
-                if (cell.block != Block::air) {
-                    Rect texture = top[1];
-                    if (cell.top == Block::air) texture = block[1];
-                    instances->append({Vec3(x, y, current_level + 1 + 0.5F),
-                                       {1, 1},
-                                       texture,
-                                       WHITE,
-                                       Face::z_pos,
-                                       0});
-                } else {
-                    // floor top
-                    instances->append({Vec3(x, y, current_level + 0.5F),
-                                       {1, 1},
-                                       top[0],
-                                       WHITE,
-                                       Face::z_pos,
-                                       0});
-                }
+                    if (checkFaceVisible(x + 1, y, z))
+                        instances->append(
+                            {Vec3(x + 0.5F, y, z), {1, 1}, block, WHITE, Face::x_pos, 0});
 
-                for (u8 i = 0; i < 2; i++) {
-                    if (checkFaceVisible(x + 1, y, current_level + i))
-                        instances->append({Vec3(x + 0.5, y, current_level + i),
-                                           {1, 1},
-                                           block[i],
-                                           WHITE,
-                                           Face::x_pos,
-                                           0});
+                    if (checkFaceVisible(x - 1, y, z))
+                        instances->append(
+                            {Vec3(x - 0.5F, y, z), {1, 1}, block, WHITE, Face::x_neg, 0});
 
-                    if (checkFaceVisible(x - 1, y, current_level + i))
-                        instances->append({Vec3(x - 0.5, y, current_level + i),
-                                           {1, 1},
-                                           block[i],
-                                           WHITE,
-                                           Face::x_neg,
-                                           0});
+                    if (checkFaceVisible(x, y + 1, z))
+                        instances->append(
+                            {Vec3(x, y + 0.5F, z), {1, 1}, block, WHITE, Face::y_pos, 0});
 
-                    if (checkFaceVisible(x, y + 1, current_level + i))
-                        instances->append({Vec3(x, y + 0.5, current_level + i),
-                                           {1, 1},
-                                           block[i],
-                                           WHITE,
-                                           Face::y_pos,
-                                           0});
-
-                    if (checkFaceVisible(x, y - 1, current_level + i))
-                        instances->append({Vec3(x, y - 0.5, current_level + i),
-                                           {1, 1},
-                                           block[i],
-                                           WHITE,
-                                           Face::y_neg,
-                                           0});
+                    if (checkFaceVisible(x, y - 1, z))
+                        instances->append(
+                            {Vec3(x, y - 0.5F, z), {1, 1}, block, WHITE, Face::y_neg, 0});
                 }
             }
         }
-        // for (int x = 0; x < MAP_MAX_X; x++) {
-        //     for (int y = 0; y < MAP_MAX_Y; y++) {
-        //         for (int z = 0; z < MAP_MAX_Z; z++) {
-        //             Block block = Block(get(x, y, z));
-        //             if (block == Block::air) continue;
-        //             Rect texture = blocks[int(block)];
-        //             const Vec3 axes[3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
-        //             for (int axis = 0; axis < 3; axis++)
-        //                 for (int i = 0; i < 2; i++) {
-        //                     const auto pos = Vec3(x, y, z);
-        //                     const auto offset = axes[axis] * (1 - i * 2);
-        //                     if (!checkFaceVisible(pos + offset)) continue;
-        //                     instances->append({Vec3(offset) * 0.25F + pos * 0.5,
-        //                                        {0.5, 0.5},
-        //                                        texture,
-        //                                        WHITE,
-        //                                        Face(axis * 2 + i),
-        //                                        0});
-        //                 }
-        //         }
-        //     }
-        // }
     }
 };

@@ -2,6 +2,7 @@ cbuffer UBO : register(b0, space1)
 {
     float4x4 view;
     float4x4 projection;
+    float2 atlas_size;
     float yaw;
 };
 
@@ -10,7 +11,7 @@ struct Input {
     float3 instance_position : TEXCOORD1;
     float2 size              : TEXCOORD2;
     float4 uv                : TEXCOORD3;
-    float4 color_in          : TEXCOORD4;
+    float4 color          : TEXCOORD4;
     uint   face              : TEXCOORD5;
     float  angle             : TEXCOORD6;
 };
@@ -18,7 +19,7 @@ struct Input {
 struct Output {
     float4 position  : SV_Position;
     float2 uv        : TEXCOORD0;
-    float4 color_out : TEXCOORD1;
+    float4 color : TEXCOORD1;
 };
 
 float2 rotate(float2 v, float rad) {
@@ -55,9 +56,12 @@ Output main(Input input) {
     );
 
     float2 uv = input.vertex_position + float2(0.5F, 0.5F);
-    output.uv = input.uv.xy + float2(uv.x, 1.0F - uv.y) * input.uv.zw;
+    float2 padding = 0.001F / atlas_size;
+    float2 uv_min = input.uv.xy + padding;
+    float2 uv_max = input.uv.xy + input.uv.zw - padding;
+    output.uv = lerp(uv_min, uv_max, float2(uv.x, 1.0F - uv.y));
 
-    output.color_out = input.color_in;
+    output.color = input.color;
 
     return output;
 }

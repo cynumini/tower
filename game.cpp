@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 #include <skn.cpp>
 #include <skn_math.cpp>
 
@@ -9,7 +11,7 @@
 
 static struct Quest {
     enum : u8 { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
-    Vec2 pos;
+    Vec3 pos;
     const char *line[Quest::REWARDED];
     uint counter;
 } quest = {
@@ -60,7 +62,7 @@ struct Object {
     int hp;
     Vec2 direction;
     Timer timer;
-    Vec2 pos;
+    Vec3 pos;
     Vec2 size;
     Rect sprite;
     Rect interaction_rel;
@@ -72,9 +74,9 @@ struct Object {
     bool invincible;
     Color tint;
 
-    static Object create(Kind kind, Rect sprite, bool alive = false, Vec2 pos = {}) {
+    static Object create(Kind kind, Rect sprite, bool alive = false, Vec3 pos = {}) {
         return {.pos = pos,
-                .size = sprite.size() / 32,
+                .size = sprite.size() / 64,
                 .sprite = sprite,
                 .kind = kind,
                 .alive = alive,
@@ -122,7 +124,7 @@ struct Object {
         }
     }
 
-    Rect rect() { return {pos, {size.x, size.y}}; }
+    Rect rect() { return {Vec2(pos), {size.x, size.y}}; }
 };
 
 // Init
@@ -251,11 +253,11 @@ static struct Game {
         using Kind = Object::Kind;
         using Body = Object::Body;
 
-        player = objects.append(
-            Object::create(Kind::player, player_down.get(0), true, {16.0F, 16.0F}));
+        player =
+            objects.append(Object::create(Kind::player, player_down.get(0), true, {0, 0, 64}));
         player->timer = Timer::init(0.2F);
         player->direction = {0.0F, 1.0F};
-        player->addCollision(Body::movable, {{0.0F, 0.0F}, {1.0F, 1.0F}});
+        player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
 
         attack =
             objects.append(Object::create(Kind::attack, engine->sprites.get("attack_trail1")));
@@ -264,10 +266,10 @@ static struct Game {
         spell = objects.append(Object::create(Kind::spell, engine->sprites.get("spell0")));
 
         {
-            auto *object = objects.append(Object::create(
-                Kind::npc, engine->sprites.get("character"), true, {48.0F, 16.0F}));
-            object->addCollision(Body::immovable, {{0.0F, 0.0F}, {1.0F, 1.0F}});
-            object->interaction_rel = Rect({0, 0}, {2, 2});
+            auto *object = objects.append(
+                Object::create(Kind::npc, engine->sprites.get("character"), true, {32, 0, 64}));
+            object->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
+            object->interaction_rel = Rect(0, 0, 1, 1);
         }
 
         // {
@@ -283,10 +285,11 @@ static struct Game {
 
         const u8 ENEMY_COUNT = 50;
         for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto *object = objects.append(
-                Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
-                               {float(engine->rand(MAX_X)), (float(engine->rand(MAX_Y)))}));
-            object->addCollision(Body::movable, {{0, 0}, {1.0F, 1.0F}});
+            auto *object =
+                objects.append(Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
+                                              {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
+                                               float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, 64}));
+            object->addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
             object->hp = 5;
             object->timer = Timer::init(0.2F);
         }
@@ -316,7 +319,7 @@ static struct Game {
         // cheat && system
         if (engine->is_key_just_pressed(Key::key_1)) quest.status = Quest::COMPLETED;
 
-        map.update(engine, instances, {player->pos, 1.5});
+        map.update(engine, instances, player->pos);
 
         for (auto &object : objects) {
             if (!object.alive) continue;
@@ -339,6 +342,11 @@ static struct Game {
                                                    float(engine->is_key_pressed(Key::s)))
                                               .normalize()
                                               .rotate(deg2rad(engine->camera.yaw));
+
+                    int level_diff = engine->is_key_just_released(Key::pageup) -
+                                     engine->is_key_just_released(Key::pagedown);
+                    player->pos.z =
+                        std::clamp(player->pos.z + level_diff, 1.0F, float(Map::MAP_MAX_Z - 1));
 
                     u8 frame = 0;
                     if (velocity.length() > 0.0F) {
@@ -408,7 +416,7 @@ static struct Game {
                 case Object::Kind::attack: {
                     object.direction = player->direction;
                     object.angle = atan2f(player->direction.y, player->direction.x);
-                    object.pos = player->pos + object.direction;
+                    object.pos = player->pos + object.direction * 0.5;
                     if (object.timer.advanceAndCheck(engine->dt)) object.alive = false;
                     break;
                 }
@@ -467,7 +475,7 @@ static struct Game {
                 break;
             case Object::Kind::attack: {
                 use_default = false;
-                instances->append({{object.pos, 1.5},
+                instances->append({{object.pos},
                                    object.size,
                                    object.sprite,
                                    object.tint,
@@ -481,7 +489,7 @@ static struct Game {
                 break;
             }
             if (use_default) {
-                instances->append({{object.pos, 1.5},
+                instances->append({{object.pos},
                                    object.size,
                                    object.sprite,
                                    object.tint,
@@ -490,14 +498,16 @@ static struct Game {
             }
         }
 
-        engine->camera.pos = {player->pos, 1.5};
+        engine->camera.pos = player->pos;
 
         // current location
         {
             bool outside = true;
             for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
                 auto *location = &locations[i];
-                if (checkCollisionAABB(player->getCollision(), location->rect)) {
+                if (checkCollisionPointRect(
+                        player->pos,
+                        {location->rect.position() - Vec3(0.5F, 0.5F), location->rect.size()})) {
                     outside = false;
                     show_location.curr_id = i;
                 }
@@ -515,15 +525,15 @@ static struct Game {
 
         // quest marker
         if (quest.status != Quest::REWARDED) {
-            const uint SIZE = 10;
+            const uint SIZE = 5;
             char sign = '!';
             auto color = YELLOW;
             if (quest.status != Quest::AVAILABLE) {
                 sign = '?';
                 if (quest.status == Quest::ACTIVE) color = WHITE;
             }
-            engine->drawWorldSymbol(instances, Vec3(quest.pos, 2.75), sign, SIZE, color,
-                                    engine->default_font);
+            engine->drawWorldSymbol(instances, {quest.pos.xy(), quest.pos.z + 0.75F}, sign, SIZE,
+                                    color, engine->default_font);
         }
 
         // debug (show collision)
@@ -543,7 +553,7 @@ static struct Game {
 
                 if (object.kind == Object::Kind::attack) {
                     instances->append({
-                        .position = Vec3(object.pos, 1.5),
+                        .position = object.pos,
                         .size = object.size,
                         .uv = solid,
                         .color = 0xff00FF7f,
@@ -556,7 +566,7 @@ static struct Game {
                 if (object.isInteractable()) {
                     auto collision = object.getInteraction();
                     instances->append({
-                        .position = Vec3(object.pos, 1.5),
+                        .position = object.pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0xff00007f,
@@ -569,7 +579,7 @@ static struct Game {
                 if (object.isSolid()) {
                     auto collision = object.getCollision();
                     instances->append({
-                        .position = {collision.position(), 1.5},
+                        .position = object.pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0x0000ff7f,

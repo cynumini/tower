@@ -23,12 +23,13 @@ static struct World {
     struct UBO {
         Mat4 view;
         Mat4 projection;
+        Vec2 atlas_size;
         float yaw;
     } ubo;
 
     void resize(float w, float h) {
         constexpr float sqrt2 = 1.41421356237F;
-        constexpr float diagonal_blocks = 24.0F;
+        constexpr float diagonal_blocks = 16.0F;
         float logical_w = sqrt2 * diagonal_blocks;
         float logical_h = sqrt2 * (diagonal_blocks * 9.0F / 16.0F);
         if (w / h < 16.0F / 9.0F) {
@@ -160,7 +161,7 @@ static struct World {
     }
 
     void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
-              SDL_GPUTexture *atlas, SDL_GPUSampler *sampler, Camera *camera) {
+              Texture atlas, SDL_GPUSampler *sampler, Camera *camera) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
@@ -169,7 +170,7 @@ static struct World {
         const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas,
+        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
@@ -177,6 +178,7 @@ static struct World {
                    Mat4::rotationZ(deg2rad(camera->yaw)) *
                    Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
         ubo.yaw = deg2rad(camera->yaw);
+        ubo.atlas_size = {atlas.w, atlas.h};
 
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len, 0, 0, 0);
