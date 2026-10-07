@@ -35,17 +35,21 @@ Output main(Input input) {
     float3 position;
 
     switch (input.face) {
-        case 0: position = float3(0,  p.x,  p.y); break; // X+
-        case 1: position = float3(0, -p.x,  p.y); break; // X-
-        case 2: position = float3(-p.x, 0,  p.y); break; // Y+
-        case 3: position = float3( p.x, 0,  p.y); break; // Y-
-        case 4: position = float3( p.x,  p.y, 0); break; // Z+
-        case 5: position = float3(-p.x,  p.y, 0); break; // Z-
-        case 6: {
-            float2 direction = float2(cos(yaw), sin(yaw));
-            position = float3(direction * p.x, p.y);
-            break;
-        } // billboard
+    case 0: position = float3(0,  p.x,  p.y); break; // X+
+    case 1: position = float3(0, -p.x,  p.y); break; // X-
+    case 2: position = float3(-p.x, 0,  p.y); break; // Y+
+    case 3: position = float3( p.x, 0,  p.y); break; // Y-
+    case 4: position = float3( p.x,  p.y, 0); break; // Z+
+    case 5: position = float3(-p.x,  p.y, 0); break; // Z-
+    case 6: {
+        float2 direction = float2(cos(yaw), sin(yaw));
+        position = float3(direction * p.x, p.y);
+        break;
+    } // billboard
+    case 7: {
+        position = float3(p.x, p.y, p.y);
+        break;
+    } // slope: Y- low -> Y+ high
     }
 
     position.xy = rotate(position.xy, input.angle);

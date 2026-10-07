@@ -348,6 +348,10 @@ static struct Game {
                     player->pos.z =
                         std::clamp(player->pos.z + level_diff, 1.0F, float(Map::MAP_MAX_Z - 1));
 
+                    if (engine->is_key_just_released(Key::kp_5)) {
+                        map.hide_above_level = !map.hide_above_level;
+                    }
+
                     u8 frame = 0;
                     if (velocity.length() > 0.0F) {
                         if (object.timer.advanceAndCheck(engine->dt)) {
@@ -446,6 +450,7 @@ static struct Game {
                     Vec2 velocity = object.direction * engine->dt * object.speed;
                     object.pos.x += velocity.x;
                     for (Object &other : q) {
+                        if (other.pos.z != object.pos.z) continue;
                         if (&object != &other and
                             checkCollisionAABB(object.getCollision(), other.getCollision())) {
                             object.pos.x -= velocity.x;
@@ -454,6 +459,7 @@ static struct Game {
                     }
                     object.pos.y += velocity.y;
                     for (Object &other : q) {
+                        if (other.pos.z != object.pos.z) continue;
                         if (&object != &other and
                             checkCollisionAABB(object.getCollision(), other.getCollision())) {
                             object.pos.y -= velocity.y;
@@ -589,6 +595,8 @@ static struct Game {
                 }
             }
         }
+
+        instances->append({Vec3(0, 0, 64), {1, 1}, engine->sprites.get("wood_floor"), WHITE, Face::slope, deg2rad(270)});
     }
 
     void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
