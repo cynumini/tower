@@ -124,6 +124,11 @@ struct WorldInstance {
     float rotation;
 };
 
+struct WorldInstances {
+    Fixed<WorldInstance> squares;
+    Fixed<WorldInstance> triangles;
+};
+
 struct Mod {
     Slice<const char> name;
     Dynamic<Slice<const char>> items;
@@ -223,5 +228,5 @@ static struct Engine {
 
     void updateUI(Fixed<UIInstance> *instances, int width, int height);
 
-    void update(Fixed<WorldInstance> *instances);
+    void update(WorldInstances *instances);
 } engine;

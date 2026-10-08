@@ -6,81 +6,85 @@
 #include <skn_math.cpp>
 
 // Bloks
-enum class Block : u8 { air, dirt, grass, water, wood_floor, wall, deep, stone };
 
 Rect blocks[U8_MAX] = {};
+
+struct Block {
+    enum class Kind : u8 { air, dirt, grass, water, wood_floor, wall, deep, stone };
+    enum class Shape : u8 {
+        block,
+        slope_sn, // South -> North
+        slope_ns, // North -> South
+        slope_ew, // East  -> West
+        slope_we, // West  -> East
+    };
+
+    Kind other;
+    Kind top;
+
+    Shape shape = Shape::block;
+};
 
 // Locations
 static struct Location {
     const char *name;
     Rect rect;
-    Block block;
+    Block::Kind block;
 } locations[2];
 
-struct Cell {
-    Block block;
-    Block top;
-};
-
 struct Map {
-    static constexpr int MAP_SIZE_X = 256;
-    static constexpr int MAP_SIZE_Y = 256;
-    static constexpr int MAP_SIZE_Z = 256;
-    static constexpr int MAP_MIN_X = -MAP_SIZE_X / 2;
-    static constexpr int MAP_MIN_Y = -MAP_SIZE_Y / 2;
-    static constexpr int MAP_MIN_Z = 0;
-    static constexpr int MAP_MAX_X = MAP_SIZE_X / 2 - 1;
-    static constexpr int MAP_MAX_Y = MAP_SIZE_Y / 2 - 1;
-    static constexpr int MAP_MAX_Z = 255;
-    Slice<Cell> data = {};
+    static constexpr Vec3i MAP_SIZE = {256, 256, 256};
+    static constexpr Vec3i MAP_MIN = {-MAP_SIZE.x / 2, -MAP_SIZE.y / 2, 0};
+    static constexpr Vec3i MAP_MAX = {MAP_SIZE.x / 2 - 1, MAP_SIZE.y / 2 - 1, 255};
+    Slice<Block> data = {};
     uint current_level = 0;
     bool hide_above_level = false;
 
-    inline Cell get(int x, int y, int z) {
+    inline Block &get(int x, int y, int z) {
         x += 128, y += 128, z += 128;
-        return data[x * MAP_SIZE_Y * MAP_SIZE_Z + y * MAP_SIZE_Z + z];
+        return data[x * MAP_SIZE.y * MAP_SIZE.z + y * MAP_SIZE.z + z];
     }
 
-    inline void set(int x, int y, int z, Cell cell) {
+    inline void set(int x, int y, int z, Block cell) {
         x += 128, y += 128, z += 128;
-        data[x * MAP_SIZE_Y * MAP_SIZE_Z + y * MAP_SIZE_Z + z] = cell;
+        data[x * MAP_SIZE.y * MAP_SIZE.z + y * MAP_SIZE.z + z] = cell;
     }
 
     inline bool checkFaceVisible(int x, int y, int z) {
-        if (x < MAP_MIN_X or y < MAP_MIN_Y or z < MAP_MIN_Z) return true;
-        if (x > MAP_MAX_X or y > MAP_MAX_Y or z > MAP_MAX_Z) return true;
-        return get(x, y, z).block == Block::air;
+        if (x < MAP_MIN.x or y < MAP_MIN.y or z < MAP_MIN.z) return true;
+        if (x > MAP_MAX.x or y > MAP_MAX.y or z > MAP_MAX.z) return true;
+        return get(x, y, z).other == Block::Kind::air;
     }
 
     void init(Engine *engine) {
-        data = arena.alloc<Cell>(MAP_SIZE_X * MAP_SIZE_Y * MAP_SIZE_Z);
+        data = arena.alloc<Block>(MAP_SIZE.x * MAP_SIZE.y * MAP_SIZE.z);
 
         // location
-        locations[0] = {"Home", {0, 0, 32, 32}, Block::dirt};
-        locations[1] = {"Town", {32, 0, 32, 32}, Block::grass};
+        locations[0] = {"Home", {0, 0, 32, 32}, Block::Kind::dirt};
+        locations[1] = {"Town", {32, 0, 32, 32}, Block::Kind::grass};
 
         // bloks
-        blocks[int(Block::air)] = {};
-        blocks[int(Block::dirt)] = engine->sprites.get("dirt");
-        blocks[int(Block::grass)] = engine->sprites.get("grass");
-        blocks[int(Block::water)] = engine->sprites.get("water");
-        blocks[int(Block::wood_floor)] = engine->sprites.get("wood_floor");
-        blocks[int(Block::wall)] = engine->sprites.get("wall");
-        blocks[int(Block::deep)] = engine->sprites.get("deep");
-        blocks[int(Block::stone)] = engine->sprites.get("stone");
+        blocks[int(Block::Kind::air)] = {};
+        blocks[int(Block::Kind::dirt)] = engine->sprites.get("dirt");
+        blocks[int(Block::Kind::grass)] = engine->sprites.get("grass");
+        blocks[int(Block::Kind::water)] = engine->sprites.get("water");
+        blocks[int(Block::Kind::wood_floor)] = engine->sprites.get("wood_floor");
+        blocks[int(Block::Kind::wall)] = engine->sprites.get("wall");
+        blocks[int(Block::Kind::deep)] = engine->sprites.get("deep");
+        blocks[int(Block::Kind::stone)] = engine->sprites.get("stone");
 
         // map
-        for (int x = MAP_MIN_X; x <= MAP_MAX_X; x++) {
-            for (int y = MAP_MIN_Y; y <= MAP_MAX_Y; y++) {
-                for (int z = MAP_MIN_Z; z <= MAP_MAX_Z; z++) {
+        for (int x = MAP_MIN.x; x <= MAP_MAX.x; x++) {
+            for (int y = MAP_MIN.y; y <= MAP_MAX.y; y++) {
+                for (int z = MAP_MIN.z; z <= MAP_MAX.z; z++) {
                     if (z == 0)
-                        set(x, y, z, {Block::deep, Block::deep});
+                        set(x, y, z, {Block::Kind::deep, Block::Kind::deep});
                     else if (z < 60)
-                        set(x, y, z, {Block::stone, Block::stone});
+                        set(x, y, z, {Block::Kind::stone, Block::Kind::stone});
                     else if (z < 63)
-                        set(x, y, z, {Block::dirt, Block::dirt});
+                        set(x, y, z, {Block::Kind::dirt, Block::Kind::dirt});
                     else if (z < 64)
-                        set(x, y, z, {Block::dirt, Block::grass});
+                        set(x, y, z, {Block::Kind::dirt, Block::Kind::grass});
                 }
             }
         }
@@ -103,68 +107,142 @@ struct Map {
         // house
         int x_offset = -4 + 32;
         int y_offset = -4;
+
         for (int x = x_offset; x < (9 + x_offset); x++) {
             for (int y = y_offset; y < (9 + y_offset); y++) {
                 if ((x > x_offset and y > y_offset) and (x < x_offset + 8 and y < y_offset + 8)) {
-                    set(x, y, 64, {Block::air, Block::wood_floor});
-                    set(x, y, 65, {Block::air, Block::wood_floor});
+                    set(x, y, 64, {Block::Kind::air, Block::Kind::wood_floor});
+                    set(x, y, 65, {Block::Kind::air, Block::Kind::wood_floor});
                 } else {
-                    set(x, y, 64, {Block::wall, Block::wall});
-                    set(x, y, 65, {Block::wood_floor, Block::wood_floor});
+                    set(x, y, 64, {Block::Kind::wall, Block::Kind::wall});
+                    set(x, y, 65, {Block::Kind::wood_floor, Block::Kind::wood_floor});
                 }
-                set(x, y, 63, {Block::dirt, Block::wood_floor});
+                set(x, y, 63, {Block::Kind::dirt, Block::Kind::wood_floor});
             }
+        }
+        for (int y = y_offset; y < (9 + y_offset); y++) {
+            set(x_offset - 1, y, 65,
+                {Block::Kind::wood_floor, Block::Kind::wood_floor, Block::Shape::slope_we});
+            set(x_offset + 9, y, 65,
+                {Block::Kind::wood_floor, Block::Kind::wood_floor, Block::Shape::slope_ew});
         }
     }
 
-    void update(Engine *engine, Fixed<WorldInstance> *instances, Vec3 player_pos) {
+    void update(Engine *engine, WorldInstances *instances, Vec3 player_pos) {
         current_level = int(player_pos.z);
 
-        const int distance = 20;
+        constexpr Color top_tint = WHITE;
+        constexpr Color east_tint = WHITE;
+        constexpr Color west_tint = 0xBFBFBFFF;
+        constexpr Color other_tint = 0xDFDFDFFF;
+        constexpr Vec2 size = {1, 1};
 
-        int x_start = std::max(int(player_pos.x) - distance, MAP_MIN_X);
-        int x_end = std::min(int(player_pos.x) + distance, MAP_MAX_X);
+        constexpr int distance = 19;
+        Vec3i start = player_pos - distance, end = player_pos + distance;
+        for (int i = 0; i < 3; i++) {
+            start[i] = std::max(start[i], MAP_MIN[i]);
+            end[i] = std::min(end[i], MAP_MAX[i]);
+        }
+        if (hide_above_level) end.z = std::min(int(player_pos.z + 1), end.z);
 
-        int y_start = std::max(int(player_pos.y) - distance, MAP_MIN_Y);
-        int y_end = std::min(int(player_pos.y) + distance, MAP_MAX_Y);
+        for (int x = start.x; x < end.x; x++) {
+            for (int y = start.y; y < end.y; y++) {
+                for (int z = start.z; z < end.z; z++) {
+                    const Block &cell = get(x, y, z);
+                    if (cell.other == Block::Kind::air and cell.top == Block::Kind::air) continue;
+                    const bool draw_top = hide_above_level and int(player_pos.z) == z
+                                              ? cell.other != Block::Kind::air
+                                              : checkFaceVisible(x, y, z + 1);
+                    if (!draw_top and cell.other == Block::Kind::air) continue;
 
-        int z_start = std::max(int(player_pos.z) - distance, MAP_MIN_Z);
-        int z_end = std::min(int(player_pos.z) + distance, MAP_MAX_Z);
-        if (hide_above_level) z_end = std::min(int(player_pos.z + 1), z_end);
-
-        for (int x = x_start; x < x_end; x++) {
-            for (int y = y_start; y < y_end; y++) {
-                for (int z = z_start; z < z_end; z++) {
-                    const Cell cell = get(x, y, z);
-                    if (cell.block == Block::air and cell.top == Block::air) continue;
-
-                    const Rect block = blocks[int(cell.block)];
+                    const Rect other = blocks[int(cell.other)];
                     const Rect top = blocks[int(cell.top)];
 
-                    const bool draw_top = hide_above_level and int(player_pos.z) == z
-                                              ? cell.block != Block::air
-                                              : checkFaceVisible(x, y, z + 1);
-
-                    if (draw_top) {
-                        instances->append(
-                            {Vec3(x, y, z + 0.5F), {1, 1}, top, WHITE, Face::z_pos, 0});
+                    switch (cell.shape) {
+                    case Block::Shape::block: {
+                        if (draw_top) {
+                            instances->squares.append(
+                                {Vec3(x, y, z + 0.5F), size, top, top_tint, Face::z_pos, 0});
+                        }
+                        if (checkFaceVisible(x + 1, y, z))
+                            instances->squares.append(
+                                {Vec3(x + 0.5F, y, z), size, other, east_tint, Face::x_pos, 0});
+                        if (checkFaceVisible(x - 1, y, z))
+                            instances->squares.append(
+                                {Vec3(x - 0.5F, y, z), size, other, west_tint, Face::x_neg, 0});
+                        if (checkFaceVisible(x, y + 1, z))
+                            instances->squares.append(
+                                {Vec3(x, y + 0.5F, z), size, other, other_tint, Face::y_pos, 0});
+                        if (checkFaceVisible(x, y - 1, z))
+                            instances->squares.append(
+                                {Vec3(x, y - 0.5F, z), size, other, other_tint, Face::y_neg, 0});
+                        break;
                     }
-
-                    if (checkFaceVisible(x + 1, y, z))
-                        instances->append(
-                            {Vec3(x + 0.5F, y, z), {1, 1}, block, WHITE, Face::x_pos, 0});
-
-                    if (checkFaceVisible(x - 1, y, z))
-                        instances->append(
-                            {Vec3(x - 0.5F, y, z), {1, 1}, block, 0xBFBFBFFF, Face::x_neg, 0});
-
-                    if (checkFaceVisible(x, y + 1, z))
-                        instances->append(
-                            {Vec3(x, y + 0.5F, z), {1, 1}, block, 0xDFDFDFFF, Face::y_pos, 0});
-
-                    if (checkFaceVisible(x, y - 1, z))
-                        instances->append(
-                            {Vec3(x, y - 0.5F, z), {1, 1}, block, 0xDFDFDFFF, Face::y_neg, 0});
+                    case Block::Shape::slope_sn: {
+                        if (draw_top) {
+                            instances->squares.append(
+                                {Vec3(x, y, z), size, top, top_tint, Face::slope, deg2rad(0)});
+                        }
+                        if (checkFaceVisible(x + 1, y, z))
+                            instances->triangles.append({Vec3(x + 0.5F, y, z), size, other,
+                                                         east_tint, Face::x_pos, deg2rad(0)});
+                        if (checkFaceVisible(x - 1, y, z))
+                            instances->triangles.append({Vec3(x - 0.5F, y, z), size, other,
+                                                         west_tint, Face::x_neg, deg2rad(180)});
+                        if (checkFaceVisible(x, y + 1, z))
+                            instances->squares.append({Vec3(x, y + 0.5F, z), size, other,
+                                                       other_tint, Face::y_pos, deg2rad(0)});
+                        break;
+                    }
+                    case Block::Shape::slope_ns: {
+                        if (draw_top) {
+                            instances->squares.append(
+                                {Vec3(x, y, z), size, top, top_tint, Face::slope, deg2rad(180)});
+                        }
+                        if (checkFaceVisible(x + 1, y, z))
+                            instances->triangles.append({Vec3(x + 0.5F, y, z), size, other,
+                                                         east_tint, Face::x_pos, deg2rad(180)});
+                        if (checkFaceVisible(x - 1, y, z))
+                            instances->triangles.append({Vec3(x - 0.5F, y, z), size, other,
+                                                         west_tint, Face::x_neg, deg2rad(0)});
+                        if (checkFaceVisible(x, y + 1, z))
+                            instances->squares.append({Vec3(x, y - 0.5F, z), size, other,
+                                                       other_tint, Face::y_neg, deg2rad(0)});
+                        break;
+                    }
+                    case Block::Shape::slope_ew: {
+                        if (draw_top) {
+                            instances->squares.append(
+                                {Vec3(x, y, z), size, top, top_tint, Face::slope, deg2rad(90)});
+                        }
+                        if (checkFaceVisible(x - 1, y, z))
+                            instances->squares.append({Vec3(x - 0.5F, y, z), size, other,
+                                                       west_tint, Face::x_neg, deg2rad(0)});
+                        if (checkFaceVisible(x, y + 1, z))
+                            instances->triangles.append({Vec3(x, y + 0.5F, z), size, other,
+                                                         other_tint, Face::y_pos, deg2rad(0)});
+                        if (checkFaceVisible(x, y - 1, z))
+                            instances->triangles.append({Vec3(x, y - 0.5F, z), size, other,
+                                                         other_tint, Face::y_neg, deg2rad(180)});
+                        break;
+                    }
+                    case Block::Shape::slope_we: {
+                        if (draw_top) {
+                            instances->squares.append(
+                                {Vec3(x, y, z), size, top, top_tint, Face::slope, deg2rad(-90)});
+                        }
+                        if (checkFaceVisible(x + 1, y, z))
+                            instances->squares.append({Vec3(x + 0.5F, y, z), size, other,
+                                                       east_tint, Face::x_pos, deg2rad(0)});
+                        if (checkFaceVisible(x, y + 1, z))
+                            instances->triangles.append({Vec3(x, y + 0.5F, z), size, other,
+                                                         other_tint, Face::y_pos, deg2rad(180)});
+                        if (checkFaceVisible(x, y - 1, z))
+                            instances->triangles.append({Vec3(x, y - 0.5F, z), size, other,
+                                                         other_tint, Face::y_neg, deg2rad(0)});
+                        break;
+                    }
+                    }
                 }
             }
         }

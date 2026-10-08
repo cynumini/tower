@@ -13,12 +13,15 @@ static struct World {
     static constexpr uint MAX_INSTANCES = 256 * 256 * 3;
 
     SDL_GPUGraphicsPipeline *pipeline;
-    SDL_GPUBuffer *vertex_buffer;
+    SDL_GPUBuffer *vertex_buffer_squre;
+    SDL_GPUBuffer *vertex_buffer_triangle;
     SDL_GPUBuffer *index_buffer;
     SDL_GPUBuffer *buffer;
 
-    uint instances_len;
-    uint prev_instances_len;
+    uint squares_len;
+    uint triangles_len;
+    uint prev_squares_len;
+    uint prev_triangles_len;
 
     struct UBO {
         Mat4 view;
@@ -28,10 +31,9 @@ static struct World {
     } ubo;
 
     void resize(float w, float h) {
-        constexpr float sqrt2 = 1.41421356237F;
-        constexpr float diagonal_blocks = 16.0F;
-        float logical_w = sqrt2 * diagonal_blocks;
-        float logical_h = sqrt2 * (diagonal_blocks * 9.0F / 16.0F);
+        constexpr float blocks = 15;
+        float logical_h = blocks;
+        float logical_w = logical_h * 16.0F / 9.0F;
         if (w / h < 16.0F / 9.0F) {
             logical_h = h * logical_w / w;
         } else {
@@ -77,7 +79,7 @@ static struct World {
         createinfo.depth_stencil_state = {
             .compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL, // TODO: why not just less?
             .enable_depth_test = true,
-           .enable_depth_write = true,
+            .enable_depth_write = true,
         };
 
         const SDL_GPUColorTargetDescription color_target_description = {
@@ -103,11 +105,17 @@ static struct World {
     }
 
     void uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
-        Vec2 vertices[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
+        Vec2 vertices_squre[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
+        Vec2 vertices_triangle[3] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}};
         i16 indices[6]{0, 1, 2, 0, 2, 3};
 
-        vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
-        SDL_assert(vertex_buffer);
+        vertex_buffer_squre =
+            createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices_squre));
+        SDL_assert(vertex_buffer_squre);
+
+        vertex_buffer_triangle =
+            createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices_triangle));
+        SDL_assert(vertex_buffer_triangle);
 
         index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
         SDL_assert(index_buffer);
@@ -116,8 +124,8 @@ static struct World {
             createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(Instance) * MAX_INSTANCES);
         SDL_assert(buffer);
 
-        auto *transfer_buffer =
-            createGPUTransferBuffer(device, sizeof(vertices) + sizeof(indices));
+        auto *transfer_buffer = createGPUTransferBuffer(
+            device, sizeof(vertices_squre) + sizeof(vertices_triangle) + sizeof(indices));
         defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
         SDL_assert(transfer_buffer);
 
@@ -126,45 +134,64 @@ static struct World {
             defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
             SDL_assert(memory);
 
-            SDL_memcpy(memory, vertices, sizeof(vertices));
-            SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
+            SDL_memcpy(memory, vertices_squre, sizeof(vertices_squre));
+            SDL_memcpy(memory + sizeof(vertices_squre), indices, sizeof(indices));
+            SDL_memcpy(memory + sizeof(vertices_squre) + sizeof(vertices_triangle), indices,
+                       sizeof(indices));
         }
-        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, vertex_buffer, sizeof(vertices));
-        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), index_buffer,
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, vertex_buffer_squre,
+                          sizeof(vertices_squre));
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, vertex_buffer_triangle,
+                          sizeof(vertices_triangle));
+        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices_squre), 0, index_buffer,
                           sizeof(indices));
     }
 
     void release(SDL_GPUDevice *device) {
         SDL_ReleaseGPUBuffer(device, buffer);
         SDL_ReleaseGPUBuffer(device, index_buffer);
-        SDL_ReleaseGPUBuffer(device, vertex_buffer);
+        SDL_ReleaseGPUBuffer(device, vertex_buffer_squre);
+        SDL_ReleaseGPUBuffer(device, vertex_buffer_triangle);
         SDL_ReleaseGPUGraphicsPipeline(device, pipeline);
     }
 
-    Fixed<Instance> beginUpload(SDL_GPUDevice *device, SDL_GPUTransferBuffer *transfer_buffer) {
+    using Instances = WorldInstances;
+
+    Instances beginUpload(SDL_GPUDevice *device, SDL_GPUTransferBuffer *transfer_buffer) {
         Instance *instances_raw =
             (Instance *)SDL_MapGPUTransferBuffer(device, transfer_buffer, true);
         SDL_assert(instances_raw);
 
-        return Fixed<Instance>::init({MAX_INSTANCES, instances_raw});
+        constexpr auto half = MAX_INSTANCES / 2;
+
+        return {Fixed<Instance>::init({half, instances_raw}),
+                Fixed<Instance>::init({half, instances_raw + half})};
     }
 
     void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,
-                   SDL_GPUTransferBuffer *transfer_buffer, size_t instances_len) {
-        this->instances_len = instances_len;
+                   SDL_GPUTransferBuffer *transfer_buffer, Instances *instances) {
+        squares_len = instances->squares.len;
+        triangles_len = instances->triangles.len;
         SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
-        if (this->instances_len) {
-            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, buffer,
-                              sizeof(Instance) * instances_len);
+        constexpr auto half = MAX_INSTANCES / 2;
+        constexpr auto half_offset = half * sizeof(Instance);
+
+        if (squares_len) {
+            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, buffer,
+                              sizeof(Instance) * squares_len);
+        }
+        if (triangles_len) {
+            uploadToGPUBuffer(copy_pass, transfer_buffer, half_offset, half_offset, buffer,
+                              sizeof(Instance) * triangles_len);
         }
     }
 
-    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
-              Texture atlas, SDL_GPUSampler *sampler, Camera *camera) {
+    void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass, Texture atlas,
+              SDL_GPUSampler *sampler, Camera *camera) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
-        SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
+        SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer_squre, 0}, {buffer, 0}};
         SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
 
         const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
@@ -174,15 +201,20 @@ static struct World {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        ubo.view = Mat4::rotationX(deg2rad(camera->pitch)) *
-                   Mat4::rotationZ(deg2rad(camera->yaw)) *
+        ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
                    Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
         ubo.yaw = deg2rad(camera->yaw);
         ubo.atlas_size = {atlas.w, atlas.h};
 
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(render_pass, 6, squares_len, 0, 0, 0);
 
-        prev_instances_len = instances_len;
+        // triangle
+        buffer_bindings[0] = {vertex_buffer_triangle, 0};
+        SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
+        SDL_DrawGPUPrimitives(render_pass, 3, triangles_len, 0, MAX_INSTANCES / 2);
+
+        prev_squares_len = squares_len;
+        prev_triangles_len = triangles_len;
     }
 } world;

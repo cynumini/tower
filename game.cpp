@@ -297,7 +297,7 @@ static struct Game {
         map.init(engine);
     }
 
-    void update(Engine *engine, Fixed<WorldInstance> *instances) {
+    void update(Engine *engine, WorldInstances *instances) {
 
         float yaw =
             engine->is_key_just_released(Key::kp_4) - engine->is_key_just_released(Key::kp_6);
@@ -346,7 +346,7 @@ static struct Game {
                     int level_diff = engine->is_key_just_released(Key::pageup) -
                                      engine->is_key_just_released(Key::pagedown);
                     player->pos.z =
-                        std::clamp(player->pos.z + level_diff, 1.0F, float(Map::MAP_MAX_Z - 1));
+                        std::clamp(player->pos.z + level_diff, 1.0F, float(Map::MAP_MAX.z - 1));
 
                     if (engine->is_key_just_released(Key::kp_5)) {
                         map.hide_above_level = !map.hide_above_level;
@@ -481,12 +481,12 @@ static struct Game {
                 break;
             case Object::Kind::attack: {
                 use_default = false;
-                instances->append({{object.pos},
-                                   object.size,
-                                   object.sprite,
-                                   object.tint,
-                                   Face::z_pos,
-                                   object.angle});
+                instances->squares.append({{object.pos},
+                                           object.size,
+                                           object.sprite,
+                                           object.tint,
+                                           Face::z_pos,
+                                           object.angle});
                 break;
             }
             case Object::Kind::spell:
@@ -495,12 +495,12 @@ static struct Game {
                 break;
             }
             if (use_default) {
-                instances->append({{object.pos},
-                                   object.size,
-                                   object.sprite,
-                                   object.tint,
-                                   Face::billboard,
-                                   0.0F});
+                instances->squares.append({{object.pos},
+                                           object.size,
+                                           object.sprite,
+                                           object.tint,
+                                           Face::billboard,
+                                           0.0F});
             }
         }
 
@@ -538,8 +538,8 @@ static struct Game {
                 sign = '?';
                 if (quest.status == Quest::ACTIVE) color = WHITE;
             }
-            engine->drawWorldSymbol(instances, {quest.pos.xy(), quest.pos.z + 0.75F}, sign, SIZE,
-                                    color, engine->default_font);
+            engine->drawWorldSymbol(&instances->squares, {quest.pos.xy(), quest.pos.z + 0.75F},
+                                    sign, SIZE, color, engine->default_font);
         }
 
         // debug (show collision)
@@ -558,7 +558,7 @@ static struct Game {
                 if (!object.alive) continue;
 
                 if (object.kind == Object::Kind::attack) {
-                    instances->append({
+                    instances->squares.append({
                         .position = object.pos,
                         .size = object.size,
                         .uv = solid,
@@ -571,7 +571,7 @@ static struct Game {
 
                 if (object.isInteractable()) {
                     auto collision = object.getInteraction();
-                    instances->append({
+                    instances->squares.append({
                         .position = object.pos,
                         .size = collision.size(),
                         .uv = solid,
@@ -584,7 +584,7 @@ static struct Game {
 
                 if (object.isSolid()) {
                     auto collision = object.getCollision();
-                    instances->append({
+                    instances->squares.append({
                         .position = object.pos,
                         .size = collision.size(),
                         .uv = solid,
@@ -594,16 +594,12 @@ static struct Game {
                     });
                 }
             }
-        }
-
-        instances->append({Vec3(0, 0, 64), {1, 1}, engine->sprites.get("wood_floor"), WHITE, Face::slope, deg2rad(270)});
+        };
     }
 
     void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
                   int render_height) {
         ScopeArena scope(&arena);
-        // update
-        // draw
 
         if (engine->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
 

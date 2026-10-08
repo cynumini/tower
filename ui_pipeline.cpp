@@ -121,8 +121,8 @@ static struct UI {
             SDL_memcpy(memory, vertices, sizeof(vertices));
             SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
         }
-        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, vertex_buffer, sizeof(vertices));
-        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), index_buffer,
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, vertex_buffer, sizeof(vertices));
+        uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), 0, index_buffer,
                           sizeof(indices));
     }
 
@@ -152,7 +152,7 @@ static struct UI {
         SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
 
         if (this->instances_len) {
-            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, buffer,
+            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, buffer,
                               sizeof(Instance) * instances_len);
         }
     }

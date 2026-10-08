@@ -36,7 +36,7 @@ static struct Time {
     float ms;
 } time;
 
-void Engine::update(Fixed<WorldInstance> *instances) {
+void Engine::update(WorldInstances *instances) {
     if (is_key_just_pressed(Key::escape)) running = true;
     if (is_key_just_pressed(Key::f3)) debug_mode = !debug_mode;
 }
@@ -62,8 +62,11 @@ void Engine::updateUI(Fixed<UIInstance> *instances, int width, int height) {
         drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "UI instances: %d/%d",
                   ui.prev_instances_len, ui.MAX_INSTANCES);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World instances: %d/%d",
-                  world.prev_instances_len, world.MAX_INSTANCES);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World square instances: %d/%d",
+                  world.prev_squares_len, world.MAX_INSTANCES / 2);
+        offset_y += 12;
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World triangle instances: %d/%d",
+                  world.prev_triangles_len, world.MAX_INSTANCES / 2);
         offset_y += 12;
     }
 }
@@ -101,7 +104,7 @@ void resize(int width, int height) {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena = Arena::init(MB(33));
+    arena = Arena::init(MB(64));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -109,7 +112,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-    int screen_width = 1280, screen_height = 720;
+    int screen_width = 853, screen_height = 480;
     window = SDL_CreateWindow(name, screen_width, screen_height, SDL_WINDOW_RESIZABLE);
     SDL_CHECK(window);
 
@@ -351,12 +354,13 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
         {
             auto instances = world.beginUpload(device, instance_transfer_buffer);
-            defer(world.endUpload(device, copy_pass, instance_transfer_buffer, instances.len));
+            defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
 
             game.update(&engine, &instances);
             engine.update(&instances);
 
-            for (auto &instance : instances) instance.uv /= 4096.0F;
+            for (auto &instance : instances.squares) instance.uv /= 4096.0F;
+            for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
         }
 
         {
