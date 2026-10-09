@@ -298,7 +298,6 @@ static struct Game {
     }
 
     void update(Engine *engine, WorldInstances *instances) {
-
         float yaw =
             engine->is_key_just_released(Key::kp_4) - engine->is_key_just_released(Key::kp_6);
         float pitch =
