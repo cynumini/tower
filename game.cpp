@@ -595,23 +595,6 @@ static struct Game {
                 }
             }
         };
-
-        // door test
-        Rect door = engine->sprites.get("door");
-        Rect door_front_back = {door.position() + Vec2{0, 4}, {32, 32}};
-        Rect door_top = {door.position(), {32, 4}};
-        Rect door_side = {door.position() + Vec2(32, 4), {4, 32}};
-        float unit = 1.0F / 32.0F;
-        instances->squares.append(
-            {{0, -2 * unit, 64}, {1, 1}, door_front_back, WHITE, Face::y_pos, 0});
-        instances->squares.append(
-            {{0, +2 * unit, 64}, {1, 1}, door_front_back, WHITE, Face::y_neg, 0});
-        instances->squares.append(
-            {{0, 0, 64 + 0.5}, {1.0f, 4 * unit}, door_top, WHITE, Face::z_pos, 0});
-        instances->squares.append(
-            {{0.5, 0, 64}, {4 * unit, 1.0F}, door_side, WHITE, Face::x_pos, 0});
-        instances->squares.append(
-            {{-0.5, 0, 64}, {4 * unit, 1.0F}, door_side, WHITE, Face::x_neg, 0});
     }
 
     void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
@@ -649,7 +632,6 @@ static struct Game {
             engine->drawText(instances, text, pos + Vec2(4, 4));
             break;
         }
-
         if (show_location.active) {
             if (show_location.timer.advanceAndCheck(engine->dt)) {
                 show_location.active = false;

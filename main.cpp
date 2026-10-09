@@ -104,7 +104,7 @@ void resize(int width, int height) {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena = Arena::init(MB(64));
+    arena = Arena::init(MB(48));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
