@@ -345,7 +345,7 @@ static struct Game {
                     int level_diff = engine->is_key_just_released(Key::pageup) -
                                      engine->is_key_just_released(Key::pagedown);
                     player->pos.z =
-                        std::clamp(player->pos.z + level_diff, 1.0F, float(Map::MAP_MAX.z - 1));
+                        std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_MAX_Z - 1));
 
                     if (engine->is_key_just_released(Key::kp_5)) {
                         map.hide_above_level = !map.hide_above_level;
@@ -506,27 +506,27 @@ static struct Game {
         engine->camera.pos = player->pos;
 
         // current location
-        {
-            bool outside = true;
-            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
-                auto *location = &locations[i];
-                if (checkCollisionPointRect(
-                        player->pos,
-                        {location->rect.position() - Vec3(0.5F, 0.5F), location->rect.size()})) {
-                    outside = false;
-                    show_location.curr_id = i;
-                }
-            }
-            if (outside) {
-                show_location.curr_id = -1;
-            }
-            if (show_location.curr_id != show_location.prev_id) {
-                show_location.active = true;
-                show_location.timer.reset();
-                show_location.prev_id = show_location.curr_id;
-            } else {
-            }
-        }
+        // {
+        //     bool outside = true;
+        //     for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+        //         auto *location = &locations[i];
+        //         if (checkCollisionPointRect(
+        //                 player->pos,
+        //                 {location->rect.position() - Vec3(0.5F, 0.5F), location->rect.size()})) {
+        //             outside = false;
+        //             show_location.curr_id = i;
+        //         }
+        //     }
+        //     if (outside) {
+        //         show_location.curr_id = -1;
+        //     }
+        //     if (show_location.curr_id != show_location.prev_id) {
+        //         show_location.active = true;
+        //         show_location.timer.reset();
+        //         show_location.prev_id = show_location.curr_id;
+        //     } else {
+        //     }
+        // }
 
         // quest marker
         if (quest.status != Quest::REWARDED) {
@@ -631,32 +631,32 @@ static struct Game {
             engine->drawText(instances, text, pos + Vec2(4, 4));
             break;
         }
-        if (show_location.active) {
-            if (show_location.timer.advanceAndCheck(engine->dt)) {
-                show_location.active = false;
-            } else {
-                auto height = 20.0F;
-                const char *name;
+        // if (show_location.active) {
+        //     if (show_location.timer.advanceAndCheck(engine->dt)) {
+        //         show_location.active = false;
+        //     } else {
+        //         auto height = 20.0F;
+        //         const char *name;
 
-                if (show_location.curr_id == -1) {
-                    name = "Outside";
-                } else {
-                    name = locations[show_location.curr_id].name;
-                }
+        //         if (show_location.curr_id == -1) {
+        //             name = "Outside";
+        //         } else {
+        //             name = locations[show_location.curr_id].name;
+        //         }
 
-                auto width = engine->measureText(sliceFromStrZ(name), height);
+        //         auto width = engine->measureText(sliceFromStrZ(name), height);
 
-                u8 alpha = 255;
-                if (show_location.timer.elapsed > 1.0F) {
-                    alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
-                }
+        //         u8 alpha = 255;
+        //         if (show_location.timer.elapsed > 1.0F) {
+        //             alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
+        //         }
 
-                engine->drawText(instances, sliceFromStrZ(name),
-                                 {(float(render_width) / 2.0F) - (width / 2.0F),
-                                  (float(render_height) / 2.0F) - (height / 2.0F)},
-                                 height, {WHITE.r, WHITE.g, WHITE.b, alpha});
-            }
-        }
+        //         engine->drawText(instances, sliceFromStrZ(name),
+        //                          {(float(render_width) / 2.0F) - (width / 2.0F),
+        //                           (float(render_height) / 2.0F) - (height / 2.0F)},
+        //                          height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+        //     }
+        // }
 
         if (inventory_visible) {
             for (size_t x_i = 0; x_i < 8; x_i++) {

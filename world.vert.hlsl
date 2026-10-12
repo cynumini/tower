@@ -11,7 +11,7 @@ struct Input {
     float3 instance_position : TEXCOORD1;
     float2 size              : TEXCOORD2;
     float4 uv                : TEXCOORD3;
-    float4 color          : TEXCOORD4;
+    float4 color             : TEXCOORD4;
     uint   face              : TEXCOORD5;
     float  angle             : TEXCOORD6;
 };
@@ -35,10 +35,10 @@ Output main(Input input) {
     float3 position;
 
     switch (input.face) {
-    case 0: position = float3(0,  p.x,  p.y); break; // X+
-    case 1: position = float3(0, -p.x,  p.y); break; // X-
-    case 2: position = float3(-p.x, 0,  p.y); break; // Y+
-    case 3: position = float3( p.x, 0,  p.y); break; // Y-
+    case 0: position = float3(-p.x, 0,  p.y); break; // Y+
+    case 1: position = float3(0,  p.x,  p.y); break; // X+
+    case 2: position = float3( p.x, 0,  p.y); break; // Y-
+    case 3: position = float3(0, -p.x,  p.y); break; // X-
     case 4: position = float3( p.x,  p.y, 0); break; // Z+
     case 5: position = float3(-p.x,  p.y, 0); break; // Z-
     case 6: {

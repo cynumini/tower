@@ -113,7 +113,7 @@ struct UIInstance {
     Color color;
 };
 
-enum class Face : u32 { x_pos, x_neg, y_pos, y_neg, z_pos, z_neg, billboard, slope };
+enum class Face : u32 { y_pos, x_pos, y_neg, x_neg, z_pos, z_neg, billboard, slope };
 
 struct WorldInstance {
     Vec3 position;
