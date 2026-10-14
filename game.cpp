@@ -55,8 +55,8 @@ struct Timer {
     };
 };
 
-// Object
-struct Object {
+// Entity
+struct Entity {
     float speed;
     float angle;
     int hp;
@@ -74,7 +74,7 @@ struct Object {
     bool invincible;
     Color tint;
 
-    static Object create(Kind kind, Rect sprite, bool alive = false, Vec3 pos = {}) {
+    static Entity create(Kind kind, Rect sprite, bool alive = false, Vec3 pos = {}) {
         return {.pos = pos,
                 .size = sprite.size() / 64,
                 .sprite = sprite,
@@ -167,9 +167,9 @@ static struct Animation {
 } player_down, player_right, player_left, player_up;
 
 struct Filter {
-    Object *ptr;
-    Object *end_ptr;
-    bool (*predicate)(Object *);
+    Entity *ptr;
+    Entity *end_ptr;
+    bool (*predicate)(Entity *);
 
     void skip() {
         while (ptr != end_ptr and !predicate(ptr)) ptr++;
@@ -188,26 +188,25 @@ struct Filter {
 
     Filter end() { return {end_ptr, end_ptr, predicate}; }
 
-    Object &operator*() const { return *ptr; }
+    Entity &operator*() const { return *ptr; }
 
     bool operator!=(const Filter &query) const { return ptr != query.ptr; }
 };
 
-static Filter makeFilter(Fixed<Object> object, bool (*predicate)(Object *)) {
-    return Filter{object.begin(), object.end(), predicate};
+static Filter makeFilter(Fixed<Entity> &entities, bool (*predicate)(Entity *)) {
+    return Filter{entities.begin(), entities.end(), predicate};
 }
 
-const u8 OBJECTS_MAX = 255;
-static Object objects_raw[OBJECTS_MAX];
-static Fixed<Object> objects;
+static constexpr size_t ENTITIES_MAX = std::numeric_limits<u8>::max();
+static Static<Entity, ENTITIES_MAX> entities;
 
 // Mpas
 static Map map;
 
 // ids
-static Object *player;
-static Object *attack;
-static Object *spell;
+static Entity *player;
+static Entity *attack;
+static Entity *spell;
 
 static struct ShowLocation {
     bool active;
@@ -247,29 +246,28 @@ static struct Game {
         player_right.init(engine->sprites.get("player_right"), 3);
         player_left.init(engine->sprites.get("player_right"), 3, true);
 
-        // objects
-        objects = {{0, objects_raw}, OBJECTS_MAX};
+        // entities
+        entities.init();
+        using Kind = Entity::Kind;
+        using Body = Entity::Body;
 
-        using Kind = Object::Kind;
-        using Body = Object::Body;
-
-        player = objects.append(
-            Object::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
+        player = entities.append(
+            Entity::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
         player->timer = Timer::init(0.2F);
         player->direction = {0.0F, 1.0F};
         player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
 
         attack =
-            objects.append(Object::create(Kind::attack, engine->sprites.get("attack_trail1")));
+            entities.append(Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
         attack->timer = Timer::init(0.1F);
 
-        spell = objects.append(Object::create(Kind::spell, engine->sprites.get("spell0")));
+        spell = entities.append(Entity::create(Kind::spell, engine->sprites.get("spell0")));
 
         {
-            auto *object = objects.append(Object::create(
+            auto *entity = entities.append(Entity::create(
                 Kind::npc, engine->sprites.get("character"), true, {32, 0, SEA_LEVEL}));
-            object->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
-            object->interaction_rel = Rect(0, 0, 1, 1);
+            entity->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
+            entity->interaction_rel = Rect(0, 0, 1, 1);
         }
 
         // {
@@ -285,13 +283,13 @@ static struct Game {
 
         const u8 ENEMY_COUNT = 50;
         for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto *object = objects.append(
-                Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
+            auto *entity = entities.append(
+                Entity::create(Kind::enemy, engine->sprites.get("zombie"), true,
                                {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
                                 float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
-            object->addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
-            object->hp = 5;
-            object->timer = Timer::init(0.2F);
+            entity->addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
+            entity->hp = 5;
+            entity->timer = Timer::init(0.2F);
         }
 
         map.init(engine, player->pos);
@@ -320,17 +318,17 @@ static struct Game {
 
         map.update(engine, instances, player->pos);
 
-        for (auto &object : objects) {
-            if (!object.alive) continue;
+        for (auto &entity : entities) {
+            if (!entity.alive) continue;
             if (!pause) {
-                switch (object.kind) {
-                case Object::Kind::player: {
+                switch (entity.kind) {
+                case Entity::Kind::player: {
                     if (engine->is_key_just_pressed(Key::space)) {
                         attack->alive = true;
                     }
                     if (engine->is_key_just_pressed(Key::f)) {
                         spell->alive = true;
-                        spell->pos = object.pos;
+                        spell->pos = entity.pos;
                         spell->direction = player->direction;
                         spell->speed = 8;
                     }
@@ -353,80 +351,80 @@ static struct Game {
 
                     u8 frame = 0;
                     if (velocity.length() > 0.0F) {
-                        if (object.timer.advanceAndCheck(engine->dt)) {
-                            object.frame += 1;
-                            object.frame %= 4;
+                        if (entity.timer.advanceAndCheck(engine->dt)) {
+                            entity.frame += 1;
+                            entity.frame %= 4;
                         };
-                        frame = object.frame;
+                        frame = entity.frame;
                         if (frame == 2) {
                             frame = 0;
                         } else if (frame == 3) {
                             frame = 2;
                         }
 
-                        object.direction = velocity;
-                        object.speed = 4;
+                        entity.direction = velocity;
+                        entity.speed = 4;
                     } else {
-                        object.speed = 0;
-                        object.frame = 0;
-                        object.timer.reset();
+                        entity.speed = 0;
+                        entity.frame = 0;
+                        entity.timer.reset();
                     }
 
-                    auto d = object.direction.rotate(deg2rad(-engine->camera.yaw));
+                    auto d = entity.direction.rotate(deg2rad(-engine->camera.yaw));
                     if (d.y > 0) {
-                        object.sprite = player_up.get(frame);
+                        entity.sprite = player_up.get(frame);
                     } else if (d.y < 0) {
-                        object.sprite = player_down.get(frame);
+                        entity.sprite = player_down.get(frame);
                     } else if (d.x > 0) {
-                        object.sprite = player_right.get(frame);
+                        entity.sprite = player_right.get(frame);
                     } else if (d.x < 0) {
-                        object.sprite = player_left.get(frame);
+                        entity.sprite = player_left.get(frame);
                     }
 
                     break;
                 }
-                case Object::Kind::enemy: {
-                    if (object.speed > 0.0F) {
+                case Entity::Kind::enemy: {
+                    if (entity.speed > 0.0F) {
                         const float KNOCKBACK_FRICTION = 40;
-                        object.speed -= KNOCKBACK_FRICTION * engine->dt;
+                        entity.speed -= KNOCKBACK_FRICTION * engine->dt;
                     } else {
-                        object.speed = 0.0F;
+                        entity.speed = 0.0F;
                     }
 
-                    if (object.invincible) {
-                        object.tint = RED;
-                        if (object.timer.advanceAndCheck(engine->dt)) {
-                            object.invincible = false;
-                            object.tint = WHITE;
+                    if (entity.invincible) {
+                        entity.tint = RED;
+                        if (entity.timer.advanceAndCheck(engine->dt)) {
+                            entity.invincible = false;
+                            entity.tint = WHITE;
                         }
                     }
 
                     if (attack->alive and
-                        checkCollisionSAT(attack->rect(), attack->angle, object.getCollision(),
+                        checkCollisionSAT(attack->rect(), attack->angle, entity.getCollision(),
                                           0) and
-                        !object.invincible) {
-                        object.takeDamage(attack->direction, inventory);
+                        !entity.invincible) {
+                        entity.takeDamage(attack->direction, inventory);
                     }
 
                     if (spell->alive and
-                        checkCollisionAABB(spell->rect(), object.getCollision()) and
-                        !object.invincible) {
-                        object.takeDamage(spell->direction, inventory);
+                        checkCollisionAABB(spell->rect(), entity.getCollision()) and
+                        !entity.invincible) {
+                        entity.takeDamage(spell->direction, inventory);
                         spell->alive = false;
                     }
                     break;
                 }
-                case Object::Kind::attack: {
-                    object.direction = player->direction;
-                    object.angle = atan2f(player->direction.y, player->direction.x);
-                    object.pos = player->pos + object.direction * 0.5;
-                    if (object.timer.advanceAndCheck(engine->dt)) object.alive = false;
+                case Entity::Kind::attack: {
+                    entity.direction = player->direction;
+                    entity.angle = atan2f(player->direction.y, player->direction.x);
+                    entity.pos = player->pos + entity.direction * 0.5;
+                    if (entity.timer.advanceAndCheck(engine->dt)) entity.alive = false;
                     break;
                 }
-                case Object::Kind::npc: {
-                    quest.pos = object.pos;
+                case Entity::Kind::npc: {
+                    quest.pos = entity.pos;
                     if (!dialog) {
-                        if (checkCollisionAABB(object.getInteraction(), player->getCollision())) {
+                        if (checkCollisionAABB(entity.getInteraction(), player->getCollision())) {
                             if (engine->is_key_just_pressed(Key::space)) {
                                 dialog = true;
                                 pause = true;
@@ -436,68 +434,68 @@ static struct Game {
                     }
                     break;
                 }
-                case Object::Kind::spell:
+                case Entity::Kind::spell:
                     break;
-                case Object::Kind::building:
+                case Entity::Kind::building:
                     // TODO: building move player to second level
                     break;
                 }
 
-                if (object.isSolid() and object.body == Object::Body::movable) {
+                if (entity.isSolid() and entity.body == Entity::Body::movable) {
                     Filter q = makeFilter(
-                        objects, [](Object *other) { return other->isSolid() and other->alive; });
-                    Vec2 velocity = object.direction * engine->dt * object.speed;
-                    object.pos.x += velocity.x;
-                    for (Object &other : q) {
-                        if (other.pos.z != object.pos.z) continue;
-                        if (&object != &other and
-                            checkCollisionAABB(object.getCollision(), other.getCollision())) {
-                            object.pos.x -= velocity.x;
+                        entities, [](Entity *other) { return other->isSolid() and other->alive; });
+                    Vec2 velocity = entity.direction * engine->dt * entity.speed;
+                    entity.pos.x += velocity.x;
+                    for (Entity &other : q) {
+                        if (other.pos.z != entity.pos.z) continue;
+                        if (&entity != &other and
+                            checkCollisionAABB(entity.getCollision(), other.getCollision())) {
+                            entity.pos.x -= velocity.x;
                             break;
                         }
                     }
-                    object.pos.y += velocity.y;
-                    for (Object &other : q) {
-                        if (other.pos.z != object.pos.z) continue;
-                        if (&object != &other and
-                            checkCollisionAABB(object.getCollision(), other.getCollision())) {
-                            object.pos.y -= velocity.y;
+                    entity.pos.y += velocity.y;
+                    for (Entity &other : q) {
+                        if (other.pos.z != entity.pos.z) continue;
+                        if (&entity != &other and
+                            checkCollisionAABB(entity.getCollision(), other.getCollision())) {
+                            entity.pos.y -= velocity.y;
                             break;
                         }
                     }
                 } else {
-                    object.pos += object.direction * engine->dt * object.speed;
+                    entity.pos += entity.direction * engine->dt * entity.speed;
                 }
             }
         }
 
-        for (auto &object : objects) {
-            if (!object.alive) continue;
+        for (auto &entity : entities) {
+            if (!entity.alive) continue;
             bool use_default = true;
-            switch (object.kind) {
-            case Object::Kind::player:
-            case Object::Kind::enemy:
+            switch (entity.kind) {
+            case Entity::Kind::player:
+            case Entity::Kind::enemy:
                 break;
-            case Object::Kind::attack: {
+            case Entity::Kind::attack: {
                 use_default = false;
-                instances->squares.append({{object.pos},
-                                           object.size,
-                                           object.sprite,
-                                           object.tint,
+                instances->squares.append({{entity.pos},
+                                           entity.size,
+                                           entity.sprite,
+                                           entity.tint,
                                            Face::z_pos,
-                                           object.angle});
+                                           entity.angle});
                 break;
             }
-            case Object::Kind::spell:
-            case Object::Kind::npc:
-            case Object::Kind::building:
+            case Entity::Kind::spell:
+            case Entity::Kind::npc:
+            case Entity::Kind::building:
                 break;
             }
             if (use_default) {
-                instances->squares.append({{object.pos},
-                                           object.size,
-                                           object.sprite,
-                                           object.tint,
+                instances->squares.append({{entity.pos},
+                                           entity.size,
+                                           entity.sprite,
+                                           entity.tint,
                                            Face::billboard,
                                            0.0F});
             }
@@ -540,7 +538,7 @@ static struct Game {
                 sign = '?';
                 if (quest.status == Quest::ACTIVE) color = WHITE;
             }
-            engine->drawWorldSymbol(&instances->squares, {quest.pos.xy(), quest.pos.z + 0.75F},
+            engine->drawWorldSymbol(&instances->squares, {quest.pos, quest.pos.z + 0.75F},
                                     sign, SIZE, color, engine->default_font);
         }
 
@@ -556,43 +554,43 @@ static struct Game {
             //     .rotation = 0,
             // });
 
-            for (auto &object : objects) {
-                if (!object.alive) continue;
+            for (auto &entity : entities) {
+                if (!entity.alive) continue;
 
-                if (object.kind == Object::Kind::attack) {
+                if (entity.kind == Entity::Kind::attack) {
                     instances->squares.append({
-                        .position = object.pos,
-                        .size = object.size,
+                        .position = entity.pos,
+                        .size = entity.size,
                         .uv = solid,
                         .color = 0xff00FF7f,
                         .face = Face::z_pos,
-                        .rotation = object.angle,
+                        .rotation = entity.angle,
 
                     });
                 }
 
-                if (object.isInteractable()) {
-                    auto collision = object.getInteraction();
+                if (entity.isInteractable()) {
+                    auto collision = entity.getInteraction();
                     instances->squares.append({
-                        .position = object.pos,
+                        .position = entity.pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0xff00007f,
                         .face = Face::z_pos,
-                        .rotation = object.angle,
+                        .rotation = entity.angle,
 
                     });
                 }
 
-                if (object.isSolid()) {
-                    auto collision = object.getCollision();
+                if (entity.isSolid()) {
+                    auto collision = entity.getCollision();
                     instances->squares.append({
-                        .position = object.pos,
+                        .position = entity.pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0x0000ff7f,
                         .face = Face::z_pos,
-                        .rotation = object.angle,
+                        .rotation = entity.angle,
                     });
                 }
             }
