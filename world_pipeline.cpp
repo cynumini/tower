@@ -164,8 +164,8 @@ static struct World {
 
         constexpr auto half = MAX_INSTANCES / 2;
 
-        return {Fixed<Instance>::init({half, instances_raw}),
-                Fixed<Instance>::init({half, instances_raw + half})};
+        return {Fixed<Instance>::create({half, instances_raw}),
+                Fixed<Instance>::create({half, instances_raw + half})};
     }
 
     void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,

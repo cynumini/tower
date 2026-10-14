@@ -253,8 +253,8 @@ static struct Game {
         using Kind = Object::Kind;
         using Body = Object::Body;
 
-        player =
-            objects.append(Object::create(Kind::player, player_down.get(0), true, {0, 0, 64}));
+        player = objects.append(
+            Object::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
         player->timer = Timer::init(0.2F);
         player->direction = {0.0F, 1.0F};
         player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
@@ -266,8 +266,8 @@ static struct Game {
         spell = objects.append(Object::create(Kind::spell, engine->sprites.get("spell0")));
 
         {
-            auto *object = objects.append(
-                Object::create(Kind::npc, engine->sprites.get("character"), true, {32, 0, 64}));
+            auto *object = objects.append(Object::create(
+                Kind::npc, engine->sprites.get("character"), true, {32, 0, SEA_LEVEL}));
             object->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
             object->interaction_rel = Rect(0, 0, 1, 1);
         }
@@ -285,16 +285,16 @@ static struct Game {
 
         const u8 ENEMY_COUNT = 50;
         for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto *object =
-                objects.append(Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
-                                              {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
-                                               float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, 64}));
+            auto *object = objects.append(
+                Object::create(Kind::enemy, engine->sprites.get("zombie"), true,
+                               {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
+                                float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
             object->addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
             object->hp = 5;
             object->timer = Timer::init(0.2F);
         }
 
-        map.init(engine);
+        map.init(engine, player->pos);
     }
 
     void update(Engine *engine, WorldInstances *instances) {
@@ -345,7 +345,7 @@ static struct Game {
                     int level_diff = engine->is_key_just_released(Key::pageup) -
                                      engine->is_key_just_released(Key::pagedown);
                     player->pos.z =
-                        std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_MAX_Z - 1));
+                        std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
 
                     if (engine->is_key_just_released(Key::kp_5)) {
                         map.hide_above_level = !map.hide_above_level;
@@ -506,27 +506,30 @@ static struct Game {
         engine->camera.pos = player->pos;
 
         // current location
-        // {
-        //     bool outside = true;
-        //     for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
-        //         auto *location = &locations[i];
-        //         if (checkCollisionPointRect(
-        //                 player->pos,
-        //                 {location->rect.position() - Vec3(0.5F, 0.5F), location->rect.size()})) {
-        //             outside = false;
-        //             show_location.curr_id = i;
-        //         }
-        //     }
-        //     if (outside) {
-        //         show_location.curr_id = -1;
-        //     }
-        //     if (show_location.curr_id != show_location.prev_id) {
-        //         show_location.active = true;
-        //         show_location.timer.reset();
-        //         show_location.prev_id = show_location.curr_id;
-        //     } else {
-        //     }
-        // }
+        {
+            bool outside = true;
+            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+                auto *location = &locations[i];
+                bool is_player_inside_location = false;
+                auto player_index = Map::indexFromPos(player->pos);
+                for (auto &chunk_id : location->chunk_ids) {
+                    if (chunk_id == player_index) is_player_inside_location = true;
+                }
+                if (is_player_inside_location) {
+                    outside = false;
+                    show_location.curr_id = i;
+                }
+            }
+            if (outside) {
+                show_location.curr_id = -1;
+            }
+            if (show_location.curr_id != show_location.prev_id) {
+                show_location.active = true;
+                show_location.timer.reset();
+                show_location.prev_id = show_location.curr_id;
+            } else {
+            }
+        }
 
         // quest marker
         if (quest.status != Quest::REWARDED) {
@@ -631,32 +634,32 @@ static struct Game {
             engine->drawText(instances, text, pos + Vec2(4, 4));
             break;
         }
-        // if (show_location.active) {
-        //     if (show_location.timer.advanceAndCheck(engine->dt)) {
-        //         show_location.active = false;
-        //     } else {
-        //         auto height = 20.0F;
-        //         const char *name;
+        if (show_location.active) {
+            if (show_location.timer.advanceAndCheck(engine->dt)) {
+                show_location.active = false;
+            } else {
+                auto height = 20.0F;
+                const char *name;
 
-        //         if (show_location.curr_id == -1) {
-        //             name = "Outside";
-        //         } else {
-        //             name = locations[show_location.curr_id].name;
-        //         }
+                if (show_location.curr_id == -1) {
+                    name = "Outside";
+                } else {
+                    name = locations[show_location.curr_id].name;
+                }
 
-        //         auto width = engine->measureText(sliceFromStrZ(name), height);
+                auto width = engine->measureText(sliceFromStrZ(name), height);
 
-        //         u8 alpha = 255;
-        //         if (show_location.timer.elapsed > 1.0F) {
-        //             alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
-        //         }
+                u8 alpha = 255;
+                if (show_location.timer.elapsed > 1.0F) {
+                    alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
+                }
 
-        //         engine->drawText(instances, sliceFromStrZ(name),
-        //                          {(float(render_width) / 2.0F) - (width / 2.0F),
-        //                           (float(render_height) / 2.0F) - (height / 2.0F)},
-        //                          height, {WHITE.r, WHITE.g, WHITE.b, alpha});
-        //     }
-        // }
+                engine->drawText(instances, sliceFromStrZ(name),
+                                 {(float(render_width) / 2.0F) - (width / 2.0F),
+                                  (float(render_height) / 2.0F) - (height / 2.0F)},
+                                 height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+            }
+        }
 
         if (inventory_visible) {
             for (size_t x_i = 0; x_i < 8; x_i++) {

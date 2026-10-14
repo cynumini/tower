@@ -143,7 +143,7 @@ static struct UI {
             (Instance *)SDL_MapGPUTransferBuffer(device, transfer_buffer, true);
         SDL_assert(instances_raw);
 
-        return {Fixed<Instance>::init({MAX_INSTANCES, instances_raw}), logical_w, logical_h};
+        return {Fixed<Instance>::create({MAX_INSTANCES, instances_raw}), logical_w, logical_h};
     }
 
     void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,
