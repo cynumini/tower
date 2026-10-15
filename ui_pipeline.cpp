@@ -24,6 +24,7 @@ static struct UI {
 
     struct UBO {
         Mat4 projection;
+        Vec2 atlas_size;
     } ubo;
 
     void resize(float w, float h) {
@@ -158,7 +159,7 @@ static struct UI {
     }
 
     void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
-              SDL_GPUTexture *atlas, SDL_GPUSampler *sampler) {
+              Texture atlas, SDL_GPUSampler *sampler) {
         SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
         SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer, 0}, {buffer, 0}};
@@ -167,10 +168,11 @@ static struct UI {
         const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
         SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas,
+        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
+        ubo.atlas_size = {atlas.w, atlas.h};
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, instances_len, 0, 0, 0);
 

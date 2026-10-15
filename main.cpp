@@ -104,7 +104,7 @@ void resize(int width, int height) {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena = Arena::init(MB(256));
+    arena = Arena::init(MB(1));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -112,7 +112,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-    int screen_width = 853, screen_height = 480;
+    int screen_width = 640, screen_height = 360;
     window = SDL_CreateWindow(name, screen_width, screen_height, SDL_WINDOW_RESIZABLE);
     SDL_CHECK(window);
 
@@ -406,7 +406,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         defer(SDL_EndGPURenderPass(render_pass));
 
         world.draw(command_buffer, render_pass, atlas, sampler, &engine.camera);
-        ui.draw(command_buffer, render_pass, atlas.ptr, sampler);
+        ui.draw(command_buffer, render_pass, atlas, sampler);
     }
 
     memset(engine.key_state, 0, sizeof(engine.key_state));

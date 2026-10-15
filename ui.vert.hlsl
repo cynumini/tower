@@ -1,6 +1,7 @@
 cbuffer UBO : register(b0, space1)
 {
     float4x4 projection;
+    float2 atlas_size;
 };
 
 struct Input {
@@ -25,7 +26,12 @@ Output main(Input input) {
         projection
     );
 
-    output.uv = input.uv.xy + input.vertex_position * input.uv.zw;
+    float2 uv = input.vertex_position;
+    // float2 padding = 0.5F / atlas_size;
+    float2 padding = 0;
+    float2 uv_min = input.uv.xy + padding;
+    float2 uv_max = input.uv.xy + input.uv.zw - padding;
+    output.uv = lerp(uv_min, uv_max, float2(uv.x, uv.y));
     output.color_out = input.color_in;
 
     return output;

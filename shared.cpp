@@ -172,14 +172,14 @@ static struct Engine {
         return measureText(text, size, default_font);
     }
 
-    static void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vec2 position,
+    static void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vec2i position,
                          float size, Color color, Font font) {
         float advance = 0;
         for (u8 c : text) {
             const u16 i = c - ' ';
             Vec2 texture_offset = {float(i % 16) * font.size, int(i / 16.F) * font.size};
             renderer->append(
-                {{position.x + advance, position.y},
+                {{int(position.x + advance), position.y},
                  {size, size},
                  Rect{font.texture.position() + texture_offset, {font.size, font.size}},
                  color});
@@ -187,12 +187,12 @@ static struct Engine {
         }
     }
 
-    void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vec2 position,
+    void drawText(Fixed<UIInstance> *renderer, Slice<const char> text, Vec2i position,
                   float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
 
-    void drawText(Fixed<UIInstance> *renderer, Slice<char> text, Vec2 position,
+    void drawText(Fixed<UIInstance> *renderer, Slice<char> text, Vec2i position,
                   float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, {text.len, text.ptr}, position, size, color, default_font);
     }
@@ -230,3 +230,18 @@ static struct Engine {
 
     void update(WorldInstances *instances);
 } engine;
+
+enum class Scene { menu, game };
+
+struct Game {
+    Scene current_scene;
+
+    void init(Engine *engine);
+
+    void update(Engine *engine, WorldInstances *instances);
+
+    void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
+                  int render_height);
+
+    void deinit(Engine *engine);
+};

@@ -91,7 +91,8 @@ struct Cell {
     }
 
     inline bool isSolid() const {
-        return (type == Type::block or type == Type::frame) and a != Material::air;
+        return (type == Type::block or type == Type::frame or type == Type::slope) and
+               a != Material::air;
     }
 
     inline bool hasFloor() const { return a != Material::air; }

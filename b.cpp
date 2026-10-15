@@ -6,8 +6,11 @@ int main(int argc, const char *argv[]) {
     const char *output = "./build/tower";
     const char *inputs[] = {
         "main.cpp",
+        "font.cpp",
         "game.cpp",
         "map.cpp",
+        "scene_game.cpp",
+        "scene_menu.cpp",
         "shared.cpp",
         "ui_pipeline.cpp",
         "world_pipeline.cpp",
