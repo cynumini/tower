@@ -7,16 +7,17 @@
 static constexpr int MAP_Z_LEN = 3;
 static constexpr int SEA_LEVEL = 1;
 static constexpr int PIXELS_PER_UNIT = 32;
+static constexpr float PIXEL = 1.0F / float(PIXELS_PER_UNIT);
 
 // Material
-enum struct Material : u8 { air, deep, stone, dirt, grass, wood, wall, water, door };
+enum struct Material : u8 { air, deep, stone, dirt, grass, wood, wall, water, door, window };
 
 static constexpr const char *BlockKey[]{
     [int(Material::air)] = "",        [int(Material::deep)] = "deep",
     [int(Material::stone)] = "stone", [int(Material::dirt)] = "dirt",
     [int(Material::grass)] = "grass", [int(Material::wood)] = "wood",
     [int(Material::wall)] = "wall",   [int(Material::water)] = "water",
-    [int(Material::door)] = "door",
+    [int(Material::door)] = "door",   [int(Material::window)] = "window",
 };
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<u8>::max());
@@ -89,6 +90,10 @@ struct Cell {
         }
     }
 
+    inline bool isSolid() const {
+        return (type == Type::block or type == Type::frame) and a != Material::air;
+    }
+
     inline bool hasFloor() const { return a != Material::air; }
     inline bool hasCeiling() const { return b != Material::air; }
 
@@ -119,7 +124,7 @@ struct Cell {
 };
 
 struct Object {
-    enum class Type { door };
+    enum class Type { door, wall };
     Type type;
     Vec3i pos;
     Material material;
@@ -127,6 +132,9 @@ struct Object {
 
     static Object door(Vec3i pos, Material material, Rotation rotation) {
         return {Type::door, pos, material, rotation};
+    }
+    static Object wall(Vec3i pos, Material material, Rotation rotation) {
+        return {Type::wall, pos, material, rotation};
     }
     inline Rect getSprite() const { return MaterialSprite[int(material)]; }
 };
@@ -142,7 +150,6 @@ struct Chunk {
 
     void init(Vec2i index) {
         this->index = index;
-        this->objects.init();
         for (int z = 0; z < MAP_Z_LEN; z++) {
             for (int y = 0; y < SIZE.y; y++) {
                 for (int x = 0; x < SIZE.x; x++) {
@@ -168,7 +175,6 @@ static struct Structure {
 
 static void initStructure() {
     // road
-    structures[0].objects.init();
     structures[0].pos = {0, 6, 1};
     for (int x = 0; x < Structure::MAX_SIZE; x++) {
         for (int y = 0; y < 4; y++) {
@@ -184,9 +190,9 @@ static void initStructure() {
     structures[0].data[4][1][0] = Cell::block(Material::wood);
     structures[0].data[6][1][0] = Cell::block(Material::wood);
 
-    structures[0].data[0][3][0] = Cell::frame(Material::wood, Rotation::sn);
-    structures[0].data[2][3][0] = Cell::frame(Material::wood, Rotation::we);
-    structures[0].data[4][3][0] = Cell::frame(Material::wood, Rotation::ns);
+    structures[0].data[0][3][0] = Cell::frame(Material::grass, Rotation::sn);
+    structures[0].data[2][3][0] = Cell::frame(Material::stone, Rotation::we);
+    structures[0].data[4][3][0] = Cell::frame(Material::wall, Rotation::ns);
     structures[0].data[6][3][0] = Cell::frame(Material::wood, Rotation::ew);
     structures[0].objects.append(Object::door({0, 0, 0}, Material::door, Rotation::sn));
     structures[0].objects.append(Object::door({2, 0, 0}, Material::door, Rotation::we));
@@ -194,7 +200,6 @@ static void initStructure() {
     structures[0].objects.append(Object::door({6, 0, 0}, Material::door, Rotation::ew));
 
     // house
-    structures[1].objects.init();
     structures[1].pos = {20, 5, 1};
     for (int x = 1; x < 10; x++) {
         const int y = x - 1;
@@ -211,8 +216,12 @@ static void initStructure() {
             }
         }
     }
-    structures[1].data[5][0][0] = Cell::surface(Material::wood);
+    structures[1].data[3][0][0] = Cell::frame(Material::wall, Rotation::sn);
+    structures[1].data[5][0][0] = Cell::surface(Material::wood, Material::wood);
+    structures[1].data[7][0][0] = Cell::frame(Material::wall, Rotation::sn);
     structures[1].objects.append(Object::door({5, 0, 0}, Material::door, Rotation::ns));
+    structures[1].objects.append(Object::wall({3, 0, 0}, Material::window, Rotation::ns));
+    structures[1].objects.append(Object::wall({7, 0, 0}, Material::window, Rotation::ns));
 }
 
 // Locations
@@ -220,10 +229,7 @@ static struct Location {
     const char *name;
     Static<Vec2i, 1> chunk_ids;
 
-    void init(const char *name) {
-        this->name = name;
-        chunk_ids.init();
-    }
+    void init(const char *name) { this->name = name; }
 } locations[2] = {};
 
 static void initLocations() {
@@ -247,23 +253,33 @@ struct Map {
 
     static Vec3i posFromIndex(Vec2i index) { return {index * Chunk::SIZE, 0}; }
 
-    Cell *getCell(Vec3i v, Vec2i chunk_index) {
+    Cell *getCellRelative(Vec3i v, Vec2i chunk_index) {
         Vec3i world = posFromIndex(chunk_index) + v;
         Vec2i index = indexFromPos(world);
         Vec3i local = {world.x - index.x * Chunk::SIZE.x, world.y - index.y * Chunk::SIZE.y,
                        world.z};
+        if (local.z < 0 or local.z >= MAP_Z_LEN) return 0;
         for (auto &chunk : chunks) {
-            if (chunk.index == index) {
-                if (local.z < 0 or local.z >= MAP_Z_LEN) return 0;
-                return &chunk.data[local.x][local.y][local.z];
-            }
+            if (chunk.index == index) return &chunk.data[local.x][local.y][local.z];
+        }
+        return 0;
+    }
+
+    Cell *getCell(Vec3 pos) {
+        Vec3i world = {int(std::floor(pos.x)), int(std::floor(pos.y)), int(std::floor(pos.z))};
+        Vec2i index = indexFromPos(world);
+        Vec3i local = {world.x - index.x * Chunk::SIZE.x, world.y - index.y * Chunk::SIZE.y,
+                       world.z};
+        if (local.z < 0 or local.z >= MAP_Z_LEN) return 0;
+        for (auto &chunk : chunks) {
+            if (chunk.index == index) return &chunk.data[local.x][local.y][local.z];
         }
         return 0;
     }
 
     bool isVisible(Vec3i v, Vec2i chunk_index, Face face) {
         if (v.z < 0 or v.z >= MAP_Z_LEN) return true;
-        Cell *cell = getCell(v, chunk_index);
+        Cell *cell = getCellRelative(v, chunk_index);
         if (!cell) return true;
         return !cell->obscuresFace(face);
     }
@@ -299,7 +315,7 @@ struct Map {
                 if (chunk.index == index) add = false;
             }
             if (add) {
-                auto chunk = chunks.append({});
+                auto *chunk = chunks.append({});
                 chunk->init(index);
                 // apply struct
                 for (size_t i = 0; i < ARRAY_LEN(structures); i++) {
@@ -362,46 +378,7 @@ struct Map {
         Vec2i new_center = indexFromPos(player_pos);
         if (new_center != center) updateChunksAndApplyStructures(new_center);
         for (auto &chunk : chunks) {
-            for (auto object : chunk.objects) {
-                Vec3 pos = chunk.index * Chunk::SIZE + object.pos + Vec3(0.5F, 0.5F, 0);
-                switch (object.type) {
-                case Object::Type::door: {
-                    auto r = int(object.rotation);
-                    auto pixel = 1.0F / PIXELS_PER_UNIT;
-                    auto sprite = object.getSprite();
-                    Rect face_sprite = Rect(sprite.position() + Vec2{0, 4}, {32, 32});
-                    // front
-                    if (isVisible(object.pos + face_offsets[r], chunk.index, Face(r)))
-                        instances->squares.append({pos + face_offsets[r] * 0.5, size, face_sprite,
-                                                   tint[r], Face(r), 0});
-                    // back
-                    auto r_b = (r + 2) % 4;
-                    instances->squares.append({pos + face_offsets[r] * (0.5 - 4 * pixel), size,
-                                               face_sprite, tint[r_b], Face(r_b), 0});
-                    // top
-                    const bool force_visible =
-                        hide_above_level and object.pos.z == int(player_pos.z);
-                    auto top_sprite = Rect(sprite.position(), {32, 4});
-                    if (force_visible or
-                        isVisible(pos + face_offsets[int(Face::z_pos)], chunk.index, Face::z_pos))
-                        instances->squares.append({pos + face_offsets[r] * (0.5 - 2 * pixel) +
-                                                       face_offsets[int(Face::z_pos)] * 0.5,
-                                                   Vec2(1.0F, pixel * 4.0F), top_sprite,
-                                                   tint[int(Face::z_pos)], Face::z_pos,
-                                                   M_PIf + (M_PI_2f * r)});
-                    // right
-                    const auto side_sprite = Rect(sprite.position() + Vec2(32, 4), {4, 32});
-                    for (int i = 0; i < 2; i++) {
-                        auto r_s = (r + 1 + (i * 2)) % 4;
-                        if (isVisible(pos + face_offsets[r_s], chunk.index, Face(r_s)))
-                            instances->squares.append({pos + face_offsets[r_s] * (0.5) +
-                                                           face_offsets[r] * (0.5 - 2 * pixel),
-                                                       Vec2(pixel * 4, 1.0F), side_sprite,
-                                                       tint[r_s], Face(r_s), 0});
-                    }
-                } break;
-                }
-            }
+
             for (int z = 0; z < MAP_Z_LEN; z++) {
                 for (int y = 0; y < Chunk::SIZE.y; y++) {
                     for (int x = 0; x < Chunk::SIZE.x; x++) {
@@ -462,24 +439,147 @@ struct Map {
                                      cell.getFloorSprite(), WHITE, Face::z_pos, 0});
                         } break;
                         case Cell::Type::frame: {
-                            // TODO: continue
                             const auto sprite = cell.getFrameSprite();
+                            int face = int(cell.rotation);
                             int r_t = int(Face::z_pos);
+                            // top
                             if (isVisible(pos + face_offsets[r_t], chunk.index, Face(r_t)))
                                 instances->squares.append({pos + face_offsets[r_t] * 0.5F, size,
                                                            sprite, tint[r_t], Face(r_t), 0});
+                            // sides
                             for (int i = 0; i < 2; i++) {
-                                auto r = (int(cell.rotation) + 1 + i * 2) % 4;
+                                auto r = (face + 1 + i * 2) % 4;
                                 if (isVisible(pos + face_offsets[r], chunk.index, Face(r)))
                                     instances->squares.append({pos + face_offsets[r] * 0.5F, size,
                                                                sprite, tint[r], Face(r), 0});
                             }
-
+                            // face & back
+                            {
+                                // left & right
+                                int faces[] = {face, (face + 2) % 4};
+                                for (int i = 0; i < 2; i++) {
+                                    const Rect s = {sprite.position() + Vec2(30.0F * i, 0.0F),
+                                                    {2.0F, sprite.h}};
+                                    Vec3 offset = Vec3(15 * PIXEL - (30 * PIXEL * i), 0.0F, 0.0F);
+                                    if (faces[0] & 1) offset = offset.rotateZ(-M_PI_2f);
+                                    if (faces[0] & 2) offset = -offset;
+                                    for (int j = 0; j < 2; j++) {
+                                        auto sign = j == 0 ? 1 : -1;
+                                        instances->squares.append(
+                                            {pos + face_offsets[faces[j]] * 0.5F + offset * sign,
+                                             {2.0F * PIXEL, 1.0F},
+                                             s,
+                                             tint[faces[j]],
+                                             Face(faces[j]),
+                                             0});
+                                    }
+                                }
+                                // top & bottom
+                                for (int i = 0; i < 2; i++) {
+                                    const Rect s = {sprite.position() + Vec2(2.F, 30.0F * i),
+                                                    {sprite.w - 4.F, 2.F}};
+                                    Vec3 offset = Vec3(0, 0, 15.F * PIXEL - (30.F * PIXEL * i));
+                                    if (faces[0] & 1) offset = offset.rotateZ(-M_PI_2f);
+                                    for (int j = 0; j < 2; j++) {
+                                        instances->squares.append(
+                                            {pos + face_offsets[faces[j]] * 0.5F + offset,
+                                             {28.F * PIXEL, 2.F * PIXEL},
+                                             s,
+                                             tint[faces[j]],
+                                             Face(faces[j]),
+                                             0});
+                                    }
+                                }
+                                // inner left & right parts
+                                for (int i = 0; i < 2; i++) {
+                                    auto f = (face + 1 + (2 * i)) % 4;
+                                    instances->squares.append(
+                                        {pos - face_offsets[f] * (14 * PIXEL),
+                                         {1.F, 28.F * PIXEL},
+                                         sprite,
+                                         face & 1 ? tint[0] : tint[3],
+                                         Face(f),
+                                         0});
+                                }
+                                // inner botom
+                                auto f = int(Face::z_pos);
+                                instances->squares.append({pos - face_offsets[f] * (14 * PIXEL),
+                                                           {1.F, 1.F},
+                                                           sprite,
+                                                           face & 1 ? WHITE : tint[3],
+                                                           Face(f),
+                                                           0});
+                            }
                         } break;
                         }
                     }
                 }
             }
+            for (auto object : chunk.objects) {
+                Vec3 pos = chunk.index * Chunk::SIZE + object.pos + Vec3(0.5F, 0.5F, 0);
+                switch (object.type) {
+                case Object::Type::door: {
+                    auto r = int(object.rotation);
+
+                    auto sprite = object.getSprite();
+                    Rect face_sprite = Rect(sprite.position() + Vec2{0, 4}, {32, 32});
+                    // front
+                    if (isVisible(object.pos + face_offsets[r], chunk.index, Face(r)))
+                        instances->squares.append({pos + face_offsets[r] * 0.5, size, face_sprite,
+                                                   tint[r], Face(r), 0});
+                    // back
+                    auto r_b = (r + 2) % 4;
+                    instances->squares.append({pos + face_offsets[r] * (0.5 - 4 * PIXEL), size,
+                                               face_sprite, tint[r_b], Face(r_b), 0});
+                    // top
+                    const bool force_visible =
+                        hide_above_level and object.pos.z == int(player_pos.z);
+                    auto top_sprite = Rect(sprite.position(), {32, 4});
+                    if (force_visible or
+                        isVisible(pos + face_offsets[int(Face::z_pos)], chunk.index, Face::z_pos))
+                        instances->squares.append({pos + face_offsets[r] * (0.5 - 2 * PIXEL) +
+                                                       face_offsets[int(Face::z_pos)] * 0.5,
+                                                   Vec2(1.0F, PIXEL * 4.0F), top_sprite,
+                                                   tint[int(Face::z_pos)], Face::z_pos,
+                                                   M_PIf + (M_PI_2f * r)});
+                    // right
+                    const auto side_sprite = Rect(sprite.position() + Vec2(32, 4), {4, 32});
+                    for (int i = 0; i < 2; i++) {
+                        auto r_s = (r + 1 + (i * 2)) % 4;
+                        if (isVisible(pos + face_offsets[r_s], chunk.index, Face(r_s)))
+                            instances->squares.append({pos + face_offsets[r_s] * (0.5) +
+                                                           face_offsets[r] * (0.5 - 2 * PIXEL),
+                                                       Vec2(PIXEL * 4.0F, 1.0F), side_sprite,
+                                                       tint[r_s], Face(r_s), 0});
+                    }
+                } break;
+                case Object::Type::wall: {
+                    auto r = int(object.rotation);
+                    auto sprite = object.getSprite();
+                    // front
+                    if (isVisible(object.pos + face_offsets[r], chunk.index, Face(r)))
+                        instances->squares.append(
+                            {pos + face_offsets[r] * 0.5, size, sprite, tint[r], Face(r), 0});
+                } break;
+                }
+            }
         }
+    }
+
+    Static<Rect, 256> getCollision(Vec3 pos) {
+        Static<Rect, 256> result = {};
+        for (auto &chunk : chunks) {
+            for (int y = 0; y < Chunk::SIZE.y; y++) {
+                for (int x = 0; x < Chunk::SIZE.x; x++) {
+                    auto z = int(std::floor(pos.z));
+                    auto cell_pos = Vec3i(x, y, z);
+                    auto cell = getCellRelative(cell_pos, chunk.index);
+                    if (!cell->isSolid()) continue;
+                    pos = posFromIndex(chunk.index) + cell_pos;
+                    result.append({pos + Vec3(0.5F, 0.5F, 0), {1, 1}});
+                }
+            }
+        }
+        return result;
     }
 };

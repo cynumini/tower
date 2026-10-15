@@ -41,7 +41,7 @@ struct Timer {
     float elapsed;
     float duration;
 
-    constexpr static Timer init(float duration) noexcept { return {.duration = duration}; };
+    constexpr static Timer init(float duration) { return {.duration = duration}; };
 
     void reset() { elapsed = 0; };
 
@@ -193,7 +193,8 @@ struct Filter {
     bool operator!=(const Filter &query) const { return ptr != query.ptr; }
 };
 
-static Filter makeFilter(Fixed<Entity> &entities, bool (*predicate)(Entity *)) {
+template <size_t N>
+static Filter makeFilter(Static<Entity, N> &entities, bool (*predicate)(Entity *)) {
     return Filter{entities.begin(), entities.end(), predicate};
 }
 
@@ -247,7 +248,6 @@ static struct Game {
         player_left.init(engine->sprites.get("player_right"), 3, true);
 
         // entities
-        entities.init();
         using Kind = Entity::Kind;
         using Body = Entity::Body;
 
@@ -265,7 +265,7 @@ static struct Game {
 
         {
             auto *entity = entities.append(Entity::create(
-                Kind::npc, engine->sprites.get("character"), true, {32, 0, SEA_LEVEL}));
+                Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
             entity->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
             entity->interaction_rel = Rect(0, 0, 1, 1);
         }
@@ -316,13 +316,19 @@ static struct Game {
         // cheat && system
         if (engine->is_key_just_pressed(Key::key_1)) quest.status = Quest::COMPLETED;
 
-        map.update(engine, instances, player->pos);
+        auto collisions = map.getCollision(player->pos);
 
         for (auto &entity : entities) {
             if (!entity.alive) continue;
             if (!pause) {
                 switch (entity.kind) {
                 case Entity::Kind::player: {
+                    auto cell = map.getCell(entity.pos);
+                    if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
+                        map.hide_above_level = true;
+                    } else {
+                        map.hide_above_level = false;
+                    }
                     if (engine->is_key_just_pressed(Key::space)) {
                         attack->alive = true;
                     }
@@ -442,8 +448,9 @@ static struct Game {
                 }
 
                 if (entity.isSolid() and entity.body == Entity::Body::movable) {
-                    Filter q = makeFilter(
-                        entities, [](Entity *other) { return other->isSolid() and other->alive; });
+                    Filter q = makeFilter(entities, [](Entity *other) {
+                        return other->isSolid() and other->alive;
+                    });
                     Vec2 velocity = entity.direction * engine->dt * entity.speed;
                     entity.pos.x += velocity.x;
                     for (Entity &other : q) {
@@ -454,11 +461,23 @@ static struct Game {
                             break;
                         }
                     }
+                    for (auto &c : collisions) {
+                        if (checkCollisionAABB(entity.getCollision(), c)) {
+                            entity.pos.x -= velocity.x;
+                            break;
+                        }
+                    }
                     entity.pos.y += velocity.y;
                     for (Entity &other : q) {
                         if (other.pos.z != entity.pos.z) continue;
                         if (&entity != &other and
                             checkCollisionAABB(entity.getCollision(), other.getCollision())) {
+                            entity.pos.y -= velocity.y;
+                            break;
+                        }
+                    }
+                    for (auto &c : collisions) {
+                        if (checkCollisionAABB(entity.getCollision(), c)) {
                             entity.pos.y -= velocity.y;
                             break;
                         }
@@ -538,9 +557,11 @@ static struct Game {
                 sign = '?';
                 if (quest.status == Quest::ACTIVE) color = WHITE;
             }
-            engine->drawWorldSymbol(&instances->squares, {quest.pos, quest.pos.z + 0.75F},
-                                    sign, SIZE, color, engine->default_font);
+            engine->drawWorldSymbol(&instances->squares, {quest.pos, quest.pos.z + 0.75F}, sign,
+                                    SIZE, color, engine->default_font);
         }
+
+        map.update(engine, instances, player->pos);
 
         // debug (show collision)
         if (engine->debug_mode) {
