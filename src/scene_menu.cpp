@@ -5,7 +5,7 @@
 struct SceneMenu {
     void init(Engine *engine) {}
 
-    void update(Engine *engine, WorldInstances *instances) {}
+    void update(Engine *engine, WorldInstances *instances, Vec2 logical) {}
 
     void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
         Slice<const char> text_play = "Play (ENTER)";
@@ -22,7 +22,7 @@ struct SceneMenu {
             instances, text_exit,
             {render_size.x / 2.F - text_exit_w / 2.F, render_size.y / 2.F - height / 2 + y});
 
-        if (engine->is_key_just_pressed(Key::enter)) {
+        if (engine->isKeyJustPressed(Key::enter)) {
             game->current_scene = Scene::game;
         }
     };

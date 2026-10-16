@@ -111,7 +111,6 @@ struct Entity {
                 quest.counter += 1;
                 if (quest.counter >= 10) {
                     quest.status = Quest::COMPLETED;
-                    inventory.add("gold", 10);
                 }
             }
         }
@@ -285,13 +284,10 @@ struct SceneGame {
 
         map.init(engine, player->pos);
     }
-    void update(Engine *engine, WorldInstances *instances) {
-        float yaw =
-            engine->is_key_just_released(Key::kp_4) - engine->is_key_just_released(Key::kp_6);
-        float pitch =
-            engine->is_key_just_released(Key::kp_2) - engine->is_key_just_released(Key::kp_8);
-        float roll =
-            engine->is_key_just_released(Key::kp_7) - engine->is_key_just_released(Key::kp_9);
+    void update(Engine *engine, WorldInstances *instances, Vec2 logical) {
+        float yaw = engine->isKeyJustReleased(Key::kp_4) - engine->isKeyJustReleased(Key::kp_6);
+        float pitch = engine->isKeyJustReleased(Key::kp_2) - engine->isKeyJustReleased(Key::kp_8);
+        float roll = engine->isKeyJustReleased(Key::kp_7) - engine->isKeyJustReleased(Key::kp_9);
 
         engine->camera.yaw += yaw * 45;
         engine->camera.yaw = int(engine->camera.yaw) % 360;
@@ -304,7 +300,7 @@ struct SceneGame {
         // TODO: show debug collision only realted to current level
 
         // cheat && system
-        if (engine->is_key_just_pressed(Key::key_1)) quest.status = Quest::COMPLETED;
+        if (engine->isKeyJustPressed(Key::key_1)) quest.status = Quest::COMPLETED;
 
         auto collisions = map.getCollision(player->pos);
 
@@ -319,29 +315,29 @@ struct SceneGame {
                     } else {
                         map.hide_above_level = false;
                     }
-                    if (engine->is_key_just_pressed(Key::space)) {
-                        attack->alive = true;
-                    }
-                    if (engine->is_key_just_pressed(Key::f)) {
+                    if (engine->isKeyJustPressed(Key::space)) attack->alive = true;
+                    if (engine->isKeyJustPressed(Key::f)) {
                         spell->alive = true;
                         spell->pos = entity.pos;
                         spell->direction = player->direction;
                         spell->speed = 8;
                     }
-
-                    const Vec2 velocity = Vec2(float(engine->is_key_pressed(Key::d)) -
-                                                   float(engine->is_key_pressed(Key::a)),
-                                               float(engine->is_key_pressed(Key::w)) -
-                                                   float(engine->is_key_pressed(Key::s)))
+                    if (engine->isMouseButtonJustPressed(MouseButton::left)) {
+                        map.deleteSelected();
+                    }
+                    const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -
+                                                   float(engine->isKeyPressed(Key::a)),
+                                               float(engine->isKeyPressed(Key::w)) -
+                                                   float(engine->isKeyPressed(Key::s)))
                                               .normalize()
                                               .rotate(deg2rad(engine->camera.yaw));
 
-                    int level_diff = engine->is_key_just_released(Key::pageup) -
-                                     engine->is_key_just_released(Key::pagedown);
+                    int level_diff = engine->isKeyJustReleased(Key::pageup) -
+                                     engine->isKeyJustReleased(Key::pagedown);
                     player->pos.z =
                         std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
 
-                    if (engine->is_key_just_released(Key::kp_5)) {
+                    if (engine->isKeyJustReleased(Key::kp_5)) {
                         map.hide_above_level = !map.hide_above_level;
                     }
 
@@ -421,7 +417,7 @@ struct SceneGame {
                     quest.pos = entity.pos;
                     if (!dialog) {
                         if (checkCollisionAABB(entity.getInteraction(), player->getCollision())) {
-                            if (engine->is_key_just_pressed(Key::space)) {
+                            if (engine->isKeyJustPressed(Key::space)) {
                                 dialog = true;
                                 pause = true;
                                 interaction_frame = true;
@@ -551,7 +547,7 @@ struct SceneGame {
                                     SIZE, color, engine->default_font);
         }
 
-        map.update(engine, instances, player->pos);
+        map.update(engine, instances, player->pos, logical);
 
         // debug (show collision)
         if (engine->debug_mode) {
@@ -613,18 +609,22 @@ struct SceneGame {
         while (dialog) {
             Slice<const char> text = {};
             if (quest.status == Quest::REWARDED) {
+
                 if (curr_line == ARRAY_LEN(lines)) {
                     dialog = pause = false;
                     curr_line = 0;
                     break;
                 }
                 text = lines[curr_line];
-                curr_line += engine->is_key_just_pressed(Key::space) and (not interaction_frame);
+                curr_line += engine->isKeyJustPressed(Key::space) and (not interaction_frame);
             } else {
                 text = quest.line[quest.status];
-                if (engine->is_key_just_pressed(Key::space) and (not interaction_frame)) {
+                if (engine->isKeyJustPressed(Key::space) and (not interaction_frame)) {
                     dialog = pause = false;
-                    if (quest.status == Quest::COMPLETED) quest.status = Quest::REWARDED;
+                    if (quest.status == Quest::COMPLETED) {
+                        quest.status = Quest::REWARDED;
+                        inventory.add("gold", 10);
+                    }
                     if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
                     break;
                 }

@@ -10,7 +10,7 @@
 static struct UI {
     using Instance = UIInstance;
 
-    static constexpr uint MAX_INSTANCES = 256;
+    static constexpr uint MAX_INSTANCES = 512;
 
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *vertex_buffer;
@@ -27,12 +27,12 @@ static struct UI {
         Vec2 atlas_size;
     } ubo;
 
-    void resize(float w, float h) {
+    void resize(Vec2 size) {
         logical.x = 640, logical.y = 360;
-        if (w / h < 16.0F / 9.0F) {
-            logical.y = h * logical.x / w;
+        if (size.x / size.y < 16.0F / 9.0F) {
+            logical.y = size.y * logical.x / size.x;
         } else {
-            logical.x = w * logical.y / h;
+            logical.x = size.x * logical.y / size.y;
         }
         ubo.projection = Mat4::ortho(0, logical.x, logical.y, 0, 0, 1);
     }

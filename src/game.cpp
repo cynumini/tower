@@ -13,13 +13,13 @@ void Game::init(Engine *engine) {
     scene_game.init(engine);
 }
 
-void Game::update(Engine *engine, WorldInstances *instances) {
+void Game::update(Engine *engine, WorldInstances *instances, Vec2 logical) {
     switch (current_scene) {
     case Scene::menu:
-        scene_menu.update(engine, instances);
+        scene_menu.update(engine, instances, logical);
         break;
     case Scene::game:
-        scene_game.update(engine, instances);
+        scene_game.update(engine, instances, logical);
         break;
     }
 }

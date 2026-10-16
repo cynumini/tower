@@ -41,6 +41,8 @@ struct Cell {
     Type type : 2;         // 4
     Rotation rotation : 2; // 4
 
+    static constexpr Cell air() { return {.type = Type::block, .a = Material::air}; }
+
     static constexpr Cell block(Material material) {
         return {.a = material, .type = Type::block};
     }
@@ -246,6 +248,9 @@ struct Map {
     Vec2i center;
     int range = 1;
 
+    Rect selection_sprite;
+    Vec3 selection;
+
     static Vec2i indexFromPos(Vec3 pos) {
         return {int(std::floor(pos.x / Chunk::SIZE.x)), int(std::floor(pos.y / Chunk::SIZE.y))};
     }
@@ -362,9 +367,43 @@ struct Map {
         size_t len = side * side; // 1 9 25 49
         chunks.init(arena.alloc<Chunk>(len));
         updateChunksAndApplyStructures(indexFromPos(player_pos));
+
+        selection_sprite = engine->sprites.get("selection");
     }
 
-    void update(Engine *engine, WorldInstances *instances, Vec3 player_pos) {
+    struct Ray {
+        Vec3 origin;
+        Vec3 direction;
+    };
+
+    Ray screenToRay(Engine *engine, Vec2 logical) {
+        Vec3 ndc = {float(engine->mouse.x) / float(engine->screen.x) * 2.F - 1.F,
+                    1.F - float(engine->mouse.y) / float(engine->screen.y) * 2.F, 0.F};
+        Mat4 inv_view = Mat4::translation(engine->camera.pos) *
+                        Mat4::rotationY(-deg2rad(engine->camera.roll)) *
+                        Mat4::rotationZ(-deg2rad(engine->camera.yaw)) * Mat4::inverseIso45();
+        float left = -logical.x / 2.0F;
+        float right = logical.x / 2.0F;
+        float bottom = -logical.y / 2.0F;
+        float top = logical.y / 2.0F;
+        float near = 100.F;
+        float far = -100.F;
+        Ray ray = {inv_view * Mat4::unprojectOrtho({ndc, 0}, left, right, bottom, top, near, far),
+                   {}};
+        Vec3 direction =
+            inv_view * Mat4::unprojectOrtho({ndc, 1}, left, right, bottom, top, near, far);
+        ray.direction = (direction - ray.origin).normalize();
+        return ray;
+    }
+
+    Vec3 intersectGround(Ray ray, float z) {
+        if (std::abs(ray.direction.z) < 1e-6F) return {};
+        float t = (z - ray.origin.z) / ray.direction.z;
+        if (t < 0.F) return {};
+        return ray.origin + ray.direction * t;
+    }
+
+    void update(Engine *engine, WorldInstances *instances, Vec3 player_pos, Vec2 logical) {
         static constexpr Color tint[] = {0xDFDFDFFF, WHITE, 0xDFDFDFFF, 0xBFBFBFFF, WHITE};
         static constexpr Vec3i face_offsets[] = {
             {0, 1, 0},  // Y+
@@ -565,6 +604,38 @@ struct Map {
                 }
             }
         }
+
+        Ray ray = screenToRay(engine, logical);
+        Vec3 pos;
+
+        for (int z = int(player_pos.z); z >= 0; z--) {
+            bool same_level = (z == int(player_pos.z));
+
+            float offset = same_level ? 0.5F : 0.0F;
+            Vec3 hit = intersectGround(ray, float(z) - offset);
+
+            int x = int(std::floor(hit.x));
+            int y = int(std::floor(hit.y));
+
+            Vec3 candidate{float(x), float(y), float(z)};
+
+            auto cell = getCell(candidate);
+            if (cell->isEmpty()) continue;
+
+            selection = candidate;
+
+            if (same_level && cell->type == Cell::Type::surface && !cell->hasCeiling()) {
+                pos = selection + Vec3(0.5F, 0.5F, -0.45F);
+            } else {
+                pos = selection + Vec3(0.5F, 0.5F, 0.5F);
+            }
+
+            break;
+        }
+        // if (cell->isEmpty()) {
+        //     pos.z -= 1;
+        // }
+        instances->squares.append({pos, {1, 1}, selection_sprite, WHITE, Face::z_pos, 0});
     }
 
     Static<Rect, 256> getCollision(Vec3 pos) {
@@ -582,5 +653,11 @@ struct Map {
             }
         }
         return result;
+    }
+
+    void deleteSelected() {
+        auto cell = getCell(selection);
+        *cell = Cell::air();
+        // printf("%f\n", selection.x);
     }
 };

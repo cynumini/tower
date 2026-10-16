@@ -14,16 +14,21 @@ static struct Inventory {
     Array<Slot, SIZE.x * SIZE.y> slots;
     bool visible;
     Rect slot_sprite;
+    Rect select_sprite;
+    int select = 0;
 
     void init(Engine *engine) {
         // items
         items.init(&arena, 1);
         items.put(&arena, "gold", engine->sprites.get("gold"));
         items.put(&arena, "sword", engine->sprites.get("sword"));
+        items.put(&arena, "hoe", engine->sprites.get("hoe"));
 
         // inventory
         slot_sprite = engine->sprites.get("inventory_slot");
+        select_sprite = engine->sprites.get("inventory_select");
         add("sword", 1);
+        add("hoe", 1);
         add("gold", 10);
     }
 
@@ -46,16 +51,23 @@ static struct Inventory {
     void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size,
                   Arena *a) {
         // hud
+        for (int i = 0; i < 2; i++) {
+            if (engine->isKeyPressed(Key(int(Key::key_1) + i))) select = i;
+        }
+
         constexpr int hud_len = 2;
         Vec2 hud_offset = {(render_size.x - slot_sprite.w * hud_len) / 2,
                            render_size.y - slot_sprite.h};
         for (int i = 0; i < hud_len; i++) {
             drawSlot(engine, instances, hud_offset, i);
+            if (i == select) {
+                instances->append({hud_offset, select_sprite.size(), select_sprite, WHITE});
+            }
             hud_offset.x += slot_sprite.w;
         }
 
         // inventory
-        if (engine->is_key_just_pressed(Key::e)) visible = !visible;
+        if (engine->isKeyJustPressed(Key::e)) visible = !visible;
         const Vec2 slot_size = slot_sprite.size();
         if (visible) {
             for (int x = 0; x < 8; x++) {

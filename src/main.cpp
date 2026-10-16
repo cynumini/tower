@@ -36,9 +36,9 @@ static struct Time {
     float ms;
 } time;
 
-void Engine::update(WorldInstances *instances) {
-    if (is_key_just_pressed(Key::escape)) running = true;
-    if (is_key_just_pressed(Key::f3)) debug_mode = !debug_mode;
+void Engine::update(WorldInstances *instances, Vec2 logical) {
+    if (isKeyJustPressed(Key::escape)) running = true;
+    if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
 }
 
 void Engine::updateUI(Fixed<UIInstance> *instances, Vec2i render_size) {
@@ -49,6 +49,10 @@ void Engine::updateUI(Fixed<UIInstance> *instances, Vec2i render_size) {
         drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "FPS: %d", time.fps);
         offset_y += 12;
         drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "%.2fms", time.ms);
+        offset_y += 12;
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Screen: %dx%d", screen.x, screen.y);
+        offset_y += 12;
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Mouse: %dx%d", mouse.x, mouse.y);
         offset_y += 12;
         drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Pitch: %.0f", camera.pitch);
         offset_y += 12;
@@ -76,21 +80,21 @@ struct AtlasItem {
     SDL_Surface *surface;
 };
 
-static int last_width;
+static Vec2i last_size;
 static int last_height;
 
-void resize(int width, int height) {
-    if (last_width == width and last_height == height) return;
-    world.resize(width, height);
-    ui.resize(width, height);
+void resize(Vec2i size) {
+    if (size == last_size) return;
+    world.resize(size);
+    ui.resize(size);
 
     if (depth) SDL_ReleaseGPUTexture(device, depth);
     SDL_GPUTextureCreateInfo depth_info = {
         .type = SDL_GPU_TEXTURETYPE_2D,
         .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
         .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-        .width = uint(width),
-        .height = uint(height),
+        .width = uint(size.x),
+        .height = uint(size.y),
         .layer_count_or_depth = 1,
         .num_levels = 1,
         .sample_count = SDL_GPU_SAMPLECOUNT_1,
@@ -98,8 +102,7 @@ void resize(int width, int height) {
     depth = SDL_CreateGPUTexture(device, &depth_info);
     SDL_assert(depth);
 
-    last_width = width;
-    last_height = height;
+    last_size = size;
 }
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
@@ -112,8 +115,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-    int screen_width = 640, screen_height = 360;
-    window = SDL_CreateWindow(name, screen_width, screen_height, SDL_WINDOW_RESIZABLE);
+    engine.screen = {640, 360};
+    window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
     SDL_CHECK(window);
 
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, 0);
@@ -298,7 +301,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                                                  sizeof(WorldInstance) * world.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
 
-    resize(screen_width, screen_height);
+    resize(engine.screen);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
     engine.default_font.init(engine.sprites.get("font"));
@@ -320,7 +323,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     switch (event->type) {
     case SDL_EVENT_WINDOW_RESIZED: {
-        resize(event->window.data1, event->window.data2);
+        engine.screen = {event->window.data1, event->window.data2};
+        resize(engine.screen);
         break;
     }
     case SDL_EVENT_QUIT: {
@@ -328,12 +332,26 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     }
     case SDL_EVENT_KEY_DOWN:
         if (!event->key.repeat) {
-            engine.key_state[event->key.scancode] = KeyState::pressed;
+            engine.key_state[event->key.scancode] = ButtonState::pressed;
         }
         break;
     case SDL_EVENT_KEY_UP:
-        engine.key_state[event->key.scancode] = KeyState::released;
+        engine.key_state[event->key.scancode] = ButtonState::released;
         break;
+    case SDL_EVENT_MOUSE_MOTION: {
+        engine.mouse = {event->motion.x, event->motion.y};
+    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+        if (event->button.button == SDL_BUTTON_LEFT) {
+            engine.mouse_button_state[MouseButton::left] = ButtonState::pressed;
+        }
+        if (event->button.button == SDL_BUTTON_MIDDLE) {
+            engine.mouse_button_state[MouseButton::middle] = ButtonState::pressed;
+        }
+        if (event->button.button == SDL_BUTTON_RIGHT) {
+            engine.mouse_button_state[MouseButton::right] = ButtonState::pressed;
+        }
+    }
     default: {
         break;
     }
@@ -356,8 +374,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             auto instances = world.beginUpload(device, instance_transfer_buffer);
             defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
 
-            game.update(&engine, &instances);
-            engine.update(&instances);
+            game.update(&engine, &instances, world.logical);
+            engine.update(&instances, world.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
             for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
@@ -380,7 +398,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     uint width = 0, height = 0;
     SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
                                                     &width, &height));
-    resize(width, height);
+    resize({width, height});
 
     if (swapchain_texture) {
         SDL_GPUColorTargetInfo color_target_info = {};
@@ -410,6 +428,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     }
 
     memset(engine.key_state, 0, sizeof(engine.key_state));
+    memset(engine.mouse_button_state, 0, sizeof(engine.mouse_button_state));
 
     auto prev = time.counter;
     time.counter = SDL_GetPerformanceCounter();

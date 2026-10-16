@@ -10,7 +10,7 @@
 static struct World {
     using Instance = WorldInstance;
 
-    static constexpr uint MAX_INSTANCES = 256 * 256 * 3;
+    static constexpr uint MAX_INSTANCES = 8192;
 
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *vertex_buffer_squre;
@@ -23,6 +23,8 @@ static struct World {
     uint prev_squares_len;
     uint prev_triangles_len;
 
+    Vec2 logical;
+
     struct UBO {
         Mat4 view;
         Mat4 projection;
@@ -30,17 +32,17 @@ static struct World {
         float yaw;
     } ubo;
 
-    void resize(float w, float h) {
+    void resize(Vec2 size) {
         constexpr float blocks = 15;
-        float logical_h = blocks;
-        float logical_w = logical_h * 16.0F / 9.0F;
-        if (w / h < 16.0F / 9.0F) {
-            logical_h = h * logical_w / w;
+        logical.y = blocks;
+        logical.x = logical.y * 16.0F / 9.0F;
+        if (size.x / size.y < 16.0F / 9.0F) {
+            logical.y = size.y * logical.x / size.x;
         } else {
-            logical_w = w * logical_h / h;
+            logical.x = size.x * logical.y / size.y;
         }
-        ubo.projection = Mat4::ortho(-logical_w / 2.0F, logical_w / 2.0F, -logical_h / 2.0F,
-                                     logical_h / 2.0F, 100.0F, -100.0F);
+        ubo.projection = Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
+                                     logical.y / 2.0F, 100.0F, -100.0F);
     }
 
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {

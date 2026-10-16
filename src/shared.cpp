@@ -104,7 +104,9 @@ enum class Key : u8 {
     kp_period = 99
 };
 
-enum class KeyState : u8 { none, pressed, released };
+enum MouseButton { left, middle, right };
+
+enum class ButtonState : u8 { none, pressed, released };
 
 struct UIInstance {
     Vec2 position;
@@ -148,18 +150,29 @@ static struct Engine {
     HashMap<Rect> sprites;
     const bool *keyboard_state;
     Font default_font;
-    KeyState key_state[512];
+    ButtonState key_state[512];
+    ButtonState mouse_button_state[8];
+    Vec2i mouse;
+    Vec2i screen;
     bool running;
     float dt;
     bool debug_mode;
     Color clear_color;
     Camera camera;
 
-    bool is_key_pressed(Key key) const { return keyboard_state[int(key)]; }
+    bool isKeyPressed(Key key) const { return keyboard_state[int(key)]; }
 
-    bool is_key_just_pressed(Key key) const { return key_state[int(key)] == KeyState::pressed; }
+    bool isKeyJustPressed(Key key) const {
+        return key_state[int(key)] == ButtonState::pressed;
+    }
 
-    bool is_key_just_released(Key key) const { return key_state[int(key)] == KeyState::released; }
+    bool isKeyJustReleased(Key key) const {
+        return key_state[int(key)] == ButtonState::released;
+    }
+
+    bool isMouseButtonJustPressed(MouseButton button) const {
+        return mouse_button_state[int(button)] == ButtonState::pressed;
+    }
 
     static float measureText(Slice<const char> text, float size, Font font) {
         if (text.len == 0) return 0;
@@ -223,7 +236,7 @@ static struct Engine {
 
     void updateUI(Fixed<UIInstance> *instances, Vec2i size);
 
-    void update(WorldInstances *instances);
+    void update(WorldInstances *instances, Vec2 logical);
 } engine;
 
 enum class Scene { menu, game };
@@ -233,7 +246,7 @@ struct Game {
 
     void init(Engine *engine);
 
-    void update(Engine *engine, WorldInstances *instances);
+    void update(Engine *engine, WorldInstances *instances, Vec2 logical);
 
     void updateUI(Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size);
 
