@@ -8,6 +8,7 @@ int main(int argc, const char *argv[]) {
         "src/main.cpp",
         "src/font.cpp",
         "src/game.cpp",
+        "src/inventory.cpp",
         "src/map.cpp",
         "src/scene_game.cpp",
         "src/scene_menu.cpp",

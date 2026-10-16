@@ -41,7 +41,7 @@ void Engine::update(WorldInstances *instances) {
     if (is_key_just_pressed(Key::f3)) debug_mode = !debug_mode;
 }
 
-void Engine::updateUI(Fixed<UIInstance> *instances, int width, int height) {
+void Engine::updateUI(Fixed<UIInstance> *instances, Vec2i render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
         float offset_y = 2.0F;
@@ -368,8 +368,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(
                 ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.len));
 
-            game.updateUI(&engine, &upload.instances, ui.logical_w, ui.logical_h);
-            engine.updateUI(&upload.instances, ui.logical_w, ui.logical_h);
+            game.updateUI(&engine, &upload.instances, ui.logical);
+            engine.updateUI(&upload.instances, ui.logical);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
         }

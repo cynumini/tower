@@ -2,49 +2,90 @@
 
 #include "shared.cpp"
 
+HashMap<Rect> items;
+
 static struct Inventory {
     struct Slot {
-        u8 item_id;
+        const char *name;
         u8 count;
     };
 
-    Slot inventory[8 * 8];
+    static constexpr Vec2i SIZE = {8, 8};
+    Array<Slot, SIZE.x * SIZE.y> slots;
     bool visible;
+    Rect slot_sprite;
 
-    void init(Dynamic<Slice<const char>> items) {
-        for (u8 i = 0; i < u8(items.len); i++) {
-            inventory[i] = Slot{i, 1};
+    void init(Engine *engine) {
+        // items
+        items.init(&arena, 1);
+        items.put(&arena, "gold", engine->sprites.get("gold"));
+        items.put(&arena, "sword", engine->sprites.get("sword"));
+
+        // inventory
+        slot_sprite = engine->sprites.get("inventory_slot");
+        add("sword", 1);
+        add("gold", 10);
+    }
+
+    void drawSlot(Engine *engine, Fixed<UIInstance> *instances, Vec2 position, size_t index) {
+        assert(index < slots.len);
+        Slot *slot = &slots[index];
+        instances->append({position, slot_sprite.size(), slot_sprite, WHITE});
+        if (slot->count > 0) {
+            instances->append({position, slot_sprite.size(), items.get(slot->name), WHITE});
+            char buffer[3] = {};
+            SliceZ<char> count = {3, buffer};
+            sprintf(count.ptr, "%d", slot->count);
+            constexpr float FONT_SIZE = 10.F;
+            auto width = engine->measureText(count.withoutZero(), FONT_SIZE);
+            engine->drawText(instances, count.withoutZero(),
+                             position + slot_sprite.size() - Vec2{width, FONT_SIZE}, FONT_SIZE);
         }
     }
 
-    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, int render_width,
-                  int render_height, Arena *a, Dynamic<Slice<const char>> items) {
+    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size,
+                  Arena *a) {
+        // hud
+        constexpr int hud_len = 2;
+        Vec2 hud_offset = {(render_size.x - slot_sprite.w * hud_len) / 2,
+                           render_size.y - slot_sprite.h};
+        for (int i = 0; i < hud_len; i++) {
+            drawSlot(engine, instances, hud_offset, i);
+            hud_offset.x += slot_sprite.w;
+        }
+
+        // inventory
+        if (engine->is_key_just_pressed(Key::e)) visible = !visible;
+        const Vec2 slot_size = slot_sprite.size();
         if (visible) {
-            for (size_t x_i = 0; x_i < 8; x_i++) {
-                for (size_t y_i = 0; y_i < 8; y_i++) {
-                    const Vec2 cell_size = engine->sprites.get("inventory_slot").size();
+            for (int x = 0; x < 8; x++) {
+                for (int y = 0; y < 8; y++) {
                     const Vec2 position =
-                        Vec2{float(x_i), float(y_i)} * cell_size +
-                        (Vec2{float(render_width), float(render_height)} - (cell_size * 8.0F));
-                    instances->append(
-                        {position, cell_size, engine->sprites.get("inventory_slot"), WHITE});
-                    const auto *invertory_slot = &inventory[(y_i * 8) + x_i];
-                    if (invertory_slot->count != 0) {
-                        assert(invertory_slot->count);
-                        assert(invertory_slot->count < 100);
-                        auto text = a->allocPrint("%d", invertory_slot->count);
-                        instances->append({position, cell_size,
-                                           engine->sprites.get(items[invertory_slot->item_id]),
-                                           WHITE});
-                        const float FONT_SIZE = 10;
-                        const Vec2 text_offset =
-                            position +
-                            (cell_size -
-                             Vec2(engine->measureText({text.len, text.ptr}), FONT_SIZE));
-                        engine->drawText(instances, text, text_offset);
-                    }
+                        Vec2(x, y) * slot_size + (render_size - (slot_size * SIZE.x));
+                    drawSlot(engine, instances, position, y * SIZE.y + x);
                 }
             }
         }
+    }
+
+    void add(const char *name, int amount) {
+        assert(items.contains(name));
+        for (auto &slot : slots) {
+            if (slot.name == 0) continue;
+            if (strcmp(slot.name, name) == 0) {
+                slot.count += amount;
+                assert(slot.count < 100);
+                return;
+            }
+        }
+        for (auto &slot : slots) {
+            if (slot.count == 0) {
+                slot.name = name;
+                slot.count = amount;
+                assert(slot.count < 100);
+                return;
+            }
+        }
+        TODO("What if there is no such item in the inventory nor empty inventory slots?");
     }
 } inventory;

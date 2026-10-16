@@ -26,8 +26,8 @@ static struct Quest {
     0,
 };
 
-// Items
-static Dynamic<Slice<const char>> items;
+// // Items
+// static Dynamic<Slice<const char>> items;
 
 // Timer
 struct Timer {
@@ -99,7 +99,7 @@ struct Entity {
         };
     }
 
-    void takeDamage(Vec2 direction, Inventory::Slot *inventory) {
+    void takeDamage(Vec2 direction) {
         this->direction = direction;
         const float KNOCKBACK_SPEED = 10;
         speed = KNOCKBACK_SPEED;
@@ -111,9 +111,9 @@ struct Entity {
                 quest.counter += 1;
                 if (quest.counter >= 10) {
                     quest.status = Quest::COMPLETED;
+                    inventory.add("gold", 10);
                 }
             }
-            inventory[0].count += 1;
         }
     }
 
@@ -221,16 +221,16 @@ struct SceneGame {
             for (auto &_ : mod.items) items_len++;
         }
         items.init(&arena, items_len);
-        items.append(&arena, "wheat_seeds");
-        for (auto &mod : engine->mods) {
-            for (auto &item : mod.items) {
-                auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
-                                            int(item.len), item.ptr);
-                items.append(&arena, {key.len, key.ptr});
-            }
-        }
+        // items.append(&arena, "wheat_seeds");
+        // for (auto &mod : engine->mods) {
+        //     for (auto &item : mod.items) {
+        //         auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
+        //                                     int(item.len), item.ptr);
+        //         items.append(&arena, {key.len, key.ptr});
+        //     }
+        // }
 
-        inventory.init(items);
+        inventory.init(engine);
 
         // animations
         player_down.init(engine->sprites.get("player_down"), 3);
@@ -399,13 +399,13 @@ struct SceneGame {
                         checkCollisionSAT(attack->rect(), attack->angle, entity.getCollision(),
                                           0) and
                         !entity.invincible) {
-                        entity.takeDamage(attack->direction, inventory.inventory);
+                        entity.takeDamage(attack->direction);
                     }
 
                     if (spell->alive and
                         checkCollisionAABB(spell->rect(), entity.getCollision()) and
                         !entity.invincible) {
-                        entity.takeDamage(spell->direction, inventory.inventory);
+                        entity.takeDamage(spell->direction);
                         spell->alive = false;
                     }
                     break;
@@ -607,11 +607,8 @@ struct SceneGame {
             }
         };
     }
-    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, int render_width,
-                  int render_height) {
+    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
         ScopeArena scope(&arena);
-
-        if (engine->is_key_just_pressed(Key::e)) inventory.visible = !inventory.visible;
 
         while (dialog) {
             Slice<const char> text = {};
@@ -632,10 +629,10 @@ struct SceneGame {
                     break;
                 }
             }
-            Vec2 pos = {0.0F, float(render_height) * 2.0F / 3.0F};
+            Vec2 pos = {0.0F, float(render_size.y) * 2.0F / 3.0F};
             instances->append({
                 .position = pos,
-                .size = {float(render_width), float(render_height) / 3.0F},
+                .size = {float(render_size.x), float(render_size.y) / 3.0F},
                 .uv = solid,
                 .color = BLACK,
             });
@@ -663,14 +660,13 @@ struct SceneGame {
                 }
 
                 engine->drawText(instances, Slice<const char>(name),
-                                 {(float(render_width) / 2.0F) - (width / 2.0F),
-                                  (float(render_height) / 2.0F) - (height / 2.0F)},
+                                 {(float(render_size.x) / 2.0F) - (width / 2.0F),
+                                  (float(render_size.y) / 2.0F) - (height / 2.0F)},
                                  height, {WHITE.r, WHITE.g, WHITE.b, alpha});
             }
         }
 
-        inventory.updateUI(game, engine, instances, render_width, render_height, &scope.tmp,
-                           items);
+        inventory.updateUI(game, engine, instances, render_size, &scope.tmp);
 
         if (interaction_frame) {
             interaction_frame = false;

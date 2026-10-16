@@ -20,7 +20,7 @@ static struct UI {
     uint instances_len;
     uint prev_instances_len;
 
-    float logical_w, logical_h;
+    Vec2 logical;
 
     struct UBO {
         Mat4 projection;
@@ -28,13 +28,13 @@ static struct UI {
     } ubo;
 
     void resize(float w, float h) {
-        logical_w = 640, logical_h = 360;
+        logical.x = 640, logical.y = 360;
         if (w / h < 16.0F / 9.0F) {
-            logical_h = h * logical_w / w;
+            logical.y = h * logical.x / w;
         } else {
-            logical_w = w * logical_h / h;
+            logical.x = w * logical.y / h;
         }
-        ubo.projection = Mat4::ortho(0, logical_w, logical_h, 0, 0, 1);
+        ubo.projection = Mat4::ortho(0, logical.x, logical.y, 0, 0, 1);
     }
 
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
@@ -144,7 +144,7 @@ static struct UI {
             (Instance *)SDL_MapGPUTransferBuffer(device, transfer_buffer, true);
         SDL_assert(instances_raw);
 
-        return {Fixed<Instance>::create({MAX_INSTANCES, instances_raw}), logical_w, logical_h};
+        return {Fixed<Instance>::create({MAX_INSTANCES, instances_raw}), logical.x, logical.y};
     }
 
     void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,

@@ -192,11 +192,6 @@ static struct Engine {
         drawText(renderer, text, position, size, color, default_font);
     }
 
-    void drawText(Fixed<UIInstance> *renderer, Slice<char> text, Vec2i position,
-                  float size = 10.0F, Color color = WHITE) const {
-        drawText(renderer, {text.len, text.ptr}, position, size, color, default_font);
-    }
-
     void drawTextF(Arena *a, Fixed<UIInstance> *instances, Vec2 pos, const char *fmt, ...)
         __attribute__((format(gnu_printf, 5, 6))) {
         va_list ap;
@@ -226,7 +221,7 @@ static struct Engine {
 
     int rand(int n);
 
-    void updateUI(Fixed<UIInstance> *instances, int width, int height);
+    void updateUI(Fixed<UIInstance> *instances, Vec2i size);
 
     void update(WorldInstances *instances);
 } engine;
@@ -240,8 +235,7 @@ struct Game {
 
     void update(Engine *engine, WorldInstances *instances);
 
-    void updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
-                  int render_height);
+    void updateUI(Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size);
 
     void deinit(Engine *engine);
 };

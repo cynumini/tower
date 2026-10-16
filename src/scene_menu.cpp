@@ -7,8 +7,7 @@ struct SceneMenu {
 
     void update(Engine *engine, WorldInstances *instances) {}
 
-    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, int render_width,
-                  int render_height) {
+    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
         Slice<const char> text_play = "Play (ENTER)";
         Slice<const char> text_exit = "Exit (ESC)";
         float text_play_w = engine->measureText(text_play);
@@ -17,11 +16,11 @@ struct SceneMenu {
         float height = 26;
         engine->drawText(
             instances, text_play,
-            {render_width / 2.F - text_play_w / 2.F, render_height / 2.F - height / 2 + y});
+            {render_size.x / 2.F - text_play_w / 2.F, render_size.y / 2.F - height / 2 + y});
         y += 12;
         engine->drawText(
             instances, text_exit,
-            {render_width / 2.F - text_exit_w / 2.F, render_height / 2.F - height / 2 + y});
+            {render_size.x / 2.F - text_exit_w / 2.F, render_size.y / 2.F - height / 2 + y});
 
         if (engine->is_key_just_pressed(Key::enter)) {
             game->current_scene = Scene::game;

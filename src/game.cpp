@@ -24,14 +24,13 @@ void Game::update(Engine *engine, WorldInstances *instances) {
     }
 }
 
-void Game::updateUI(Engine *engine, Fixed<UIInstance> *instances, int render_width,
-                    int render_height) {
+void Game::updateUI(Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
     switch (current_scene) {
     case Scene::menu:
-        scene_menu.updateUI(this, engine, instances, render_width, render_height);
+        scene_menu.updateUI(this, engine, instances, render_size);
         break;
     case Scene::game:
-        scene_game.updateUI(this, engine, instances, render_width, render_height);
+        scene_game.updateUI(this, engine, instances, render_size);
         break;
     }
 }
