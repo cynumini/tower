@@ -15,11 +15,13 @@ struct SceneMenu {
         float text_exit_w = engine->measureText(text_exit);
         float y = 2;
         float height = 26;
-        engine->drawText(instances, text_play,
-                         {640.F / 2.F - text_play_w / 2.F, 360.F / 2.F - height / 2 + y});
+        engine->drawText(
+            instances, text_play,
+            {render_width / 2.F - text_play_w / 2.F, render_height / 2.F - height / 2 + y});
         y += 12;
-        engine->drawText(instances, text_exit,
-                         {640.F / 2.F - text_exit_w / 2.F, 360.F / 2.F - height / 2 + y});
+        engine->drawText(
+            instances, text_exit,
+            {render_width / 2.F - text_exit_w / 2.F, render_height / 2.F - height / 2 + y});
 
         if (engine->is_key_just_pressed(Key::enter)) {
             game->current_scene = Scene::game;

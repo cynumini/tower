@@ -7,8 +7,7 @@
 #include <skn.cpp>
 #include <skn_math.cpp>
 
-#include "shared.cpp"
-
+#include "inventory.cpp"
 #include "map.cpp"
 
 static struct Quest {
@@ -29,14 +28,6 @@ static struct Quest {
 
 // Items
 static Dynamic<Slice<const char>> items;
-
-// Invertory
-struct InventorySlot {
-    u8 item_id;
-    u8 count;
-};
-static InventorySlot inventory[8 * 8];
-static bool inventory_visible;
 
 // Timer
 struct Timer {
@@ -108,7 +99,7 @@ struct Entity {
         };
     }
 
-    void takeDamage(Vec2 direction, InventorySlot *inventory) {
+    void takeDamage(Vec2 direction, Inventory::Slot *inventory) {
         this->direction = direction;
         const float KNOCKBACK_SPEED = 10;
         speed = KNOCKBACK_SPEED;
@@ -238,9 +229,8 @@ struct SceneGame {
                 items.append(&arena, {key.len, key.ptr});
             }
         }
-        for (u8 i = 0; i < u8(items.len); i++) {
-            inventory[i] = InventorySlot{i, 1};
-        }
+
+        inventory.init(items);
 
         // animations
         player_down.init(engine->sprites.get("player_down"), 3);
@@ -409,13 +399,13 @@ struct SceneGame {
                         checkCollisionSAT(attack->rect(), attack->angle, entity.getCollision(),
                                           0) and
                         !entity.invincible) {
-                        entity.takeDamage(attack->direction, inventory);
+                        entity.takeDamage(attack->direction, inventory.inventory);
                     }
 
                     if (spell->alive and
                         checkCollisionAABB(spell->rect(), entity.getCollision()) and
                         !entity.invincible) {
-                        entity.takeDamage(spell->direction, inventory);
+                        entity.takeDamage(spell->direction, inventory.inventory);
                         spell->alive = false;
                     }
                     break;
@@ -621,7 +611,7 @@ struct SceneGame {
                   int render_height) {
         ScopeArena scope(&arena);
 
-        if (engine->is_key_just_pressed(Key::e)) inventory_visible = !inventory_visible;
+        if (engine->is_key_just_pressed(Key::e)) inventory.visible = !inventory.visible;
 
         while (dialog) {
             Slice<const char> text = {};
@@ -679,33 +669,8 @@ struct SceneGame {
             }
         }
 
-        if (inventory_visible) {
-            for (size_t x_i = 0; x_i < 8; x_i++) {
-                for (size_t y_i = 0; y_i < 8; y_i++) {
-                    const Vec2 cell_size = engine->sprites.get("inventory_slot").size();
-                    const Vec2 position =
-                        Vec2{float(x_i), float(y_i)} * cell_size +
-                        (Vec2{float(render_width), float(render_height)} - (cell_size * 8.0F));
-                    instances->append(
-                        {position, cell_size, engine->sprites.get("inventory_slot"), WHITE});
-                    const auto *invertory_slot = &inventory[(y_i * 8) + x_i];
-                    if (invertory_slot->count != 0) {
-                        assert(invertory_slot->count);
-                        assert(invertory_slot->count < 100);
-                        auto text = scope.tmp.allocPrint("%d", invertory_slot->count);
-                        instances->append({position, cell_size,
-                                           engine->sprites.get(items[invertory_slot->item_id]),
-                                           WHITE});
-                        const float FONT_SIZE = 10;
-                        const Vec2 text_offset =
-                            position +
-                            (cell_size -
-                             Vec2(engine->measureText({text.len, text.ptr}), FONT_SIZE));
-                        engine->drawText(instances, text, text_offset);
-                    }
-                }
-            }
-        }
+        inventory.updateUI(game, engine, instances, render_width, render_height, &scope.tmp,
+                           items);
 
         if (interaction_frame) {
             interaction_frame = false;
