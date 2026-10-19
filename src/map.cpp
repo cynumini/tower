@@ -21,20 +21,24 @@ enum struct Material : u8 {
     water,
     door,
     window,
-    iron_ore
+    iron_ore,
+    furnace
 };
 
-static constexpr const char *BlockKey[]{[int(Material::air)] = "",
-                                        [int(Material::deep)] = "deep",
-                                        [int(Material::stone)] = "stone",
-                                        [int(Material::dirt)] = "dirt",
-                                        [int(Material::grass)] = "grass",
-                                        [int(Material::wood)] = "wood",
-                                        [int(Material::wall)] = "wall",
-                                        [int(Material::water)] = "water",
-                                        [int(Material::door)] = "door",
-                                        [int(Material::window)] = "window",
-                                        [int(Material::iron_ore)] = "iron_ore"};
+static constexpr const char *BlockKey[]{
+    [int(Material::air)] = "",
+    [int(Material::deep)] = "deep",
+    [int(Material::stone)] = "stone",
+    [int(Material::dirt)] = "dirt",
+    [int(Material::grass)] = "grass",
+    [int(Material::wood)] = "wood",
+    [int(Material::wall)] = "wall",
+    [int(Material::water)] = "water",
+    [int(Material::door)] = "door",
+    [int(Material::window)] = "window",
+    [int(Material::iron_ore)] = "iron_ore",
+    [int(Material::furnace)] = "furnace",
+};
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<u8>::max());
 
@@ -157,7 +161,7 @@ struct Cell {
 };
 
 struct Object {
-    enum class Type { door, wall, ore };
+    enum class Type { door, wall, ore, furnace };
     Type type;
     Vec3i pos;
     Material material;
@@ -170,8 +174,10 @@ struct Object {
         return {Type::wall, pos, material, rotation};
     }
 
-    static Object ore(Vec3i pos, Material material) {
-        return {Type::ore, pos, material, Rotation::sn};
+    static Object ore(Vec3i pos) { return {Type::ore, pos, Material::iron_ore, Rotation::sn}; }
+
+    static Object furnace(Vec3i pos) {
+        return {Type::furnace, pos, Material::furnace, Rotation::sn};
     }
 
     inline Rect getSprite() const { return MaterialSprite[int(material)]; }
@@ -250,7 +256,7 @@ static void initStructure(Engine *engine) {
             }
 
             if (!ok) continue;
-            structures[0].objects.append(Object::ore(pos, Material::iron_ore));
+            structures[0].objects.append(Object::ore(pos));
             break;
         }
     }
@@ -278,6 +284,9 @@ static void initStructure(Engine *engine) {
     structures[1].objects.append(Object::door({5, 0, 0}, Material::door, Rotation::ns));
     structures[1].objects.append(Object::wall({3, 0, 0}, Material::window, Rotation::ns));
     structures[1].objects.append(Object::wall({7, 0, 0}, Material::window, Rotation::ns));
+    structures[1].objects.append(Object::furnace({4, 7, 0}));
+    structures[1].objects.append(Object::furnace({5, 7, 0}));
+    structures[1].objects.append(Object::furnace({6, 7, 0}));
 }
 
 // Locations
@@ -654,6 +663,7 @@ struct Map {
                         instances->squares.append(
                             {pos + face_offsets[r] * 0.5, size, sprite, tint[r], Face(r), 0});
                 } break;
+                case Object::Type::furnace:
                 case Object::Type::ore: {
                     auto sprite = object.getSprite();
                     instances->squares.append({pos, {1, 1}, sprite, WHITE, Face::billboard, 0});
@@ -735,6 +745,9 @@ struct Map {
                 if (object.type == Object::Type::ore) {
                     pos = posFromIndex(chunk.index) + object.pos;
                     result.append({pos, {0.25F, 0.25F}});
+                } else if (object.type == Object::Type::furnace) {
+                    pos = posFromIndex(chunk.index) + object.pos;
+                    result.append({pos, {1.0F, 1.0F}});
                 }
             }
         }
