@@ -10,15 +10,31 @@ static constexpr int PIXELS_PER_UNIT = 32;
 static constexpr float PIXEL = 1.0F / float(PIXELS_PER_UNIT);
 
 // Material
-enum struct Material : u8 { air, deep, stone, dirt, grass, wood, wall, water, door, window };
-
-static constexpr const char *BlockKey[]{
-    [int(Material::air)] = "",        [int(Material::deep)] = "deep",
-    [int(Material::stone)] = "stone", [int(Material::dirt)] = "dirt",
-    [int(Material::grass)] = "grass", [int(Material::wood)] = "wood",
-    [int(Material::wall)] = "wall",   [int(Material::water)] = "water",
-    [int(Material::door)] = "door",   [int(Material::window)] = "window",
+enum struct Material : u8 {
+    air,
+    deep,
+    stone,
+    dirt,
+    grass,
+    wood,
+    wall,
+    water,
+    door,
+    window,
+    iron_ore
 };
+
+static constexpr const char *BlockKey[]{[int(Material::air)] = "",
+                                        [int(Material::deep)] = "deep",
+                                        [int(Material::stone)] = "stone",
+                                        [int(Material::dirt)] = "dirt",
+                                        [int(Material::grass)] = "grass",
+                                        [int(Material::wood)] = "wood",
+                                        [int(Material::wall)] = "wall",
+                                        [int(Material::water)] = "water",
+                                        [int(Material::door)] = "door",
+                                        [int(Material::window)] = "window",
+                                        [int(Material::iron_ore)] = "iron_ore"};
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<u8>::max());
 
@@ -81,14 +97,18 @@ struct Cell {
         }
     }
 
-    inline bool isEmpty() const {
+    inline bool isEmpty(bool floor_ok = false) const {
         switch (type) {
         case Type::block:
         case Type::slope:
         case Type::frame:
             return a == Material::air;
         case Type::surface:
-            return a == Material::air and b == Material::air;
+            if (!floor_ok) {
+                return a == Material::air and b == Material::air;
+            } else {
+                return b == Material::air;
+            }
         }
     }
 
@@ -137,7 +157,7 @@ struct Cell {
 };
 
 struct Object {
-    enum class Type { door, wall };
+    enum class Type { door, wall, ore };
     Type type;
     Vec3i pos;
     Material material;
@@ -149,10 +169,15 @@ struct Object {
     static Object wall(Vec3i pos, Material material, Rotation rotation) {
         return {Type::wall, pos, material, rotation};
     }
+
+    static Object ore(Vec3i pos, Material material) {
+        return {Type::ore, pos, material, Rotation::sn};
+    }
+
     inline Rect getSprite() const { return MaterialSprite[int(material)]; }
 };
 
-constexpr int OBJECT_LEN = 4;
+constexpr int OBJECT_LEN = 32;
 
 // Chunk
 struct Chunk {
@@ -180,13 +205,13 @@ struct Chunk {
 
 // Structure
 static struct Structure {
-    static constexpr int MAX_SIZE = 16;
+    static constexpr int MAX_SIZE = 32;
     Vec3i pos;
     Cell data[MAX_SIZE][MAX_SIZE][MAX_SIZE];
     Static<Object, OBJECT_LEN> objects;
 } structures[2] = {};
 
-static void initStructure() {
+static void initStructure(Engine *engine) {
     // road
     structures[0].pos = {0, 6, 1};
     for (int x = 0; x < Structure::MAX_SIZE; x++) {
@@ -211,6 +236,24 @@ static void initStructure() {
     structures[0].objects.append(Object::door({2, 0, 0}, Material::door, Rotation::we));
     structures[0].objects.append(Object::door({4, 0, 0}, Material::door, Rotation::ns));
     structures[0].objects.append(Object::door({6, 0, 0}, Material::door, Rotation::ew));
+
+    for (int i = 0; i < 16; i++) {
+        while (true) {
+            int x = engine->rand(16);
+            int y = engine->rand(16);
+            Vec3i pos = {x, y, 0};
+
+            if (!structures[0].data[x][y][0].isEmpty(true)) continue;
+            bool ok = true;
+            for (auto &object : structures[0].objects) {
+                if (object.pos == pos) ok = false;
+            }
+
+            if (!ok) continue;
+            structures[0].objects.append(Object::ore(pos, Material::iron_ore));
+            break;
+        }
+    }
 
     // house
     structures[1].pos = {20, 5, 1};
@@ -371,7 +414,7 @@ struct Map {
 
     void init(Engine *engine, Vec3 player_pos) {
         initMaterialSprite(engine);
-        initStructure();
+        initStructure(engine);
         initLocations();
 
         size_t side = 2 * range + 1;
@@ -611,6 +654,11 @@ struct Map {
                         instances->squares.append(
                             {pos + face_offsets[r] * 0.5, size, sprite, tint[r], Face(r), 0});
                 } break;
+                case Object::Type::ore: {
+                    auto sprite = object.getSprite();
+                    instances->squares.append({pos, {1, 1}, sprite, WHITE, Face::billboard, 0});
+
+                } break;
                 }
             }
         }
@@ -681,6 +729,12 @@ struct Map {
                     if (!cell->isSolid()) continue;
                     pos = posFromIndex(chunk.index) + cell_pos;
                     result.append({pos, {1, 1}});
+                }
+            }
+            for (auto &object : chunk.objects) {
+                if (object.type == Object::Type::ore) {
+                    pos = posFromIndex(chunk.index) + object.pos;
+                    result.append({pos, {0.25F, 0.25F}});
                 }
             }
         }
