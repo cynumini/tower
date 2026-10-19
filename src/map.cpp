@@ -743,6 +743,35 @@ struct Map {
 
     Cell *getSelected() { return getCell(selection_pos); }
 
+    Object *getObject(Vec3i pos) {
+        for (auto &chunk : chunks) {
+            auto index = indexFromPos(pos);
+            auto local =
+                Vec3i(pos.x - index.x * Chunk::SIZE.x, pos.y - index.y * Chunk::SIZE.y, pos.z);
+            if (index != chunk.index) continue;
+            for (auto &object : chunk.objects) {
+                if (object.pos == local) return &object;
+            }
+        }
+        return 0;
+    }
+
+    Object *getSelectedObject() { return getObject(selection_pos); }
+
+    void deleteObject(Vec3 pos) {
+        int del = -1;
+        for (auto &chunk : chunks) {
+            auto index = indexFromPos(pos);
+            if (index != chunk.index) continue;
+            auto local =
+                Vec3i(pos.x - index.x * Chunk::SIZE.x, pos.y - index.y * Chunk::SIZE.y, pos.z);
+            for (size_t i = 0; i < chunk.objects.len; i++) {
+                if (chunk.objects[i].pos == local) del = i;
+            }
+            chunk.objects.swapRemove(del);
+        }
+    }
+
     void deleteFloor() {
         auto cell = getSelected();
         if (cell->type == Cell::Type::surface and cell->hasFloor()) {

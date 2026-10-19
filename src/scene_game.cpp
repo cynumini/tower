@@ -328,16 +328,34 @@ struct SceneGame {
                         spell->direction = player->direction;
                         spell->speed = 8;
                     }
-                    map.selection = strcmp(inventory.getCurrent(), "hoe") == 0;
+
+                    if (strcmp(inventory.getCurrent(), "hoe") == 0) {
+                        map.selection = true;
+                    } else if (strcmp(inventory.getCurrent(), "pickaxe") == 0) {
+                        map.selection = true;
+                    } else {
+                        map.selection = false;
+                    }
+
                     if (player_action) {
-                        if (map.selection) {
+                        if (strcmp(inventory.getCurrent(), "hoe") == 0) {
+                            map.selection = true;
                             Cell *cell = map.getSelected();
                             if (cell->type == Cell::Type::surface and cell->hasFloor() and
                                 cell->getFloor() == Material::grass) {
                                 map.deleteFloor();
                             }
+                        } else if (strcmp(inventory.getCurrent(), "pickaxe") == 0) {
+                            Object *object = map.getSelectedObject();
+                            if (object and object->type == Object::Type::ore) {
+                                map.deleteObject(map.selection_pos);
+                                inventory.add("iron_ore", 1);
+                            }
                         }
-                        if (strcmp(inventory.getCurrent(), "sword") == 0) attack->alive = true;
+
+                        else if (strcmp(inventory.getCurrent(), "sword") == 0) {
+                            attack->alive = true;
+                        }
                     }
                     const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -
                                                    float(engine->isKeyPressed(Key::a)),
