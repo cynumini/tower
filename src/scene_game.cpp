@@ -198,6 +198,7 @@ static Map map;
 
 // ids
 static Entity *player;
+static bool player_action;
 static Entity *attack;
 static Entity *spell;
 
@@ -285,6 +286,8 @@ struct SceneGame {
         map.init(engine, player->pos);
     }
     void update(Engine *engine, WorldInstances *instances, Vec2 logical) {
+        player_action = false;
+
         float yaw = engine->isKeyJustReleased(Key::kp_4) - engine->isKeyJustReleased(Key::kp_6);
         float pitch = engine->isKeyJustReleased(Key::kp_2) - engine->isKeyJustReleased(Key::kp_8);
         float roll = engine->isKeyJustReleased(Key::kp_7) - engine->isKeyJustReleased(Key::kp_9);
@@ -304,6 +307,9 @@ struct SceneGame {
 
         auto collisions = map.getCollision(player->pos);
 
+        player_action = engine->isMouseButtonJustPressed(MouseButton::left) or
+                        engine->isKeyJustPressed(Key::space);
+
         for (auto &entity : entities) {
             if (!entity.alive) continue;
             if (!pause) {
@@ -315,7 +321,7 @@ struct SceneGame {
                     } else {
                         map.hide_above_level = false;
                     }
-                    if (engine->isKeyJustPressed(Key::space)) attack->alive = true;
+
                     if (engine->isKeyJustPressed(Key::f)) {
                         spell->alive = true;
                         spell->pos = entity.pos;
@@ -323,7 +329,7 @@ struct SceneGame {
                         spell->speed = 8;
                     }
                     map.selection = strcmp(inventory.getCurrent(), "hoe") == 0;
-                    if (engine->isMouseButtonJustPressed(MouseButton::left)) {
+                    if (player_action) {
                         if (map.selection) {
                             Cell *cell = map.getSelected();
                             if (cell->type == Cell::Type::surface and cell->hasFloor() and
@@ -331,6 +337,7 @@ struct SceneGame {
                                 map.deleteFloor();
                             }
                         }
+                        if (strcmp(inventory.getCurrent(), "sword") == 0) attack->alive = true;
                     }
                     const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -
                                                    float(engine->isKeyPressed(Key::a)),
@@ -424,7 +431,7 @@ struct SceneGame {
                     quest.pos = entity.pos;
                     if (!dialog) {
                         if (checkCollisionAABB(entity.getInteraction(), player->getCollision())) {
-                            if (engine->isKeyJustPressed(Key::space)) {
+                            if (player_action) {
                                 dialog = true;
                                 pause = true;
                                 interaction_frame = true;
@@ -625,10 +632,10 @@ struct SceneGame {
                     break;
                 }
                 text = lines[curr_line];
-                curr_line += engine->isKeyJustPressed(Key::space) and (not interaction_frame);
+                curr_line += player_action and (not interaction_frame);
             } else {
                 text = quest.line[quest.status];
-                if (engine->isKeyJustPressed(Key::space) and (not interaction_frame)) {
+                if (player_action and (not interaction_frame)) {
                     dialog = pause = false;
                     if (quest.status == Quest::COMPLETED) {
                         quest.status = Quest::REWARDED;
@@ -681,5 +688,5 @@ struct SceneGame {
             interaction_frame = false;
         }
     };
-    void deinit([[maybe_unused]]Engine *engine) {}
+    void deinit([[maybe_unused]] Engine *engine) {}
 };
