@@ -3,9 +3,9 @@
 #include "shared.cpp"
 
 struct SceneMenu {
-    void init(Engine *engine) {}
+    void init([[maybe_unused]]Engine *engine) {}
 
-    void update(Engine *engine, WorldInstances *instances, Vec2 logical) {}
+    void update([[maybe_unused]]Engine *engine, [[maybe_unused]]WorldInstances *instances, [[maybe_unused]]Vec2 logical) {}
 
     void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
         Slice<const char> text_play = "Play (ENTER)";
@@ -27,5 +27,5 @@ struct SceneMenu {
         }
     };
 
-    void deinit(Engine *engine) {}
+    void deinit([[maybe_unused]]Engine *engine) {}
 };

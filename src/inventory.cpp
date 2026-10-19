@@ -15,7 +15,7 @@ static struct Inventory {
     bool visible;
     Rect slot_sprite;
     Rect select_sprite;
-    int select = 0;
+    size_t select = 0;
 
     void init(Engine *engine) {
         // items
@@ -48,8 +48,8 @@ static struct Inventory {
         }
     }
 
-    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size,
-                  Arena *a) {
+    void updateUI([[maybe_unused]]Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size,
+                  [[maybe_unused]]Arena *a) {
         // hud
         for (int i = 0; i < 2; i++) {
             if (engine->isKeyPressed(Key(int(Key::key_1) + i))) select = i;
@@ -58,7 +58,7 @@ static struct Inventory {
         constexpr int hud_len = 2;
         Vec2 hud_offset = {(render_size.x - slot_sprite.w * hud_len) / 2,
                            render_size.y - slot_sprite.h};
-        for (int i = 0; i < hud_len; i++) {
+        for (size_t i = 0; i < hud_len; i++) {
             drawSlot(engine, instances, hud_offset, i);
             if (i == select) {
                 instances->append({hud_offset, select_sprite.size(), select_sprite, WHITE});
@@ -99,5 +99,10 @@ static struct Inventory {
             }
         }
         TODO("What if there is no such item in the inventory nor empty inventory slots?");
+    }
+
+    const char *getCurrent() {
+        assert(slots.len > select);
+        return slots[select].name;
     }
 } inventory;

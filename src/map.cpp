@@ -124,6 +124,16 @@ struct Cell {
         assert(type == Type::surface);
         return MaterialSprite[int(b)];
     }
+
+    inline void setFloor(Material material = Material::air) {
+        assert(type == Type::surface);
+        a = material;
+    }
+
+    inline Material getFloor() {
+        assert(type == Type::surface);
+        return a;
+    }
 };
 
 struct Object {
@@ -249,7 +259,8 @@ struct Map {
     int range = 1;
 
     Rect selection_sprite;
-    Vec3 selection;
+    Vec3 selection_pos;
+    bool selection = false;
 
     static Vec2i indexFromPos(Vec3 pos) {
         return {int(std::floor(pos.x / Chunk::SIZE.x)), int(std::floor(pos.y / Chunk::SIZE.y))};
@@ -396,12 +407,12 @@ struct Map {
         return ray;
     }
 
-    Vec3 intersectGround(Ray ray, float z) {
-        if (std::abs(ray.direction.z) < 1e-6F) return {};
-        float t = (z - ray.origin.z) / ray.direction.z;
-        if (t < 0.F) return {};
-        return ray.origin + ray.direction * t;
-    }
+    // Vec3 intersectGround(Ray ray, float z) {
+    //     if (std::abs(ray.direction.z) < 1e-6F) return {};
+    //     float t = (z - ray.origin.z) / ray.direction.z;
+    //     if (t < 0.F) return {};
+    //     return ray.origin + ray.direction * t;
+    // }
 
     void update(Engine *engine, WorldInstances *instances, Vec3 player_pos, Vec2 logical) {
         static constexpr Color tint[] = {0xDFDFDFFF, WHITE, 0xDFDFDFFF, 0xBFBFBFFF, WHITE};
@@ -418,7 +429,6 @@ struct Map {
         Vec2i new_center = indexFromPos(player_pos);
         if (new_center != center) updateChunksAndApplyStructures(new_center);
         for (auto &chunk : chunks) {
-
             for (int z = 0; z < MAP_Z_LEN; z++) {
                 for (int y = 0; y < Chunk::SIZE.y; y++) {
                     for (int x = 0; x < Chunk::SIZE.x; x++) {
@@ -427,7 +437,7 @@ struct Map {
                         Cell cell = chunk.data[x][y][z];
                         if (cell.isEmpty()) continue;
                         Vec3i cell_pos = {x, y, z};
-                        Vec3 pos = chunk.index * Chunk::SIZE + cell_pos + Vec3(0.5F, 0.5F, 0);
+                        Vec3 pos = chunk.index * Chunk::SIZE + cell_pos + Vec3(0.5F, 0.5F, 0.5F);
                         switch (cell.type) {
                         case Cell::Type::block: {
                             const auto sprite = cell.getBlockSprite();
@@ -556,7 +566,7 @@ struct Map {
                 }
             }
             for (auto object : chunk.objects) {
-                Vec3 pos = chunk.index * Chunk::SIZE + object.pos + Vec3(0.5F, 0.5F, 0);
+                Vec3 pos = chunk.index * Chunk::SIZE + object.pos + Vec3(0.5F, 0.5F, 0.5F);
                 switch (object.type) {
                 case Object::Type::door: {
                     auto r = int(object.rotation);
@@ -605,37 +615,59 @@ struct Map {
             }
         }
 
-        Ray ray = screenToRay(engine, logical);
-        Vec3 pos;
-
-        for (int z = int(player_pos.z); z >= 0; z--) {
-            bool same_level = (z == int(player_pos.z));
-
-            float offset = same_level ? 0.5F : 0.0F;
-            Vec3 hit = intersectGround(ray, float(z) - offset);
-
-            int x = int(std::floor(hit.x));
-            int y = int(std::floor(hit.y));
-
-            Vec3 candidate{float(x), float(y), float(z)};
-
-            auto cell = getCell(candidate);
-            if (cell->isEmpty()) continue;
-
-            selection = candidate;
-
-            if (same_level && cell->type == Cell::Type::surface && !cell->hasCeiling()) {
-                pos = selection + Vec3(0.5F, 0.5F, -0.45F);
-            } else {
-                pos = selection + Vec3(0.5F, 0.5F, 0.5F);
+        if (selection) {
+            Ray ray = screenToRay(engine, logical);
+            Vec3 goal = ray.origin.floor();
+            Vec3 voxel = goal;
+            goal.x += ray.direction.x > 0 ? 1 : 0; // why not -1? Because floor imply "-"
+            goal.y += ray.direction.y > 0 ? 1 : 0; // why not -1? Because floor imply "-"
+            goal.z += ray.direction.z > 0 ? 1 : 0; // why not -1? Because floor imply "-"
+            bool found = false;
+            bool floor = false;
+            bool from_top = false;
+            while (goal.z >= 0 and (goal - ray.direction).length() < 1000) {
+                Cell *cell = getCell(voxel);
+                Cell *above = getCell(voxel + Vec3(0, 0, 1));
+                bool floor_check = from_top and above and above->type == Cell::Type::surface and
+                                   !above->hasCeiling() and above->hasFloor();
+                if (cell != 0 and (!cell->isEmpty() or floor_check) and
+                    (cell->type != Cell::Type::surface or cell->hasCeiling()) and
+                    !(hide_above_level and goal.z > player_pos.z)) {
+                    if (floor_check) floor = true;
+                    found = true;
+                    break;
+                }
+                constexpr auto inf = std::numeric_limits<float>::infinity();
+                Vec3 t = (goal - ray.origin);
+                t.x = ray.direction.x == 0 ? inf : t.x / ray.direction.x;
+                t.y = ray.direction.y == 0 ? inf : t.y / ray.direction.y;
+                t.z = ray.direction.z == 0 ? inf : t.z / ray.direction.z;
+                Vec3 step = {};
+                from_top = false;
+                if (t.x < t.y and t.x < t.z) {
+                    step.x += ray.direction.x > 0 ? 1 : -1;
+                } else if (t.y < t.z) {
+                    step.y += ray.direction.y > 0 ? 1 : -1;
+                } else {
+                    step.z += ray.direction.z > 0 ? 1 : -1;
+                    if (ray.direction.z < 0) {
+                        from_top = true;
+                    }
+                }
+                goal += step;
+                voxel += step;
             }
-
-            break;
+            if (found) {
+                selection_pos = voxel;
+                instances->squares.append({selection_pos + Vec3(0.5, 0.5, 1),
+                                           {1, 1},
+                                           selection_sprite,
+                                           WHITE,
+                                           Face::z_pos,
+                                           0});
+                if (floor) selection_pos.z += 1;
+            }
         }
-        // if (cell->isEmpty()) {
-        //     pos.z -= 1;
-        // }
-        instances->squares.append({pos, {1, 1}, selection_sprite, WHITE, Face::z_pos, 0});
     }
 
     Static<Rect, 256> getCollision(Vec3 pos) {
@@ -648,16 +680,19 @@ struct Map {
                     auto cell = getCellRelative(cell_pos, chunk.index);
                     if (!cell->isSolid()) continue;
                     pos = posFromIndex(chunk.index) + cell_pos;
-                    result.append({pos + Vec3(0.5F, 0.5F, 0), {1, 1}});
+                    result.append({pos, {1, 1}});
                 }
             }
         }
         return result;
     }
 
-    void deleteSelected() {
-        auto cell = getCell(selection);
-        *cell = Cell::air();
-        // printf("%f\n", selection.x);
+    Cell *getSelected() { return getCell(selection_pos); }
+
+    void deleteFloor() {
+        auto cell = getSelected();
+        if (cell->type == Cell::Type::surface and cell->hasFloor()) {
+            cell->setFloor();
+        }
     }
 };

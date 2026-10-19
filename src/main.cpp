@@ -36,12 +36,12 @@ static struct Time {
     float ms;
 } time;
 
-void Engine::update(WorldInstances *instances, Vec2 logical) {
+void Engine::update([[maybe_unused]]WorldInstances *instances, [[maybe_unused]]Vec2 logical) {
     if (isKeyJustPressed(Key::escape)) running = true;
     if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
 }
 
-void Engine::updateUI(Fixed<UIInstance> *instances, Vec2i render_size) {
+void Engine::updateUI(Fixed<UIInstance> *instances, [[maybe_unused]]Vec2i render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
         float offset_y = 2.0F;
@@ -81,7 +81,6 @@ struct AtlasItem {
 };
 
 static Vec2i last_size;
-static int last_height;
 
 void resize(Vec2i size) {
     if (size == last_size) return;
@@ -340,6 +339,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         break;
     case SDL_EVENT_MOUSE_MOTION: {
         engine.mouse = {event->motion.x, event->motion.y};
+        break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         if (event->button.button == SDL_BUTTON_LEFT) {
@@ -351,6 +351,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         if (event->button.button == SDL_BUTTON_RIGHT) {
             engine.mouse_button_state[MouseButton::right] = ButtonState::pressed;
         }
+        break;
     }
     default: {
         break;

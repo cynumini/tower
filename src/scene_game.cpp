@@ -309,7 +309,7 @@ struct SceneGame {
             if (!pause) {
                 switch (entity.kind) {
                 case Entity::Kind::player: {
-                    auto cell = map.getCell(entity.pos);
+                    auto cell = map.getCell(entity.pos + Vec3(0.5, 0.5, 0));
                     if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
                         map.hide_above_level = true;
                     } else {
@@ -322,8 +322,15 @@ struct SceneGame {
                         spell->direction = player->direction;
                         spell->speed = 8;
                     }
+                    map.selection = strcmp(inventory.getCurrent(), "hoe") == 0;
                     if (engine->isMouseButtonJustPressed(MouseButton::left)) {
-                        map.deleteSelected();
+                        if (map.selection) {
+                            Cell *cell = map.getSelected();
+                            if (cell->type == Cell::Type::surface and cell->hasFloor() and
+                                cell->getFloor() == Material::grass) {
+                                map.deleteFloor();
+                            }
+                        }
                     }
                     const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -
                                                    float(engine->isKeyPressed(Key::a)),
@@ -474,6 +481,7 @@ struct SceneGame {
             }
         }
 
+        Vec3 pos_offset = {0.5, 0.5, 0.5};
         for (auto &entity : entities) {
             if (!entity.alive) continue;
             bool use_default = true;
@@ -483,7 +491,7 @@ struct SceneGame {
                 break;
             case Entity::Kind::attack: {
                 use_default = false;
-                instances->squares.append({{entity.pos},
+                instances->squares.append({{entity.pos + pos_offset},
                                            entity.size,
                                            entity.sprite,
                                            entity.tint,
@@ -497,7 +505,7 @@ struct SceneGame {
                 break;
             }
             if (use_default) {
-                instances->squares.append({{entity.pos},
+                instances->squares.append({{entity.pos + pos_offset},
                                            entity.size,
                                            entity.sprite,
                                            entity.tint,
@@ -506,7 +514,7 @@ struct SceneGame {
             }
         }
 
-        engine->camera.pos = player->pos;
+        engine->camera.pos = player->pos + Vec3(0.5, 0.5, 0.0);
 
         // current location
         {
@@ -543,7 +551,7 @@ struct SceneGame {
                 sign = '?';
                 if (quest.status == Quest::ACTIVE) color = WHITE;
             }
-            engine->drawWorldSymbol(&instances->squares, {quest.pos, quest.pos.z + 0.75F}, sign,
+            engine->drawWorldSymbol(&instances->squares, quest.pos + Vec3{0.5, 0.5, 1.25F}, sign,
                                     SIZE, color, engine->default_font);
         }
 
@@ -562,11 +570,12 @@ struct SceneGame {
             // });
 
             for (auto &entity : entities) {
+                auto pos = entity.pos + Vec3(0.5, 0.5, 0.5);
                 if (!entity.alive) continue;
 
                 if (entity.kind == Entity::Kind::attack) {
                     instances->squares.append({
-                        .position = entity.pos,
+                        .position = pos,
                         .size = entity.size,
                         .uv = solid,
                         .color = 0xff00FF7f,
@@ -579,7 +588,7 @@ struct SceneGame {
                 if (entity.isInteractable()) {
                     auto collision = entity.getInteraction();
                     instances->squares.append({
-                        .position = entity.pos,
+                        .position = pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0xff00007f,
@@ -592,7 +601,7 @@ struct SceneGame {
                 if (entity.isSolid()) {
                     auto collision = entity.getCollision();
                     instances->squares.append({
-                        .position = entity.pos,
+                        .position = pos,
                         .size = collision.size(),
                         .uv = solid,
                         .color = 0x0000ff7f,
@@ -672,5 +681,5 @@ struct SceneGame {
             interaction_frame = false;
         }
     };
-    void deinit(Engine *engine) {}
+    void deinit([[maybe_unused]]Engine *engine) {}
 };
