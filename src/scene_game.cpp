@@ -329,17 +329,8 @@ struct SceneGame {
                         spell->speed = 8;
                     }
 
-                    if (strcmp(inventory.getCurrent(), "hoe") == 0) {
-                        map.selection = true;
-                    } else if (strcmp(inventory.getCurrent(), "pickaxe") == 0) {
-                        map.selection = true;
-                    } else {
-                        map.selection = false;
-                    }
-
                     if (player_action) {
                         if (strcmp(inventory.getCurrent(), "hoe") == 0) {
-                            map.selection = true;
                             Cell *cell = map.getSelected();
                             if (cell->type == Cell::Type::surface and cell->hasFloor() and
                                 cell->getFloor() == Material::grass) {
@@ -351,10 +342,22 @@ struct SceneGame {
                                 map.deleteObject(map.selection_pos);
                                 inventory.add("iron_ore", 1);
                             }
+                        } else if (strcmp(inventory.getCurrent(), "sword") == 0) {
+                            attack->alive = true;
                         }
 
-                        else if (strcmp(inventory.getCurrent(), "sword") == 0) {
-                            attack->alive = true;
+                        {
+                            Object *object = map.getSelectedObject();
+                            if (object != nullptr and object->type == Object::Type::furnace) {
+                                for (auto &slot : inventory.slots) {
+                                    if (slot.name == nullptr or slot.count == 0) continue;
+                                    if (strcmp(slot.name, "iron_ore") == 0) {
+                                        auto count = slot.count;
+                                        slot.count = 0;
+                                        inventory.add("iron_ingot", count);
+                                    }
+                                }
+                            }
                         }
                     }
                     const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -

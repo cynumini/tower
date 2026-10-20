@@ -312,7 +312,7 @@ struct Map {
 
     Rect selection_sprite;
     Vec3 selection_pos;
-    bool selection = false;
+    bool selection = true;
 
     static Vec2i indexFromPos(Vec3 pos) {
         return {int(std::floor(pos.x / Chunk::SIZE.x)), int(std::floor(pos.y / Chunk::SIZE.y))};
@@ -678,19 +678,27 @@ struct Map {
             Vec3 goal = ray.origin.floor();
             Vec3 voxel = goal;
             goal.x += ray.direction.x > 0 ? 1 : 0; // why not -1? Because floor imply "-"
-            goal.y += ray.direction.y > 0 ? 1 : 0; // why not -1? Because floor imply "-"
-            goal.z += ray.direction.z > 0 ? 1 : 0; // why not -1? Because floor imply "-"
+            goal.y += ray.direction.y > 0 ? 1 : 0;
+            goal.z += ray.direction.z > 0 ? 1 : 0;
             bool found = false;
             bool floor = false;
             bool from_top = false;
-            while (goal.z >= 0 and (goal - ray.direction).length() < 1000) {
+            while (goal.z >= 0 and (goal - ray.origin).length() < 1000) {
                 Cell *cell = getCell(voxel);
                 Cell *above = getCell(voxel + Vec3(0, 0, 1));
-                bool floor_check = from_top and above and above->type == Cell::Type::surface and
-                                   !above->hasCeiling() and above->hasFloor();
-                if (cell != 0 and (!cell->isEmpty() or floor_check) and
+
+                bool floor_check = from_top and above != nullptr and
+                                   above->type == Cell::Type::surface and
+                                   (!above->hasCeiling() or
+                                    (hide_above_level and (voxel.z + 1) == player_pos.z)) and
+                                   above->hasFloor();
+
+                bool skip_ceiling = cell != nullptr and hide_above_level and
+                                    cell->type == Cell::Type::surface and voxel.z == player_pos.z;
+
+                if (cell != nullptr and (!cell->isEmpty() or floor_check) and
                     (cell->type != Cell::Type::surface or cell->hasCeiling()) and
-                    !(hide_above_level and goal.z > player_pos.z)) {
+                    !(hide_above_level and goal.z > player_pos.z) and !skip_ceiling) {
                     if (floor_check) floor = true;
                     found = true;
                     break;

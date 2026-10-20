@@ -25,6 +25,7 @@ static struct Inventory {
         items.put(&arena, "sword", engine->sprites.get("sword"));
         items.put(&arena, "hoe", engine->sprites.get("hoe"));
         items.put(&arena, "pickaxe", engine->sprites.get("pickaxe"));
+        items.put(&arena, "iron_ingot", engine->sprites.get("iron_ingot"));
 
         // inventory
         slot_sprite = engine->sprites.get("inventory_slot");
