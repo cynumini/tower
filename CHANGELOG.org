@@ -1,4 +1,29 @@
 * Tower
+** [0.4.0] - 2026-10-20
+*** Added
+- 3D world rendering with depth, billboards, and camera controls.
+- NPC dialogue and quest-giving interactions.
+- A quest system with objectives to kill 10 zombies.
+- Quest markers.
+- Gold rewards for completing the quest.
+- A main menu with Play and Exit options.
+- An inventory HUD and hotbar selection.
+- Hoe tool for removing grass floors.
+- Iron ore deposits that can be mined with a pickaxe.
+- Pickaxe tool for mining iron ore.
+- Furnace that convert iron ore into iron ingots
+- 3D buildings that hide blocks above the floor when entered, revealing the interior.
+- Door and window objects.
+- Slope blocks and triangular world geometry.
+- Collision detection for solid objects and map geometry.
+- Mouse-based block selection and destruction.
+*** Changed
+- Redesigned map data structures and rendering pipeline.
+- Refactored inventory management into a modular system.
+- Unified player actions across combat, interaction, and dialogue.
+- Introduced a scene system and moved gameplay logic into a dedicated game scene.
+- Reorganized engine, game, and rendering code.
+- Improved window resizing.
 ** [0.3.0] - 2026-09-22
 *** Added
 - Animated player movement and directional sprites.
