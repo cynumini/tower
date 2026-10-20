@@ -110,7 +110,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
-    SDL_SetAppMetadata(name, "0.4.0", "cynumini.tower");
+    SDL_SetAppMetadata(name, "0.5.0", "cynumini.tower");
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 

@@ -666,14 +666,15 @@ struct SceneGame {
                     break;
                 }
             }
-            Vec2 pos = {0.0F, float(render_size.y) * 2.0F / 3.0F};
+            Vec2 pos = {0.0F, render_size.y - 128.F};
             instances->append({
                 .position = pos,
-                .size = {float(render_size.x), float(render_size.y) / 3.0F},
+                .size = {float(render_size.x), 128.0F},
                 .uv = solid,
                 .color = BLACK,
             });
-            engine->drawText(instances, text, pos + Vec2(4, 4));
+            instances->append({pos, {128, 128}, engine->sprites.get("alice_portrait"), WHITE});
+            engine->drawText(instances, text, pos + Vec2(128 + 4, 4));
             break;
         }
         if (show_location.active) {
