@@ -4,8 +4,7 @@
 
 #include "shared.cpp"
 
-#include "../build/ui.frag.hpp"
-#include "../build/ui.vert.hpp"
+#include "../build/shaders.hpp"
 
 static struct UI {
     using Instance = UIInstance;
@@ -40,13 +39,13 @@ static struct UI {
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
-            createGPUShader(device, {ui_vert_code_spv, ui_vert_code_dxil},
+            createGPUShader(device, ShaderCode(ui_vert_spv, ui_vert_dxil),
                             SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
         defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
         SDL_assert(createinfo.vertex_shader);
 
         createinfo.fragment_shader =
-            createGPUShader(device, {ui_frag_code_spv, ui_frag_code_dxil},
+            createGPUShader(device, ShaderCode(ui_frag_spv, ui_frag_dxil),
                             SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
         defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
         SDL_assert(createinfo.fragment_shader);

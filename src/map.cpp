@@ -25,20 +25,18 @@ enum struct Material : u8 {
     furnace
 };
 
-static constexpr const char *BlockKey[]{
-    [int(Material::air)] = "",
-    [int(Material::deep)] = "deep",
-    [int(Material::stone)] = "stone",
-    [int(Material::dirt)] = "dirt",
-    [int(Material::grass)] = "grass",
-    [int(Material::wood)] = "wood",
-    [int(Material::wall)] = "wall",
-    [int(Material::water)] = "water",
-    [int(Material::door)] = "door",
-    [int(Material::window)] = "window",
-    [int(Material::iron_ore)] = "iron_ore",
-    [int(Material::furnace)] = "furnace",
-};
+constexpr std::array<const char *, 12> initBlockKey() {
+    std::array<const char *, 12> r;
+    r[int(Material::air)] = "", r[int(Material::deep)] = "deep",
+    r[int(Material::stone)] = "stone", r[int(Material::dirt)] = "dirt",
+    r[int(Material::grass)] = "grass", r[int(Material::wood)] = "wood",
+    r[int(Material::wall)] = "wall", r[int(Material::water)] = "water",
+    r[int(Material::door)] = "door", r[int(Material::window)] = "window",
+    r[int(Material::iron_ore)] = "iron_ore", r[int(Material::furnace)] = "furnace";
+    return r;
+}
+
+static constexpr auto BlockKey = initBlockKey();
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<u8>::max());
 
@@ -61,7 +59,7 @@ struct Cell {
     Type type : 2;         // 4
     Rotation rotation : 2; // 4
 
-    static constexpr Cell air() { return {.type = Type::block, .a = Material::air}; }
+    static constexpr Cell air() { return {.a = Material::air, .type = Type::block}; }
 
     static constexpr Cell block(Material material) {
         return {.a = material, .type = Type::block};

@@ -162,13 +162,9 @@ static struct Engine {
 
     bool isKeyPressed(Key key) const { return keyboard_state[int(key)]; }
 
-    bool isKeyJustPressed(Key key) const {
-        return key_state[int(key)] == ButtonState::pressed;
-    }
+    bool isKeyJustPressed(Key key) const { return key_state[int(key)] == ButtonState::pressed; }
 
-    bool isKeyJustReleased(Key key) const {
-        return key_state[int(key)] == ButtonState::released;
-    }
+    bool isKeyJustReleased(Key key) const { return key_state[int(key)] == ButtonState::released; }
 
     bool isMouseButtonJustPressed(MouseButton button) const {
         return mouse_button_state[int(button)] == ButtonState::pressed;
@@ -223,7 +219,7 @@ static struct Engine {
         instances->append({
             .position = pos,
             .size = {width * (size / font.size) / 10.F, size / 10.F},
-            Rect{font.texture.position() + texture_offset, {width, font.size}},
+            .uv = Rect{font.texture.position() + texture_offset, {width, font.size}},
             .color = color,
             .face = Face::billboard,
             .rotation = 0,

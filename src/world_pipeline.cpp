@@ -4,8 +4,7 @@
 
 #include "shared.cpp"
 
-#include "../build/world.frag.hpp"
-#include "../build/world.vert.hpp"
+#include "../build/shaders.hpp"
 
 static struct World {
     using Instance = WorldInstance;
@@ -48,13 +47,13 @@ static struct World {
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
-            createGPUShader(device, {world_vert_code_spv, world_vert_code_dxil},
-                            SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
+            createGPUShader(device, ShaderCode{world_vert_spv, world_vert_dxil}, SDL_GPU_SHADERSTAGE_VERTEX,
+                            shader_format, 0, 1);
         defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
         SDL_assert(createinfo.vertex_shader);
 
         createinfo.fragment_shader =
-            createGPUShader(device, {world_frag_code_spv, world_frag_code_dxil},
+            createGPUShader(device, ShaderCode{world_frag_spv, world_frag_dxil},
                             SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
         defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
         SDL_assert(createinfo.fragment_shader);
