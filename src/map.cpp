@@ -2,6 +2,7 @@
 
 #include "shared.cpp"
 
+#include <inplace_vector>
 #include <limits>
 
 static constexpr int MAP_Z_LEN = 3;
@@ -188,7 +189,7 @@ struct Chunk {
     static constexpr Vec2i SIZE = {16, 16};
     Vec2i index;
     Cell data[SIZE.x][SIZE.y][MAP_Z_LEN] = {};
-    Static<Object, OBJECT_LEN> objects;
+    std::inplace_vector<Object, OBJECT_LEN> objects;
 
     void init(Vec2i index) {
         this->index = index;
@@ -212,7 +213,7 @@ static struct Structure {
     static constexpr int MAX_SIZE = 32;
     Vec3i pos;
     Cell data[MAX_SIZE][MAX_SIZE][MAX_SIZE];
-    Static<Object, OBJECT_LEN> objects;
+    std::inplace_vector<Object, OBJECT_LEN> objects;
 } structures[2] = {};
 
 static void initStructure(Engine *engine) {
@@ -236,10 +237,10 @@ static void initStructure(Engine *engine) {
     structures[0].data[2][3][0] = Cell::frame(Material::stone, Rotation::we);
     structures[0].data[4][3][0] = Cell::frame(Material::wall, Rotation::ns);
     structures[0].data[6][3][0] = Cell::frame(Material::wood, Rotation::ew);
-    structures[0].objects.append(Object::door({0, 0, 0}, Material::door, Rotation::sn));
-    structures[0].objects.append(Object::door({2, 0, 0}, Material::door, Rotation::we));
-    structures[0].objects.append(Object::door({4, 0, 0}, Material::door, Rotation::ns));
-    structures[0].objects.append(Object::door({6, 0, 0}, Material::door, Rotation::ew));
+    structures[0].objects.emplace_back(Object::door({0, 0, 0}, Material::door, Rotation::sn));
+    structures[0].objects.emplace_back(Object::door({2, 0, 0}, Material::door, Rotation::we));
+    structures[0].objects.emplace_back(Object::door({4, 0, 0}, Material::door, Rotation::ns));
+    structures[0].objects.emplace_back(Object::door({6, 0, 0}, Material::door, Rotation::ew));
 
     for (int i = 0; i < 16; i++) {
         while (true) {
@@ -254,7 +255,7 @@ static void initStructure(Engine *engine) {
             }
 
             if (!ok) continue;
-            structures[0].objects.append(Object::ore(pos));
+            structures[0].objects.emplace_back(Object::ore(pos));
             break;
         }
     }
@@ -279,27 +280,27 @@ static void initStructure(Engine *engine) {
     structures[1].data[3][0][0] = Cell::frame(Material::wall, Rotation::sn);
     structures[1].data[5][0][0] = Cell::surface(Material::wood, Material::wood);
     structures[1].data[7][0][0] = Cell::frame(Material::wall, Rotation::sn);
-    structures[1].objects.append(Object::door({5, 0, 0}, Material::door, Rotation::ns));
-    structures[1].objects.append(Object::wall({3, 0, 0}, Material::window, Rotation::ns));
-    structures[1].objects.append(Object::wall({7, 0, 0}, Material::window, Rotation::ns));
-    structures[1].objects.append(Object::furnace({4, 7, 0}));
-    structures[1].objects.append(Object::furnace({5, 7, 0}));
-    structures[1].objects.append(Object::furnace({6, 7, 0}));
+    structures[1].objects.emplace_back(Object::door({5, 0, 0}, Material::door, Rotation::ns));
+    structures[1].objects.emplace_back(Object::wall({3, 0, 0}, Material::window, Rotation::ns));
+    structures[1].objects.emplace_back(Object::wall({7, 0, 0}, Material::window, Rotation::ns));
+    structures[1].objects.emplace_back(Object::furnace({4, 7, 0}));
+    structures[1].objects.emplace_back(Object::furnace({5, 7, 0}));
+    structures[1].objects.emplace_back(Object::furnace({6, 7, 0}));
 }
 
 // Locations
 static struct Location {
     const char *name;
-    Static<Vec2i, 1> chunk_ids;
+    std::inplace_vector<Vec2i, 1> chunk_ids;
 
     void init(const char *name) { this->name = name; }
 } locations[2] = {};
 
 static void initLocations() {
     locations[0].init("Home");
-    locations[0].chunk_ids.append({0, 0});
+    locations[0].chunk_ids.emplace_back(0, 0);
     locations[1].init("Town");
-    locations[1].chunk_ids.append({1, 0});
+    locations[1].chunk_ids.emplace_back(1, 0);
 }
 
 struct Map {
@@ -395,7 +396,7 @@ struct Map {
                         Vec3i local = world - posFromIndex(chunk->index);
                         Object o = object;
                         o.pos = local;
-                        chunk->objects.append(o);
+                        chunk->objects.emplace_back(o);
                     }
                     for (int z = 0; z < Structure::MAX_SIZE; z++) {
                         for (int y = 0; y < Structure::MAX_SIZE; y++) {
@@ -734,8 +735,8 @@ struct Map {
         }
     }
 
-    Static<Rect, 256> getCollision(Vec3 pos) {
-        Static<Rect, 256> result = {};
+    std::inplace_vector<Rect, 256> getCollision(Vec3 pos) {
+        std::inplace_vector<Rect, 256> result = {};
         for (auto &chunk : chunks) {
             for (int y = 0; y < Chunk::SIZE.y; y++) {
                 for (int x = 0; x < Chunk::SIZE.x; x++) {
@@ -744,16 +745,16 @@ struct Map {
                     auto cell = getCellRelative(cell_pos, chunk.index);
                     if (!cell->isSolid()) continue;
                     pos = posFromIndex(chunk.index) + cell_pos;
-                    result.append({pos, {1, 1}});
+                    result.emplace_back(Rect(pos, {1, 1}));
                 }
             }
             for (auto &object : chunk.objects) {
                 if (object.type == Object::Type::ore) {
                     pos = posFromIndex(chunk.index) + object.pos;
-                    result.append({pos, {0.25F, 0.25F}});
+                    result.emplace_back(Rect(pos, {0.25F, 0.25F}));
                 } else if (object.type == Object::Type::furnace) {
                     pos = posFromIndex(chunk.index) + object.pos;
-                    result.append({pos, {1.0F, 1.0F}});
+                    result.emplace_back(Rect(pos, {1.0F, 1.0F}));
                 }
             }
         }
@@ -784,10 +785,10 @@ struct Map {
             if (index != chunk.index) continue;
             auto local =
                 Vec3i(pos.x - index.x * Chunk::SIZE.x, pos.y - index.y * Chunk::SIZE.y, pos.z);
-            for (size_t i = 0; i < chunk.objects.len; i++) {
+            for (size_t i = 0; i < chunk.objects.size(); i++) {
                 if (chunk.objects[i].pos == local) del = i;
             }
-            chunk.objects.swapRemove(del);
+            chunk.objects.erase(chunk.objects.begin() + del);
         }
     }
 

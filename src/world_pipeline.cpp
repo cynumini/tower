@@ -6,7 +6,8 @@
 
 #include "../build/shaders.hpp"
 
-static struct World {
+namespace {
+struct World {
     using Instance = WorldInstance;
 
     static constexpr uint MAX_INSTANCES = 8192;
@@ -47,8 +48,8 @@ static struct World {
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
         SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
         createinfo.vertex_shader =
-            createGPUShader(device, ShaderCode{world_vert_spv, world_vert_dxil}, SDL_GPU_SHADERSTAGE_VERTEX,
-                            shader_format, 0, 1);
+            createGPUShader(device, ShaderCode{world_vert_spv, world_vert_dxil},
+                            SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
         defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
         SDL_assert(createinfo.vertex_shader);
 
@@ -219,3 +220,4 @@ static struct World {
         prev_triangles_len = triangles_len;
     }
 } world;
+} // namespace

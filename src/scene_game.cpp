@@ -1,6 +1,7 @@
 #pragma once
 
 #include "shared.cpp"
+#include <inplace_vector>
 
 #include <algorithm>
 
@@ -186,12 +187,12 @@ struct Filter {
 };
 
 template <size_t N>
-static Filter makeFilter(Static<Entity, N> &entities, bool (*predicate)(Entity *)) {
-    return Filter{entities.begin(), entities.end(), predicate};
+static Filter makeFilter(std::inplace_vector<Entity, N> &entities, bool (*predicate)(Entity *)) {
+    return Filter{entities.data(), entities.data() + entities.size(), predicate};
 }
 
 static constexpr size_t ENTITIES_MAX = std::numeric_limits<u8>::max();
-static Static<Entity, ENTITIES_MAX> entities;
+static std::inplace_vector<Entity, ENTITIES_MAX> entities;
 
 // Mpas
 static Map map;
@@ -242,23 +243,24 @@ struct SceneGame {
         using Kind = Entity::Kind;
         using Body = Entity::Body;
 
-        player = entities.append(
+        player = &entities.emplace_back(
             Entity::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
         player->timer = Timer::init(0.2F);
         player->direction = {0.0F, 1.0F};
         player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
 
-        attack =
-            entities.append(Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
+        attack = &entities.emplace_back(
+            Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
         attack->timer = Timer::init(0.1F);
 
-        spell = entities.append(Entity::create(Kind::spell, engine->sprites.get("spell0")));
+        spell =
+            &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.get("spell0")));
 
         {
-            auto *entity = entities.append(Entity::create(
+            auto &entity = entities.emplace_back(Entity::create(
                 Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
-            entity->addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
-            entity->interaction_rel = Rect(0, 0, 1, 1);
+            entity.addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
+            entity.interaction_rel = Rect(0, 0, 1, 1);
         }
 
         // {
@@ -274,13 +276,13 @@ struct SceneGame {
 
         const u8 ENEMY_COUNT = 50;
         for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto *entity = entities.append(
+            auto &entity = entities.emplace_back(
                 Entity::create(Kind::enemy, engine->sprites.get("zombie"), true,
                                {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
                                 float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
-            entity->addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
-            entity->hp = 5;
-            entity->timer = Timer::init(0.2F);
+            entity.addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
+            entity.hp = 5;
+            entity.timer = Timer::init(0.2F);
         }
 
         map.init(engine, player->pos);
