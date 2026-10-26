@@ -1,5 +1,7 @@
 #pragma once
 
+#include <skn/matrix.cpp>
+
 #include <skn_sdl.cpp>
 
 #include "shared.cpp"
@@ -26,8 +28,8 @@ struct World {
     Vec2 logical;
 
     struct UBO {
-        Mat4 view;
-        Mat4 projection;
+        skn::Mat4 view;
+        skn::Mat4 projection;
         Vec2 atlas_size;
         float yaw;
     } ubo;
@@ -41,7 +43,7 @@ struct World {
         } else {
             logical.x = size.x * logical.y / size.y;
         }
-        ubo.projection = Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
+        ubo.projection = skn::Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
                                      logical.y / 2.0F, 100.0F, -100.0F);
     }
 
@@ -203,9 +205,9 @@ struct World {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
-                   Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
-        ubo.yaw = deg2rad(camera->yaw);
+        ubo.view = skn::Mat4::iso45() * skn::Mat4::rotationZ(skn::deg2rad(camera->yaw)) *
+            skn::Mat4::rotationY(skn::deg2rad(camera->roll)) * skn::Mat4::translation(-camera->pos);
+        ubo.yaw = skn::deg2rad(camera->yaw);
         ubo.atlas_size = {atlas.w, atlas.h};
 
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));

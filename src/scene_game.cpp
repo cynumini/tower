@@ -1,12 +1,9 @@
 #pragma once
 
 #include "shared.cpp"
-#include <inplace_vector>
 
-#include <algorithm>
 
 #include <skn.cpp>
-#include <skn_math.cpp>
 
 #include "inventory.cpp"
 #include "map.cpp"
@@ -58,33 +55,33 @@ struct Entity {
     Timer timer;
     Vec3 pos;
     Vec2 size;
-    Rect sprite;
-    Rect interaction_rel;
-    Rect collision_rel;
+    skn::Rect sprite;
+    skn::Rect interaction_rel;
+    skn::Rect collision_rel;
     enum class Kind : u8 { player, enemy, attack, spell, npc, building } kind;
     enum class Body : u8 { none, movable, immovable } body;
     u8 frame;
     bool alive;
     bool invincible;
-    Color tint;
+    skn::Color tint;
 
-    static Entity create(Kind kind, Rect sprite, bool alive = false, Vec3 pos = {}) {
+    static Entity create(Kind kind, skn::Rect sprite, bool alive = false, Vec3 pos = {}) {
         return {.pos = pos,
                 .size = sprite.size() / 64,
                 .sprite = sprite,
                 .kind = kind,
                 .alive = alive,
-                .tint = WHITE};
+                .tint = skn::WHITE};
     }
 
-    void addCollision(Body body, Rect rect) {
+    void addCollision(Body body, skn::Rect rect) {
         this->body = body;
         collision_rel = rect;
     }
 
     bool isInteractable() const { return interaction_rel.w != 0 and interaction_rel.h != 0; }
 
-    Rect getInteraction() const {
+    skn::Rect getInteraction() const {
         return {
             {pos.x + interaction_rel.x, pos.y + interaction_rel.y},
             {interaction_rel.w, interaction_rel.h},
@@ -93,7 +90,7 @@ struct Entity {
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
 
-    Rect getCollision() {
+    skn::Rect getCollision() {
         return {
             {pos.x + collision_rel.x, pos.y + collision_rel.y},
             {collision_rel.w, collision_rel.h},
@@ -117,11 +114,11 @@ struct Entity {
         }
     }
 
-    Rect rect() { return {Vec2(pos), {size.x, size.y}}; }
+    skn::Rect rect() { return {Vec2(pos), {size.x, size.y}}; }
 };
 
 // Init
-static Rect solid;
+static skn::Rect solid;
 static bool pause = false;
 static bool interaction_frame = false;
 
@@ -133,10 +130,10 @@ static uint curr_line = 0;
 // Animation
 static struct Animation {
     u8 frames;
-    Rect origin;
+    skn::Rect origin;
     bool flip_x;
 
-    void init(Rect texture, u8 frames, bool flip_x = false) {
+    void init(skn::Rect texture, u8 frames, bool flip_x = false) {
         this->flip_x = flip_x;
         this->frames = frames;
         this->origin = {
@@ -148,9 +145,9 @@ static struct Animation {
         };
     }
 
-    Rect get(u8 index) const {
+    skn::Rect get(u8 index) const {
         assert(index < frames);
-        Rect result = {
+        skn::Rect result = {
             {origin.x + (origin.w * index), origin.y},
             {origin.w, origin.h},
         };
@@ -260,7 +257,7 @@ struct SceneGame {
             auto &entity = entities.emplace_back(Entity::create(
                 Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
             entity.addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
-            entity.interaction_rel = Rect(0, 0, 1, 1);
+            entity.interaction_rel = skn::Rect(0, 0, 1, 1);
         }
 
         // {
@@ -367,7 +364,7 @@ struct SceneGame {
                                                float(engine->isKeyPressed(Key::w)) -
                                                    float(engine->isKeyPressed(Key::s)))
                                               .normalize()
-                                              .rotate(deg2rad(engine->camera.yaw));
+                        .rotate(skn::deg2rad(engine->camera.yaw));
 
                     int level_diff = engine->isKeyJustReleased(Key::pageup) -
                                      engine->isKeyJustReleased(Key::pagedown);
@@ -399,7 +396,7 @@ struct SceneGame {
                         entity.timer.reset();
                     }
 
-                    auto d = entity.direction.rotate(deg2rad(-engine->camera.yaw));
+                    auto d = entity.direction.rotate(skn::deg2rad(-engine->camera.yaw));
                     if (d.y > 0) {
                         entity.sprite = player_up.get(frame);
                     } else if (d.y < 0) {
@@ -421,10 +418,10 @@ struct SceneGame {
                     }
 
                     if (entity.invincible) {
-                        entity.tint = RED;
+                        entity.tint = skn::RED;
                         if (entity.timer.advanceAndCheck(engine->dt)) {
                             entity.invincible = false;
-                            entity.tint = WHITE;
+                            entity.tint = skn::WHITE;
                         }
                     }
 
@@ -576,10 +573,10 @@ struct SceneGame {
         if (quest.status != Quest::REWARDED) {
             const uint SIZE = 5;
             char sign = '!';
-            auto color = YELLOW;
+            auto color = skn::YELLOW;
             if (quest.status != Quest::AVAILABLE) {
                 sign = '?';
-                if (quest.status == Quest::ACTIVE) color = WHITE;
+                if (quest.status == Quest::ACTIVE) color = skn::WHITE;
             }
             engine->drawWorldSymbol(&instances->squares, quest.pos + Vec3{0.5, 0.5, 1.25F}, sign,
                                     SIZE, color, engine->default_font);
@@ -646,7 +643,7 @@ struct SceneGame {
         ScopeArena scope(&arena);
 
         while (dialog) {
-            Slice<const char> text = {};
+            OldSlice<const char> text = {};
             if (quest.status == Quest::REWARDED) {
 
                 if (curr_line == ARRAY_LEN(lines)) {
@@ -673,9 +670,9 @@ struct SceneGame {
                 .position = pos,
                 .size = {float(render_size.x), 128.0F},
                 .uv = solid,
-                .color = BLACK,
+                .color = skn::BLACK,
             });
-            instances->append({pos, {128, 128}, engine->sprites.get("alice_portrait"), WHITE});
+            instances->append({pos, {128, 128}, engine->sprites.get("alice_portrait"), skn::WHITE});
             engine->drawText(instances, text, pos + Vec2(128 + 4, 4));
             break;
         }
@@ -699,10 +696,10 @@ struct SceneGame {
                     alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
                 }
 
-                engine->drawText(instances, Slice<const char>(name),
+                engine->drawText(instances, OldSlice<const char>(name),
                                  {(float(render_size.x) / 2.0F) - (width / 2.0F),
                                   (float(render_size.y) / 2.0F) - (height / 2.0F)},
-                                 height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+                                 height, {skn::WHITE.r, skn::WHITE.g, skn::WHITE.b, alpha});
             }
         }
 

@@ -2,7 +2,7 @@
 
 #include "shared.cpp"
 
-HashMap<Rect> items;
+HashMap<skn::Rect> items;
 
 static struct Inventory {
     struct Slot {
@@ -11,10 +11,10 @@ static struct Inventory {
     };
 
     static constexpr Vec2i SIZE = {8, 8};
-    Array<Slot, SIZE.x * SIZE.y> slots;
+    OldArray<Slot, SIZE.x * SIZE.y> slots;
     bool visible;
-    Rect slot_sprite;
-    Rect select_sprite;
+    skn::Rect slot_sprite;
+    skn::Rect select_sprite;
     size_t select = 0;
 
     void init(Engine *engine) {
@@ -37,11 +37,11 @@ static struct Inventory {
     }
 
     void drawSlot(Engine *engine, Fixed<UIInstance> *instances, Vec2 position, size_t index) {
-        assert(index < slots.len);
+        assert(index < slots.len());
         Slot *slot = &slots[index];
-        instances->append({position, slot_sprite.size(), slot_sprite, WHITE});
+        instances->append({position, slot_sprite.size(), slot_sprite, skn::WHITE});
         if (slot->count > 0) {
-            instances->append({position, slot_sprite.size(), items.get(slot->name), WHITE});
+            instances->append({position, slot_sprite.size(), items.get(slot->name), skn::WHITE});
             char buffer[3] = {};
             SliceZ<char> count = {3, buffer};
             sprintf(count.ptr, "%d", slot->count);
@@ -66,7 +66,7 @@ static struct Inventory {
         for (size_t i = 0; i < hud_len; i++) {
             drawSlot(engine, instances, hud_offset, i);
             if (i == select) {
-                instances->append({hud_offset, select_sprite.size(), select_sprite, WHITE});
+                instances->append({hud_offset, select_sprite.size(), select_sprite, skn::WHITE});
             }
             hud_offset.x += slot_sprite.w;
         }
@@ -107,7 +107,7 @@ static struct Inventory {
     }
 
     const char *getCurrent() {
-        assert(slots.len > select);
+        assert(slots.len() > select);
         return slots[select].name;
     }
 } inventory;

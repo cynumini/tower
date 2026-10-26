@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # compile options
-set(COMPILE_OPTIONS -Wall -Wextra -Wpedantic -fno-exceptions -Wno-c2y-extensions)
+set(COMPILE_OPTIONS -Wall -Wextra -Wpedantic -fno-exceptions)
 
 # shader_header_gen
 add_executable(shader_header_gen tools/shader_header_gen.cpp)
@@ -35,15 +35,32 @@ add_custom_command(OUTPUT "${SHADER_HEADER}"
 add_custom_target(compile_shaders DEPENDS "${SHADER_HEADER}")
 
 # tower
-find_package(SDL3 REQUIRED)
-find_package(nlohmann_json REQUIRED)
+find_package(SDL3 CONFIG REQUIRED)
+find_package(nlohmann_json CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
 
-add_executable(tower src/main.cpp)
+add_executable(tower src/main.cpp src/structure.cpp)
+
+target_precompile_headers(tower PRIVATE
+    <string>
+    <unordered_map>
+    <algorithm>
+    <limits>
+    <fstream>
+    <iostream>
+    <inplace_vector>
+    <SDL3/SDL.h>
+    <nlohmann/json.hpp>
+)
+
+target_link_libraries(tower
+  PRIVATE SDL3::SDL3
+  nlohmann_json::nlohmann_json
+  glm::glm)
 
 target_include_directories(tower PRIVATE include sakana "${CMAKE_CURRENT_BINARY_DIR}")
 
 add_dependencies(tower compile_shaders)
 
-target_link_libraries(tower PRIVATE SDL3::SDL3 nlohmann_json::nlohmann_json)
-
 target_compile_options(tower PRIVATE ${COMPILE_OPTIONS})
+

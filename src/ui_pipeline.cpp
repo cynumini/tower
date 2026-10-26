@@ -1,5 +1,7 @@
 #pragma once
 
+#include <skn/matrix.cpp>
+
 #include <skn_sdl.cpp>
 
 #include "shared.cpp"
@@ -22,7 +24,7 @@ static struct UI {
     Vec2 logical;
 
     struct UBO {
-        Mat4 projection;
+        skn::Mat4 projection;
         Vec2 atlas_size;
     } ubo;
 
@@ -33,7 +35,7 @@ static struct UI {
         } else {
             logical.x = size.x * logical.y / size.y;
         }
-        ubo.projection = Mat4::ortho(0, logical.x, logical.y, 0, 0, 1);
+        ubo.projection = skn::Mat4::ortho(0, logical.x, logical.y, 0, 0, 1);
     }
 
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
@@ -135,7 +137,7 @@ static struct UI {
 
     struct Upload {
         Fixed<Instance> instances;
-        float width, height;
+        f32 width, height;
     };
 
     Upload beginUpload(SDL_GPUDevice *device, SDL_GPUTransferBuffer *transfer_buffer) {

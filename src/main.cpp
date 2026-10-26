@@ -25,16 +25,16 @@ void Engine::log(const char *fmt, ...) {
     va_end(args);
 }
 
-int Engine::rand(int n) { return SDL_rand(n); }
+int Engine::rand(int n) const { return SDL_rand(n); }
 
-static struct Time {
+static struct Times {
     u64 counter;
     u64 frames;
-    float seconds;
-    float frequency;
+    f32 seconds;
+    f32 frequency;
     u16 fps;
-    float ms;
-} time;
+    f32 ms;
+} times;
 
 void Engine::update([[maybe_unused]]WorldInstances *instances, [[maybe_unused]]Vec2 logical) {
     if (isKeyJustPressed(Key::escape)) running = true;
@@ -44,11 +44,11 @@ void Engine::update([[maybe_unused]]WorldInstances *instances, [[maybe_unused]]V
 void Engine::updateUI(Fixed<UIInstance> *instances, [[maybe_unused]]Vec2i render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
-        float offset_y = 2.0F;
+        f32 offset_y = 2.0F;
 
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "FPS: %d", time.fps);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "FPS: %d", times.fps);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "%.2fms", time.ms);
+        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "%.2fms", times.ms);
         offset_y += 12;
         drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Screen: %dx%d", screen.x, screen.y);
         offset_y += 12;
@@ -76,7 +76,7 @@ void Engine::updateUI(Fixed<UIInstance> *instances, [[maybe_unused]]Vec2i render
 }
 
 struct AtlasItem {
-    Slice<const char> name;
+    OldSlice<const char> name;
     SDL_Surface *surface;
 };
 
@@ -201,13 +201,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
         SDL_CHECK(mods_files);
 
-        engine.sprites = HashMap<Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+        engine.sprites = HashMap<skn::Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
 
         auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
 
         for (char *const *it = files; *it; it++) {
-            const Slice<const char> file = arena.dupeConst(getStem(*it));
+            const OldSlice<const char> file = arena.dupeConst(getStem(*it));
             const SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
@@ -224,7 +224,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         }
 
         for (char *const *it = mods_files; *it; it++) {
-            const Slice<const char> file = arena.dupeConst(getStem(*it));
+            const OldSlice<const char> file = arena.dupeConst(getStem(*it));
             const SliceZ<char> path = scope.tmp.allocPrintZ("mods/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
@@ -254,7 +254,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
-                createGPUTransferBuffer(device, sizeof(Color) * surface->w * surface->h);
+                createGPUTransferBuffer(device, sizeof(skn::Color) * surface->w * surface->h);
             defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
             SDL_CHECK(transfer_buffer);
 
@@ -284,7 +284,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
             engine.sprites.put(
                 &arena, name,
-                {{float(x_offset), float(y_offset)}, {float(surface->w), float(surface->h)}});
+                {{f32(x_offset), f32(y_offset)}, {f32(surface->w), f32(surface->h)}});
 
             y_max = std::max(surface->h, y_max);
 
@@ -307,8 +307,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     game.init(&engine);
 
-    time.frequency = float(SDL_GetPerformanceFrequency());
-    time.counter = SDL_GetPerformanceCounter();
+    times.frequency = f32(SDL_GetPerformanceFrequency());
+    times.counter = SDL_GetPerformanceCounter();
 
     {
         SDL_Time ticks; // NOLINT
@@ -405,10 +405,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         SDL_GPUColorTargetInfo color_target_info = {};
         color_target_info.texture = swapchain_texture;
         color_target_info.clear_color = {
-            .r = float(engine.clear_color.r) / 255.0F,
-            .g = float(engine.clear_color.g) / 255.0F,
-            .b = float(engine.clear_color.b) / 255.0F,
-            .a = float(engine.clear_color.a) / 255.0F,
+            .r = f32(engine.clear_color.r) / 255.0F,
+            .g = f32(engine.clear_color.g) / 255.0F,
+            .b = f32(engine.clear_color.b) / 255.0F,
+            .a = f32(engine.clear_color.a) / 255.0F,
         };
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
@@ -431,16 +431,16 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     memset(engine.key_state, 0, sizeof(engine.key_state));
     memset(engine.mouse_button_state, 0, sizeof(engine.mouse_button_state));
 
-    auto prev = time.counter;
-    time.counter = SDL_GetPerformanceCounter();
-    time.frames += 1;
-    engine.dt = float(time.counter - prev) / time.frequency;
-    time.seconds += engine.dt;
-    time.ms = engine.dt * 1000;
-    if (time.seconds >= 0.5F) {
-        time.fps = (u16)SDL_roundf((float)time.frames / time.seconds);
-        time.frames = 0;
-        time.seconds = 0;
+    auto prev = times.counter;
+    times.counter = SDL_GetPerformanceCounter();
+    times.frames += 1;
+    engine.dt = f32(times.counter - prev) / times.frequency;
+    times.seconds += engine.dt;
+    times.ms = engine.dt * 1000;
+    if (times.seconds >= 0.5F) {
+        times.fps = (u16)SDL_roundf((f32)times.frames / times.seconds);
+        times.frames = 0;
+        times.seconds = 0;
     }
     return SDL_APP_CONTINUE;
 }

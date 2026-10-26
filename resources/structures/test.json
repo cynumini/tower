@@ -1,0 +1,45 @@
+{
+  "pos": {
+    "x": 0,
+    "y": 6,
+    "z": 1
+  },
+  "objects": [
+    {
+      "type": "door",
+      "rotation": "sn",
+      "pos": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "door",
+      "rotation": "we",
+      "pos": {
+        "x": 2,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "door",
+      "rotation": "ns",
+      "pos": {
+        "x": 4,
+        "y": 0,
+        "z": 0
+      }
+    },
+    {
+      "type": "door",
+      "rotation": "ew",
+      "pos": {
+        "x": 6,
+        "y": 0,
+        "z": 0
+      }
+    }
+  ]
+}

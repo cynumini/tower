@@ -1,12 +1,11 @@
 #pragma once
 
-#include <skn_math.cpp>
-
-#include <array>
+#include <skn.cpp>
+#include <skn/rect.cpp>
 
 struct Font {
-    constexpr std::array<char, 256> calcWidths() {
-        std::array<char, 256> r = {};
+    static constexpr OldArray<char, 256> calcWidths() {
+        OldArray<char, 256> r = {};
         r[' '] = 2, r['!'] = 1, r['"'] = 3, r['#'] = 6, r['$'] = 5, r['%'] = 8, r['&'] = 7,
         r['\''] = 1, r['('] = 2, r[')'] = 2, r['*'] = 5, r['+'] = 5, r[','] = 2, r['-'] = 4,
         r['.'] = 1, r['/'] = 4, r['0'] = 5, r['1'] = 3, r['2'] = 5, r['3'] = 4, r['4'] = 4,
@@ -23,11 +22,11 @@ struct Font {
         r['{'] = 4, r['|'] = 1, r['}'] = 4, r['~'] = 7;
         return r;
     }
-    std::array<char, 256> widths;
-    float size = 10.0F;
-    Rect texture;
+    OldArray<char, 256> widths;
+    f32 size = 10.0F;
+    skn::Rect texture;
 
-    constexpr void init(Rect texture) {
+    constexpr void init(skn::Rect texture) {
         this->texture = texture;
         widths = calcWidths();
     }

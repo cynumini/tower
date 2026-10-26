@@ -1,4 +1,11 @@
 Checks: >
   *,
-  -llvmlibc-*
+  -altera-struct-pack-align,
+  -altera-unroll-loops,
+  -fuchsia-default-arguments-calls,
+  -hicpp-braces-around-statements,
+  -llvmlibc*,
+  -modernize-use-trailing-return-type,
+  -readability-braces-around-statements,
+  -readability-identifier-length
 ExcludeHeaderFilterRegex: '/usr/include/gentoo'

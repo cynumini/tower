@@ -8,12 +8,12 @@ struct SceneMenu {
     void update([[maybe_unused]]Engine *engine, [[maybe_unused]]WorldInstances *instances, [[maybe_unused]]Vec2 logical) {}
 
     void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
-        Slice<const char> text_play = "Play (ENTER)";
-        Slice<const char> text_exit = "Exit (ESC)";
-        float text_play_w = engine->measureText(text_play);
-        float text_exit_w = engine->measureText(text_exit);
-        float y = 2;
-        float height = 26;
+        OldSlice<const char> text_play = "Play (ENTER)";
+        OldSlice<const char> text_exit = "Exit (ESC)";
+        f32 text_play_w = engine->measureText(text_play);
+        f32 text_exit_w = engine->measureText(text_exit);
+        f32 y = 2;
+        f32 height = 26;
         engine->drawText(
             instances, text_play,
             {render_size.x / 2.F - text_play_w / 2.F, render_size.y / 2.F - height / 2 + y});
