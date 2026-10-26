@@ -1,9 +1,13 @@
 #pragma once
 
 #include <skn.cpp>
-#include <skn/vec.cpp>
-#include <skn/rect.cpp>
 #include <skn/color.cpp>
+#include <skn/rect.cpp>
+#include <skn/vec.cpp>
+
+#include <string_view>
+
+#include "fixed_vector.hpp"
 
 static Arena arena;
 
@@ -147,7 +151,7 @@ struct Camera {
     Vec3 pos;
 };
 
-static struct Engine {
+struct Engine {
     Dynamic<Mod> mods;
     HashMap<skn::Rect> sprites;
     const bool *keyboard_state;
@@ -172,44 +176,42 @@ static struct Engine {
         return mouse_button_state[int(button)] == ButtonState::pressed;
     }
 
-    static f32 measureText(OldSlice<const char> text, f32 size, Font font) {
-        if (text.len == 0) return 0;
+    static f32 measureText(std::string_view text, f32 size, Font font) {
+        if (text.size() == 0) return 0;
         f32 advance = 0;
         for (u8 c : text) advance += (f32(font.widths[c]) + 1) * (size / font.size);
         return advance - (size / font.size);
     }
 
-    f32 measureText(OldSlice<const char> text, f32 size = 10.0F) const {
+    f32 measureText(std::string_view text, f32 size = 10.0F) const {
         return measureText(text, size, default_font);
     }
 
-    static void drawText(Fixed<UIInstance> *renderer, OldSlice<const char> text, Vec2i position,
+    static void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vec2i position,
                          f32 size, skn::Color color, Font font) {
         f32 advance = 0;
         for (u8 c : text) {
             const u16 i = c - ' ';
             Vec2 texture_offset = {f32(i % 16) * font.size, int(i / 16.F) * font.size};
-            renderer->append(
-                {{int(position.x + advance), position.y},
-                 {size, size},
-                 skn::Rect{font.texture.position() + texture_offset, {font.size, font.size}},
-                 color});
+            append(renderer, Vec2(int(position.x + advance), position.y), Vec2(size, size),
+                   skn::Rect{font.texture.position() + texture_offset, {font.size, font.size}},
+                   color);
             advance += (f32(font.widths[c]) + 1) * (size / font.size);
         }
     }
 
-    void drawText(Fixed<UIInstance> *renderer, OldSlice<const char> text, Vec2i position,
+    void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vec2i position,
                   f32 size = 10.0F, skn::Color color = skn::WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
 
-    void drawTextF(Arena *a, Fixed<UIInstance> *instances, Vec2 pos, const char *fmt, ...)
+    void drawTextF(Arena *a, FixedVector<UIInstance> &instances, Vec2 pos, const char *fmt, ...)
         __attribute__((format(gnu_printf, 5, 6))) {
         va_list ap;
         va_start(ap, fmt);
         auto slice = a->vAllocPrintZ(fmt, ap);
         va_end(ap);
-        drawText(instances, slice.withoutZero(), pos);
+        drawText(instances, slice.ptr, pos);
         a->free(slice);
     }
 
@@ -232,10 +234,12 @@ static struct Engine {
 
     int rand(int n) const;
 
-    void updateUI(Fixed<UIInstance> *instances, Vec2i size);
+    void updateUI(FixedVector<UIInstance> &instances, Vec2i size);
 
     void update(WorldInstances *instances, Vec2 logical);
-} engine;
+};
+
+extern Engine engine;
 
 enum class Scene { menu, game };
 
@@ -246,7 +250,7 @@ struct Game {
 
     void update(Engine *engine, WorldInstances *instances, Vec2 logical);
 
-    void updateUI(Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size);
+    void updateUI(Engine *engine, FixedVector<UIInstance> &instances, Vec2i render_size);
 
     void deinit(Engine *engine);
 };

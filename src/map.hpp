@@ -2,6 +2,9 @@
 
 #include "shared.cpp"
 
+#include <unordered_map>
+#include <string_view>
+
 // Material
 enum struct Material : u8 {
     air,

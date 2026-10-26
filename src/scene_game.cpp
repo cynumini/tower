@@ -639,11 +639,11 @@ struct SceneGame {
             }
         };
     }
-    void updateUI(Game *game, Engine *engine, Fixed<UIInstance> *instances, Vec2i render_size) {
+    void updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances, Vec2i render_size) {
         ScopeArena scope(&arena);
 
         while (dialog) {
-            OldSlice<const char> text = {};
+            std::string_view text = {};
             if (quest.status == Quest::REWARDED) {
 
                 if (curr_line == ARRAY_LEN(lines)) {
@@ -666,13 +666,13 @@ struct SceneGame {
                 }
             }
             Vec2 pos = {0.0F, render_size.y - 128.F};
-            instances->append({
+            append(instances, UIInstance{
                 .position = pos,
                 .size = {float(render_size.x), 128.0F},
                 .uv = solid,
                 .color = skn::BLACK,
             });
-            instances->append({pos, {128, 128}, engine->sprites.get("alice_portrait"), skn::WHITE});
+            append(instances, pos, Vec2{128, 128}, engine->sprites.get("alice_portrait"), skn::WHITE);
             engine->drawText(instances, text, pos + Vec2(128 + 4, 4));
             break;
         }
@@ -696,7 +696,7 @@ struct SceneGame {
                     alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
                 }
 
-                engine->drawText(instances, OldSlice<const char>(name),
+                engine->drawText(instances, name,
                                  {(float(render_size.x) / 2.0F) - (width / 2.0F),
                                   (float(render_size.y) / 2.0F) - (height / 2.0F)},
                                  height, {skn::WHITE.r, skn::WHITE.g, skn::WHITE.b, alpha});

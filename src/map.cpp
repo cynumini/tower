@@ -5,6 +5,8 @@
 #include "map.hpp"
 #include "structure.hpp"
 
+#include <inplace_vector>
+
 static constexpr int MAP_Z_LEN = 3;
 static constexpr int SEA_LEVEL = 1;
 static constexpr int PIXELS_PER_UNIT = 32;
@@ -166,7 +168,7 @@ struct Map {
                 // apply struct
                 for (size_t i = 0; i < structures.size(); i++) {
                     auto &s = structures[i];
-                    Vec3i origin = Vec3i(s.pos[0], s.pos[1], s.pos[2]);
+                    Vec3i origin = Vec3i(s.pos.x, s.pos.y, s.pos.z);
                     for (auto &object : s.objects) {
                         Vec3i world = origin + object.pos;
                         Vec2i target_index = indexFromPos(world);
@@ -200,7 +202,7 @@ struct Map {
 
     void init(Engine *engine, Vec3 player_pos) {
         initMaterialSprite(engine);
-        structure_init(*engine, structures);
+        structureInit(*engine, structures);
         initLocations();
 
         size_t side = 2 * range + 1;

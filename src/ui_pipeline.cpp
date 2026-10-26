@@ -136,7 +136,7 @@ static struct UI {
     }
 
     struct Upload {
-        Fixed<Instance> instances;
+        FixedVector<Instance> instances;
         f32 width, height;
     };
 
@@ -145,7 +145,7 @@ static struct UI {
             (Instance *)SDL_MapGPUTransferBuffer(device, transfer_buffer, true);
         SDL_assert(instances_raw);
 
-        return {Fixed<Instance>::create({MAX_INSTANCES, instances_raw}), logical.x, logical.y};
+        return {{instances_raw, MAX_INSTANCES, 0}, logical.x, logical.y};
     }
 
     void endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,

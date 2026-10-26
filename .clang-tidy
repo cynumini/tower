@@ -2,10 +2,14 @@ Checks: >
   *,
   -altera-struct-pack-align,
   -altera-unroll-loops,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -readability-magic-numbers,
   -fuchsia-default-arguments-calls,
+  -google-readability-casting,
   -hicpp-braces-around-statements,
   -llvmlibc*,
   -modernize-use-trailing-return-type,
   -readability-braces-around-statements,
+  -readability-math-missing-parentheses,
   -readability-identifier-length
 ExcludeHeaderFilterRegex: '/usr/include/gentoo'

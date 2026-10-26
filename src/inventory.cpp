@@ -36,23 +36,22 @@ static struct Inventory {
         add("gold", 10);
     }
 
-    void drawSlot(Engine *engine, Fixed<UIInstance> *instances, Vec2 position, size_t index) {
+    void drawSlot(Engine *engine, FixedVector<UIInstance> &instances, Vec2 position, size_t index) {
         assert(index < slots.len());
         Slot *slot = &slots[index];
-        instances->append({position, slot_sprite.size(), slot_sprite, skn::WHITE});
+        append(instances, position, slot_sprite.size(), slot_sprite, skn::WHITE);
         if (slot->count > 0) {
-            instances->append({position, slot_sprite.size(), items.get(slot->name), skn::WHITE});
+            append(instances,position, slot_sprite.size(), items.get(slot->name), skn::WHITE);
             char buffer[3] = {};
-            SliceZ<char> count = {3, buffer};
-            sprintf(count.ptr, "%d", slot->count);
+            sprintf(buffer, "%d", slot->count);
             constexpr float FONT_SIZE = 10.F;
-            auto width = engine->measureText(count.withoutZero(), FONT_SIZE);
-            engine->drawText(instances, count.withoutZero(),
+            auto width = engine->measureText(buffer, FONT_SIZE);
+            engine->drawText(instances, buffer,
                              position + slot_sprite.size() - Vec2{width, FONT_SIZE}, FONT_SIZE);
         }
     }
 
-    void updateUI([[maybe_unused]] Game *game, Engine *engine, Fixed<UIInstance> *instances,
+    void updateUI([[maybe_unused]] Game *game, Engine *engine, FixedVector<UIInstance> &instances,
                   Vec2i render_size, [[maybe_unused]] Arena *a) {
 
         // hud
@@ -66,7 +65,7 @@ static struct Inventory {
         for (size_t i = 0; i < hud_len; i++) {
             drawSlot(engine, instances, hud_offset, i);
             if (i == select) {
-                instances->append({hud_offset, select_sprite.size(), select_sprite, skn::WHITE});
+                append(instances, hud_offset, select_sprite.size(), select_sprite, skn::WHITE);
             }
             hud_offset.x += slot_sprite.w;
         }

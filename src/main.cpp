@@ -27,6 +27,8 @@ void Engine::log(const char *fmt, ...) {
 
 int Engine::rand(int n) const { return SDL_rand(n); }
 
+Engine engine;
+
 static struct Times {
     u64 counter;
     u64 frames;
@@ -41,7 +43,7 @@ void Engine::update([[maybe_unused]]WorldInstances *instances, [[maybe_unused]]V
     if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
 }
 
-void Engine::updateUI(Fixed<UIInstance> *instances, [[maybe_unused]]Vec2i render_size) {
+void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]]Vec2i render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
         f32 offset_y = 2.0F;
@@ -385,10 +387,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         {
             auto upload = ui.beginUpload(device, instance_transfer_buffer);
             defer(
-                ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.len));
+                ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
-            game.updateUI(&engine, &upload.instances, ui.logical);
-            engine.updateUI(&upload.instances, ui.logical);
+            game.updateUI(&engine, upload.instances, ui.logical);
+            engine.updateUI(upload.instances, ui.logical);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
         }
