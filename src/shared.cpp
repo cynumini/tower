@@ -9,7 +9,7 @@
 
 #include "fixed_vector.hpp"
 
-static Arena arena;
+extern Arena arena;
 
 enum class Key : u8 {
     a = 4,
@@ -194,7 +194,8 @@ struct Engine {
             const u16 i = c - ' ';
             Vec2 texture_offset = {f32(i % 16) * font.size, int(i / 16.F) * font.size};
             append(renderer, Vec2(int(position.x + advance), position.y), Vec2(size, size),
-                   skn::Rect{Vec2{font.texture.x, font.texture.y} + texture_offset, {font.size, font.size}},
+                   skn::Rect{Vec2{font.texture.x, font.texture.y} + texture_offset,
+                             {font.size, font.size}},
                    color);
             advance += (f32(font.widths[c]) + 1) * (size / font.size);
         }
@@ -223,7 +224,8 @@ struct Engine {
         instances->append({
             .position = pos,
             .size = {width * (size / font.size) / 10.F, size / 10.F},
-            .uv = skn::Rect{Vec2i{font.texture.x, font.texture.y} + texture_offset, {width, font.size}},
+            .uv = skn::Rect{Vec2i{font.texture.x, font.texture.y} + texture_offset,
+                            {width, font.size}},
             .color = color,
             .face = Face::billboard,
             .rotation = 0,
@@ -243,14 +245,12 @@ extern Engine engine;
 
 enum class Scene { menu, game };
 
-struct Game {
-    Scene current_scene;
+struct Game;
 
+struct SceneGame {
     void init(Engine *engine);
-
     void update(Engine *engine, WorldInstances *instances, Vec2 logical);
-
-    void updateUI(Engine *engine, FixedVector<UIInstance> &instances, Vec2i render_size);
-
+    void updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances,
+                  Vec2i render_size);
     void deinit(Engine *engine);
 };

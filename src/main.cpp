@@ -8,7 +8,10 @@
 #include "ui_pipeline.cpp"
 #include "world_pipeline.cpp"
 
-#include "game.cpp"
+#include "game.hpp"
+
+static Game game;
+Arena arena;
 
 static SDL_GPUDevice *device;
 static SDL_Window *window;
@@ -311,7 +314,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             createDefaultFont({.x = texture.x, .y = texture.y, .w = texture.w, .h = texture.h});
     }
 
-    game.init(&engine);
+    initGame(game, engine);
 
     times.frequency = f32(SDL_GetPerformanceFrequency());
     times.counter = SDL_GetPerformanceCounter();
@@ -381,7 +384,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             auto instances = world.beginUpload(device, instance_transfer_buffer);
             defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
 
-            game.update(&engine, &instances, world.logical);
+            updateGame(game, engine, &instances, world.logical);
             engine.update(&instances, world.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
@@ -393,7 +396,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(
                 ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
-            game.updateUI(&engine, upload.instances, ui.logical);
+            updateGameUI(game, engine, upload.instances, ui.logical);
             engine.updateUI(upload.instances, ui.logical);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
@@ -452,7 +455,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    game.deinit(&engine);
+    deinitGame(game, engine);
 
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 

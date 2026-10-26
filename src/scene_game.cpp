@@ -2,7 +2,6 @@
 
 #include "shared.cpp"
 
-
 #include <skn.cpp>
 
 #include "inventory.cpp"
@@ -207,507 +206,505 @@ static struct ShowLocation {
     Timer timer;
 } show_location = {false, -1, -1, Timer::init(2)};
 
-struct SceneGame {
-    void init(Engine *engine) {
-        // globals
-        solid = engine->sprites.get("solid");
-        engine->clear_color = 0x8bbbffff;
+void SceneGame::init(Engine *engine) {
+    // globals
+    solid = engine->sprites.get("solid");
+    engine->clear_color = 0x8bbbffff;
 
-        // invertory
-        uint items_len = 1;
-        for (auto &mod : engine->mods) {
-            for (auto &_ : mod.items) items_len++;
-        }
-        items.init(&arena, items_len);
-        // items.append(&arena, "wheat_seeds");
-        // for (auto &mod : engine->mods) {
-        //     for (auto &item : mod.items) {
-        //         auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
-        //                                     int(item.len), item.ptr);
-        //         items.append(&arena, {key.len, key.ptr});
-        //     }
-        // }
-
-        inventory.init(engine);
-
-        // animations
-        player_down.init(engine->sprites.get("player_down"), 3);
-        player_up.init(engine->sprites.get("player_up"), 3);
-        player_right.init(engine->sprites.get("player_right"), 3);
-        player_left.init(engine->sprites.get("player_right"), 3, true);
-
-        // entities
-        using Kind = Entity::Kind;
-        using Body = Entity::Body;
-
-        player = &entities.emplace_back(
-            Entity::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
-        player->timer = Timer::init(0.2F);
-        player->direction = {0.0F, 1.0F};
-        player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
-
-        attack = &entities.emplace_back(
-            Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
-        attack->timer = Timer::init(0.1F);
-
-        spell =
-            &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.get("spell0")));
-
-        {
-            auto &entity = entities.emplace_back(Entity::create(
-                Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
-            entity.addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
-            entity.interaction_rel = skn::Rect(0, 0, 1, 1);
-        }
-
-        // {
-        //     auto house = engine->sprites.get("house");
-        //     auto *object = objects.append(Object::create(Kind::building, house, true));
-        //     object->addCollision(Body::immovable, {{1.0F, 47.0F}, {192.0F, 162.0F}});
-        //     object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
-        //     object->interaction_rel = {{80.0F, 208.0F}, {30.0F, 2.0F}};
-        // }
-
-        const i32 MAX_X = 64;
-        const i32 MAX_Y = 32;
-
-        const u8 ENEMY_COUNT = 50;
-        for (u8 i = 0; i < ENEMY_COUNT; i++) {
-            auto &entity = entities.emplace_back(
-                Entity::create(Kind::enemy, engine->sprites.get("zombie"), true,
-                               {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
-                                float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
-            entity.addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
-            entity.hp = 5;
-            entity.timer = Timer::init(0.2F);
-        }
-
-        map.init(engine, player->pos);
+    // invertory
+    uint items_len = 1;
+    for (auto &mod : engine->mods) {
+        for (auto &_ : mod.items) items_len++;
     }
-    void update(Engine *engine, WorldInstances *instances, Vec2 logical) {
-        player_action = false;
+    items.init(&arena, items_len);
+    // items.append(&arena, "wheat_seeds");
+    // for (auto &mod : engine->mods) {
+    //     for (auto &item : mod.items) {
+    //         auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
+    //                                     int(item.len), item.ptr);
+    //         items.append(&arena, {key.len, key.ptr});
+    //     }
+    // }
 
-        float yaw = engine->isKeyJustReleased(Key::kp_4) - engine->isKeyJustReleased(Key::kp_6);
-        float pitch = engine->isKeyJustReleased(Key::kp_2) - engine->isKeyJustReleased(Key::kp_8);
-        float roll = engine->isKeyJustReleased(Key::kp_7) - engine->isKeyJustReleased(Key::kp_9);
+    inventory.init(engine);
 
-        engine->camera.yaw += yaw * 45;
-        engine->camera.yaw = int(engine->camera.yaw) % 360;
-        engine->camera.pitch += pitch * 5;
-        engine->camera.roll += roll * 5;
+    // animations
+    player_down.init(engine->sprites.get("player_down"), 3);
+    player_up.init(engine->sprites.get("player_up"), 3);
+    player_right.init(engine->sprites.get("player_right"), 3);
+    player_left.init(engine->sprites.get("player_right"), 3, true);
 
-        // TODO: way to exit house
-        // TODO: move NPC to house
-        // TODO: don't spawn zombie into house
-        // TODO: show debug collision only realted to current level
+    // entities
+    using Kind = Entity::Kind;
+    using Body = Entity::Body;
 
-        // cheat && system
-        if (engine->isKeyJustPressed(Key::key_1)) quest.status = Quest::COMPLETED;
+    player = &entities.emplace_back(
+        Entity::create(Kind::player, player_down.get(0), true, {0, 0, SEA_LEVEL}));
+    player->timer = Timer::init(0.2F);
+    player->direction = {0.0F, 1.0F};
+    player->addCollision(Body::movable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
 
-        auto collisions = map.getCollision(player->pos);
+    attack = &entities.emplace_back(
+        Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
+    attack->timer = Timer::init(0.1F);
 
-        player_action = engine->isMouseButtonJustPressed(MouseButton::left) or
-                        engine->isKeyJustPressed(Key::space);
+    spell = &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.get("spell0")));
 
-        for (auto &entity : entities) {
-            if (!entity.alive) continue;
-            if (!pause) {
-                switch (entity.kind) {
-                case Entity::Kind::player: {
-                    auto cell = map.getCell(entity.pos + Vec3(0.5, 0.5, 0));
-                    if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
-                        map.hide_above_level = true;
-                    } else {
-                        map.hide_above_level = false;
-                    }
+    {
+        auto &entity = entities.emplace_back(Entity::create(
+            Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
+        entity.addCollision(Body::immovable, {{0.0F, 0.0F}, {0.5F, 0.5F}});
+        entity.interaction_rel = skn::Rect(0, 0, 1, 1);
+    }
 
-                    if (engine->isKeyJustPressed(Key::f)) {
-                        spell->alive = true;
-                        spell->pos = entity.pos;
-                        spell->direction = player->direction;
-                        spell->speed = 8;
-                    }
+    // {
+    //     auto house = engine->sprites.get("house");
+    //     auto *object = objects.append(Object::create(Kind::building, house, true));
+    //     object->addCollision(Body::immovable, {{1.0F, 47.0F}, {192.0F, 162.0F}});
+    //     object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
+    //     object->interaction_rel = {{80.0F, 208.0F}, {30.0F, 2.0F}};
+    // }
 
-                    if (player_action) {
-                        if (strcmp(inventory.getCurrent(), "hoe") == 0) {
-                            Cell *cell = map.getSelected();
-                            if (cell->type == Cell::Type::surface and cell->hasFloor() and
-                                cell->getFloor() == Material::grass) {
-                                map.deleteFloor();
-                            }
-                        } else if (strcmp(inventory.getCurrent(), "pickaxe") == 0) {
-                            Object *object = map.getSelectedObject();
-                            if (object and object->type == Object::Type::ore) {
-                                map.deleteObject(map.selection_pos);
-                                inventory.add("iron_ore", 1);
-                            }
-                        } else if (strcmp(inventory.getCurrent(), "sword") == 0) {
-                            attack->alive = true;
+    const i32 MAX_X = 64;
+    const i32 MAX_Y = 32;
+
+    const u8 ENEMY_COUNT = 50;
+    for (u8 i = 0; i < ENEMY_COUNT; i++) {
+        auto &entity = entities.emplace_back(
+            Entity::create(Kind::enemy, engine->sprites.get("zombie"), true,
+                           {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
+                            float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
+        entity.addCollision(Body::movable, {{0, 0}, {0.5F, 0.5F}});
+        entity.hp = 5;
+        entity.timer = Timer::init(0.2F);
+    }
+
+    map.init(engine, player->pos);
+}
+
+void SceneGame::update(Engine *engine, WorldInstances *instances, Vec2 logical) {
+    player_action = false;
+
+    float yaw = engine->isKeyJustReleased(Key::kp_4) - engine->isKeyJustReleased(Key::kp_6);
+    float pitch = engine->isKeyJustReleased(Key::kp_2) - engine->isKeyJustReleased(Key::kp_8);
+    float roll = engine->isKeyJustReleased(Key::kp_7) - engine->isKeyJustReleased(Key::kp_9);
+
+    engine->camera.yaw += yaw * 45;
+    engine->camera.yaw = int(engine->camera.yaw) % 360;
+    engine->camera.pitch += pitch * 5;
+    engine->camera.roll += roll * 5;
+
+    // TODO: way to exit house
+    // TODO: move NPC to house
+    // TODO: don't spawn zombie into house
+    // TODO: show debug collision only realted to current level
+
+    // cheat && system
+    if (engine->isKeyJustPressed(Key::key_1)) quest.status = Quest::COMPLETED;
+
+    auto collisions = map.getCollision(player->pos);
+
+    player_action = engine->isMouseButtonJustPressed(MouseButton::left) or
+                    engine->isKeyJustPressed(Key::space);
+
+    for (auto &entity : entities) {
+        if (!entity.alive) continue;
+        if (!pause) {
+            switch (entity.kind) {
+            case Entity::Kind::player: {
+                auto cell = map.getCell(entity.pos + Vec3(0.5, 0.5, 0));
+                if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
+                    map.hide_above_level = true;
+                } else {
+                    map.hide_above_level = false;
+                }
+
+                if (engine->isKeyJustPressed(Key::f)) {
+                    spell->alive = true;
+                    spell->pos = entity.pos;
+                    spell->direction = player->direction;
+                    spell->speed = 8;
+                }
+
+                if (player_action) {
+                    if (strcmp(inventory.getCurrent(), "hoe") == 0) {
+                        Cell *cell = map.getSelected();
+                        if (cell->type == Cell::Type::surface and cell->hasFloor() and
+                            cell->getFloor() == Material::grass) {
+                            map.deleteFloor();
                         }
+                    } else if (strcmp(inventory.getCurrent(), "pickaxe") == 0) {
+                        Object *object = map.getSelectedObject();
+                        if (object and object->type == Object::Type::ore) {
+                            map.deleteObject(map.selection_pos);
+                            inventory.add("iron_ore", 1);
+                        }
+                    } else if (strcmp(inventory.getCurrent(), "sword") == 0) {
+                        attack->alive = true;
+                    }
 
-                        {
-                            Object *object = map.getSelectedObject();
-                            if (object != nullptr and object->type == Object::Type::furnace) {
-                                for (auto &slot : inventory.slots) {
-                                    if (slot.name == nullptr or slot.count == 0) continue;
-                                    if (strcmp(slot.name, "iron_ore") == 0) {
-                                        auto count = slot.count;
-                                        slot.count = 0;
-                                        inventory.add("iron_ingot", count);
-                                    }
+                    {
+                        Object *object = map.getSelectedObject();
+                        if (object != nullptr and object->type == Object::Type::furnace) {
+                            for (auto &slot : inventory.slots) {
+                                if (slot.name == nullptr or slot.count == 0) continue;
+                                if (strcmp(slot.name, "iron_ore") == 0) {
+                                    auto count = slot.count;
+                                    slot.count = 0;
+                                    inventory.add("iron_ingot", count);
                                 }
                             }
                         }
                     }
-                    const Vec2 velocity = Vec2(float(engine->isKeyPressed(Key::d)) -
-                                                   float(engine->isKeyPressed(Key::a)),
-                                               float(engine->isKeyPressed(Key::w)) -
-                                                   float(engine->isKeyPressed(Key::s)))
-                                              .normalize()
+                }
+                const Vec2 velocity =
+                    Vec2(
+                        float(engine->isKeyPressed(Key::d)) - float(engine->isKeyPressed(Key::a)),
+                        float(engine->isKeyPressed(Key::w)) - float(engine->isKeyPressed(Key::s)))
+                        .normalize()
                         .rotate(skn::deg2rad(engine->camera.yaw));
 
-                    int level_diff = engine->isKeyJustReleased(Key::pageup) -
-                                     engine->isKeyJustReleased(Key::pagedown);
-                    player->pos.z =
-                        std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
+                int level_diff = engine->isKeyJustReleased(Key::pageup) -
+                                 engine->isKeyJustReleased(Key::pagedown);
+                player->pos.z =
+                    std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
 
-                    if (engine->isKeyJustReleased(Key::kp_5)) {
-                        map.hide_above_level = !map.hide_above_level;
-                    }
-
-                    u8 frame = 0;
-                    if (velocity.length() > 0.0F) {
-                        if (entity.timer.advanceAndCheck(engine->dt)) {
-                            entity.frame += 1;
-                            entity.frame %= 4;
-                        };
-                        frame = entity.frame;
-                        if (frame == 2) {
-                            frame = 0;
-                        } else if (frame == 3) {
-                            frame = 2;
-                        }
-
-                        entity.direction = velocity;
-                        entity.speed = 4;
-                    } else {
-                        entity.speed = 0;
-                        entity.frame = 0;
-                        entity.timer.reset();
-                    }
-
-                    auto d = entity.direction.rotate(skn::deg2rad(-engine->camera.yaw));
-                    if (d.y > 0) {
-                        entity.sprite = player_up.get(frame);
-                    } else if (d.y < 0) {
-                        entity.sprite = player_down.get(frame);
-                    } else if (d.x > 0) {
-                        entity.sprite = player_right.get(frame);
-                    } else if (d.x < 0) {
-                        entity.sprite = player_left.get(frame);
-                    }
-
-                    break;
-                }
-                case Entity::Kind::enemy: {
-                    if (entity.speed > 0.0F) {
-                        const float KNOCKBACK_FRICTION = 40;
-                        entity.speed -= KNOCKBACK_FRICTION * engine->dt;
-                    } else {
-                        entity.speed = 0.0F;
-                    }
-
-                    if (entity.invincible) {
-                        entity.tint = skn::RED;
-                        if (entity.timer.advanceAndCheck(engine->dt)) {
-                            entity.invincible = false;
-                            entity.tint = skn::WHITE;
-                        }
-                    }
-
-                    if (attack->alive and
-                        checkCollisionSAT(attack->rect(), attack->angle, entity.getCollision(),
-                                          0) and
-                        !entity.invincible) {
-                        entity.takeDamage(attack->direction);
-                    }
-
-                    if (spell->alive and
-                        checkCollisionAABB(spell->rect(), entity.getCollision()) and
-                        !entity.invincible) {
-                        entity.takeDamage(spell->direction);
-                        spell->alive = false;
-                    }
-                    break;
-                }
-                case Entity::Kind::attack: {
-                    entity.direction = player->direction;
-                    entity.angle = atan2f(player->direction.y, player->direction.x);
-                    entity.pos = player->pos + entity.direction * 0.5;
-                    if (entity.timer.advanceAndCheck(engine->dt)) entity.alive = false;
-                    break;
-                }
-                case Entity::Kind::npc: {
-                    quest.pos = entity.pos;
-                    if (!dialog) {
-                        if (checkCollisionAABB(entity.getInteraction(), player->getCollision())) {
-                            if (player_action) {
-                                dialog = true;
-                                pause = true;
-                                interaction_frame = true;
-                            }
-                        }
-                    }
-                    break;
-                }
-                case Entity::Kind::spell:
-                    break;
-                case Entity::Kind::building:
-                    // TODO: building move player to second level
-                    break;
+                if (engine->isKeyJustReleased(Key::kp_5)) {
+                    map.hide_above_level = !map.hide_above_level;
                 }
 
-                if (entity.isSolid() and entity.body == Entity::Body::movable) {
-                    Filter q = makeFilter(entities, [](Entity *other) {
-                        return other->isSolid() and other->alive;
-                    });
-                    Vec2 velocity = entity.direction * engine->dt * entity.speed;
-                    entity.pos.x += velocity.x;
-                    for (Entity &other : q) {
-                        if (other.pos.z != entity.pos.z) continue;
-                        if (&entity != &other and
-                            checkCollisionAABB(entity.getCollision(), other.getCollision())) {
-                            entity.pos.x -= velocity.x;
-                            break;
-                        }
+                u8 frame = 0;
+                if (velocity.length() > 0.0F) {
+                    if (entity.timer.advanceAndCheck(engine->dt)) {
+                        entity.frame += 1;
+                        entity.frame %= 4;
+                    };
+                    frame = entity.frame;
+                    if (frame == 2) {
+                        frame = 0;
+                    } else if (frame == 3) {
+                        frame = 2;
                     }
-                    for (auto &c : collisions) {
-                        if (checkCollisionAABB(entity.getCollision(), c)) {
-                            entity.pos.x -= velocity.x;
-                            break;
-                        }
-                    }
-                    entity.pos.y += velocity.y;
-                    for (Entity &other : q) {
-                        if (other.pos.z != entity.pos.z) continue;
-                        if (&entity != &other and
-                            checkCollisionAABB(entity.getCollision(), other.getCollision())) {
-                            entity.pos.y -= velocity.y;
-                            break;
-                        }
-                    }
-                    for (auto &c : collisions) {
-                        if (checkCollisionAABB(entity.getCollision(), c)) {
-                            entity.pos.y -= velocity.y;
-                            break;
-                        }
-                    }
+
+                    entity.direction = velocity;
+                    entity.speed = 4;
                 } else {
-                    entity.pos += entity.direction * engine->dt * entity.speed;
+                    entity.speed = 0;
+                    entity.frame = 0;
+                    entity.timer.reset();
                 }
-            }
-        }
 
-        Vec3 pos_offset = {0.5, 0.5, 0.5};
-        for (auto &entity : entities) {
-            if (!entity.alive) continue;
-            bool use_default = true;
-            switch (entity.kind) {
-            case Entity::Kind::player:
-            case Entity::Kind::enemy:
+                auto d = entity.direction.rotate(skn::deg2rad(-engine->camera.yaw));
+                if (d.y > 0) {
+                    entity.sprite = player_up.get(frame);
+                } else if (d.y < 0) {
+                    entity.sprite = player_down.get(frame);
+                } else if (d.x > 0) {
+                    entity.sprite = player_right.get(frame);
+                } else if (d.x < 0) {
+                    entity.sprite = player_left.get(frame);
+                }
+
                 break;
+            }
+            case Entity::Kind::enemy: {
+                if (entity.speed > 0.0F) {
+                    const float KNOCKBACK_FRICTION = 40;
+                    entity.speed -= KNOCKBACK_FRICTION * engine->dt;
+                } else {
+                    entity.speed = 0.0F;
+                }
+
+                if (entity.invincible) {
+                    entity.tint = skn::RED;
+                    if (entity.timer.advanceAndCheck(engine->dt)) {
+                        entity.invincible = false;
+                        entity.tint = skn::WHITE;
+                    }
+                }
+
+                if (attack->alive and
+                    checkCollisionSAT(attack->rect(), attack->angle, entity.getCollision(), 0) and
+                    !entity.invincible) {
+                    entity.takeDamage(attack->direction);
+                }
+
+                if (spell->alive and checkCollisionAABB(spell->rect(), entity.getCollision()) and
+                    !entity.invincible) {
+                    entity.takeDamage(spell->direction);
+                    spell->alive = false;
+                }
+                break;
+            }
             case Entity::Kind::attack: {
-                use_default = false;
-                instances->squares.append({{entity.pos + pos_offset},
-                                           entity.size,
-                                           entity.sprite,
-                                           entity.tint,
-                                           Face::z_pos,
-                                           entity.angle});
+                entity.direction = player->direction;
+                entity.angle = atan2f(player->direction.y, player->direction.x);
+                entity.pos = player->pos + entity.direction * 0.5;
+                if (entity.timer.advanceAndCheck(engine->dt)) entity.alive = false;
+                break;
+            }
+            case Entity::Kind::npc: {
+                quest.pos = entity.pos;
+                if (!dialog) {
+                    if (checkCollisionAABB(entity.getInteraction(), player->getCollision())) {
+                        if (player_action) {
+                            dialog = true;
+                            pause = true;
+                            interaction_frame = true;
+                        }
+                    }
+                }
                 break;
             }
             case Entity::Kind::spell:
-            case Entity::Kind::npc:
+                break;
             case Entity::Kind::building:
+                // TODO: building move player to second level
                 break;
             }
-            if (use_default) {
-                instances->squares.append({{entity.pos + pos_offset},
-                                           entity.size,
-                                           entity.sprite,
-                                           entity.tint,
-                                           Face::billboard,
-                                           0.0F});
-            }
-        }
 
-        engine->camera.pos = player->pos + Vec3(0.5, 0.5, 0.0);
-
-        // current location
-        {
-            bool outside = true;
-            for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
-                auto *location = &locations[i];
-                bool is_player_inside_location = false;
-                auto player_index = Map::indexFromPos(player->pos);
-                for (auto &chunk_id : location->chunk_ids) {
-                    if (chunk_id == player_index) is_player_inside_location = true;
-                }
-                if (is_player_inside_location) {
-                    outside = false;
-                    show_location.curr_id = i;
-                }
-            }
-            if (outside) {
-                show_location.curr_id = -1;
-            }
-            if (show_location.curr_id != show_location.prev_id) {
-                show_location.active = true;
-                show_location.timer.reset();
-                show_location.prev_id = show_location.curr_id;
-            } else {
-            }
-        }
-
-        // quest marker
-        if (quest.status != Quest::REWARDED) {
-            const uint SIZE = 5;
-            char sign = '!';
-            auto color = skn::YELLOW;
-            if (quest.status != Quest::AVAILABLE) {
-                sign = '?';
-                if (quest.status == Quest::ACTIVE) color = skn::WHITE;
-            }
-            engine->drawWorldSymbol(&instances->squares, quest.pos + Vec3{0.5, 0.5, 1.25F}, sign,
-                                    SIZE, color, engine->default_font);
-        }
-
-        map.update(engine, instances, player->pos, logical);
-
-        // debug (show collision)
-        if (engine->debug_mode) {
-            // auto home = locations->rect;
-            // instances->append({
-            //     .position = Vec3(home.position(), 0),
-            //     .size = home.size(),
-            //     .uv = solid,
-            //     .color = 0xff00FF7f,
-            //     .face = Face::z_pos,
-            //     .rotation = 0,
-            // });
-
-            for (auto &entity : entities) {
-                auto pos = entity.pos + Vec3(0.5, 0.5, 0.5);
-                if (!entity.alive) continue;
-
-                if (entity.kind == Entity::Kind::attack) {
-                    instances->squares.append({
-                        .position = pos,
-                        .size = entity.size,
-                        .uv = solid,
-                        .color = 0xff00FF7f,
-                        .face = Face::z_pos,
-                        .rotation = entity.angle,
-
-                    });
-                }
-
-                if (entity.isInteractable()) {
-                    auto collision = entity.getInteraction();
-                    instances->squares.append({
-                        .position = pos,
-                        .size = collision.size(),
-                        .uv = solid,
-                        .color = 0xff00007f,
-                        .face = Face::z_pos,
-                        .rotation = entity.angle,
-
-                    });
-                }
-
-                if (entity.isSolid()) {
-                    auto collision = entity.getCollision();
-                    instances->squares.append({
-                        .position = pos,
-                        .size = collision.size(),
-                        .uv = solid,
-                        .color = 0x0000ff7f,
-                        .face = Face::z_pos,
-                        .rotation = entity.angle,
-                    });
-                }
-            }
-        };
-    }
-    void updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances, Vec2i render_size) {
-        ScopeArena scope(&arena);
-
-        while (dialog) {
-            std::string_view text = {};
-            if (quest.status == Quest::REWARDED) {
-
-                if (curr_line == ARRAY_LEN(lines)) {
-                    dialog = pause = false;
-                    curr_line = 0;
-                    break;
-                }
-                text = lines[curr_line];
-                curr_line += player_action and (not interaction_frame);
-            } else {
-                text = quest.line[quest.status];
-                if (player_action and (not interaction_frame)) {
-                    dialog = pause = false;
-                    if (quest.status == Quest::COMPLETED) {
-                        quest.status = Quest::REWARDED;
-                        inventory.add("gold", 10);
+            if (entity.isSolid() and entity.body == Entity::Body::movable) {
+                Filter q = makeFilter(
+                    entities, [](Entity *other) { return other->isSolid() and other->alive; });
+                Vec2 velocity = entity.direction * engine->dt * entity.speed;
+                entity.pos.x += velocity.x;
+                for (Entity &other : q) {
+                    if (other.pos.z != entity.pos.z) continue;
+                    if (&entity != &other and
+                        checkCollisionAABB(entity.getCollision(), other.getCollision())) {
+                        entity.pos.x -= velocity.x;
+                        break;
                     }
-                    if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
-                    break;
                 }
+                for (auto &c : collisions) {
+                    if (checkCollisionAABB(entity.getCollision(), c)) {
+                        entity.pos.x -= velocity.x;
+                        break;
+                    }
+                }
+                entity.pos.y += velocity.y;
+                for (Entity &other : q) {
+                    if (other.pos.z != entity.pos.z) continue;
+                    if (&entity != &other and
+                        checkCollisionAABB(entity.getCollision(), other.getCollision())) {
+                        entity.pos.y -= velocity.y;
+                        break;
+                    }
+                }
+                for (auto &c : collisions) {
+                    if (checkCollisionAABB(entity.getCollision(), c)) {
+                        entity.pos.y -= velocity.y;
+                        break;
+                    }
+                }
+            } else {
+                entity.pos += entity.direction * engine->dt * entity.speed;
             }
-            Vec2 pos = {0.0F, render_size.y - 128.F};
-            append(instances, UIInstance{
-                .position = pos,
-                .size = {float(render_size.x), 128.0F},
-                .uv = solid,
-                .color = skn::BLACK,
-            });
-            append(instances, pos, Vec2{128, 128}, engine->sprites.get("alice_portrait"), skn::WHITE);
-            engine->drawText(instances, text, pos + Vec2(128 + 4, 4));
+        }
+    }
+
+    Vec3 pos_offset = {0.5, 0.5, 0.5};
+    for (auto &entity : entities) {
+        if (!entity.alive) continue;
+        bool use_default = true;
+        switch (entity.kind) {
+        case Entity::Kind::player:
+        case Entity::Kind::enemy:
+            break;
+        case Entity::Kind::attack: {
+            use_default = false;
+            instances->squares.append({{entity.pos + pos_offset},
+                                       entity.size,
+                                       entity.sprite,
+                                       entity.tint,
+                                       Face::z_pos,
+                                       entity.angle});
             break;
         }
-        if (show_location.active) {
-            if (show_location.timer.advanceAndCheck(engine->dt)) {
-                show_location.active = false;
-            } else {
-                auto height = 20.0F;
-                const char *name;
+        case Entity::Kind::spell:
+        case Entity::Kind::npc:
+        case Entity::Kind::building:
+            break;
+        }
+        if (use_default) {
+            instances->squares.append({{entity.pos + pos_offset},
+                                       entity.size,
+                                       entity.sprite,
+                                       entity.tint,
+                                       Face::billboard,
+                                       0.0F});
+        }
+    }
 
-                if (show_location.curr_id == -1) {
-                    name = "Outside";
-                } else {
-                    name = locations[show_location.curr_id].name;
-                }
+    engine->camera.pos = player->pos + Vec3(0.5, 0.5, 0.0);
 
-                auto width = engine->measureText(name, height);
-
-                u8 alpha = 255;
-                if (show_location.timer.elapsed > 1.0F) {
-                    alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
-                }
-
-                engine->drawText(instances, name,
-                                 {(float(render_size.x) / 2.0F) - (width / 2.0F),
-                                  (float(render_size.y) / 2.0F) - (height / 2.0F)},
-                                 height, {skn::WHITE.r, skn::WHITE.g, skn::WHITE.b, alpha});
+    // current location
+    {
+        bool outside = true;
+        for (u8 i = 0; i < u8(ARRAY_LEN(locations)); i++) {
+            auto *location = &locations[i];
+            bool is_player_inside_location = false;
+            auto player_index = Map::indexFromPos(player->pos);
+            for (auto &chunk_id : location->chunk_ids) {
+                if (chunk_id == player_index) is_player_inside_location = true;
+            }
+            if (is_player_inside_location) {
+                outside = false;
+                show_location.curr_id = i;
             }
         }
+        if (outside) {
+            show_location.curr_id = -1;
+        }
+        if (show_location.curr_id != show_location.prev_id) {
+            show_location.active = true;
+            show_location.timer.reset();
+            show_location.prev_id = show_location.curr_id;
+        } else {
+        }
+    }
 
-        inventory.updateUI(game, engine, instances, render_size, &scope.tmp);
+    // quest marker
+    if (quest.status != Quest::REWARDED) {
+        const uint SIZE = 5;
+        char sign = '!';
+        auto color = skn::YELLOW;
+        if (quest.status != Quest::AVAILABLE) {
+            sign = '?';
+            if (quest.status == Quest::ACTIVE) color = skn::WHITE;
+        }
+        engine->drawWorldSymbol(&instances->squares, quest.pos + Vec3{0.5, 0.5, 1.25F}, sign,
+                                SIZE, color, engine->default_font);
+    }
 
-        if (interaction_frame) {
-            interaction_frame = false;
+    map.update(engine, instances, player->pos, logical);
+
+    // debug (show collision)
+    if (engine->debug_mode) {
+        // auto home = locations->rect;
+        // instances->append({
+        //     .position = Vec3(home.position(), 0),
+        //     .size = home.size(),
+        //     .uv = solid,
+        //     .color = 0xff00FF7f,
+        //     .face = Face::z_pos,
+        //     .rotation = 0,
+        // });
+
+        for (auto &entity : entities) {
+            auto pos = entity.pos + Vec3(0.5, 0.5, 0.5);
+            if (!entity.alive) continue;
+
+            if (entity.kind == Entity::Kind::attack) {
+                instances->squares.append({
+                    .position = pos,
+                    .size = entity.size,
+                    .uv = solid,
+                    .color = 0xff00FF7f,
+                    .face = Face::z_pos,
+                    .rotation = entity.angle,
+
+                });
+            }
+
+            if (entity.isInteractable()) {
+                auto collision = entity.getInteraction();
+                instances->squares.append({
+                    .position = pos,
+                    .size = collision.size(),
+                    .uv = solid,
+                    .color = 0xff00007f,
+                    .face = Face::z_pos,
+                    .rotation = entity.angle,
+
+                });
+            }
+
+            if (entity.isSolid()) {
+                auto collision = entity.getCollision();
+                instances->squares.append({
+                    .position = pos,
+                    .size = collision.size(),
+                    .uv = solid,
+                    .color = 0x0000ff7f,
+                    .face = Face::z_pos,
+                    .rotation = entity.angle,
+                });
+            }
         }
     };
-    void deinit([[maybe_unused]] Engine *engine) {}
+}
+
+void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances,
+                         Vec2i render_size) {
+    ScopeArena scope(&arena);
+
+    while (dialog) {
+        std::string_view text = {};
+        if (quest.status == Quest::REWARDED) {
+
+            if (curr_line == ARRAY_LEN(lines)) {
+                dialog = pause = false;
+                curr_line = 0;
+                break;
+            }
+            text = lines[curr_line];
+            curr_line += player_action and (not interaction_frame);
+        } else {
+            text = quest.line[quest.status];
+            if (player_action and (not interaction_frame)) {
+                dialog = pause = false;
+                if (quest.status == Quest::COMPLETED) {
+                    quest.status = Quest::REWARDED;
+                    inventory.add("gold", 10);
+                }
+                if (quest.status == Quest::AVAILABLE) quest.status = Quest::ACTIVE;
+                break;
+            }
+        }
+        Vec2 pos = {0.0F, render_size.y - 128.F};
+        append(instances, UIInstance{
+                              .position = pos,
+                              .size = {float(render_size.x), 128.0F},
+                              .uv = solid,
+                              .color = skn::BLACK,
+                          });
+        append(instances, pos, Vec2{128, 128}, engine->sprites.get("alice_portrait"), skn::WHITE);
+        engine->drawText(instances, text, pos + Vec2(128 + 4, 4));
+        break;
+    }
+    if (show_location.active) {
+        if (show_location.timer.advanceAndCheck(engine->dt)) {
+            show_location.active = false;
+        } else {
+            auto height = 20.0F;
+            const char *name;
+
+            if (show_location.curr_id == -1) {
+                name = "Outside";
+            } else {
+                name = locations[show_location.curr_id].name;
+            }
+
+            auto width = engine->measureText(name, height);
+
+            u8 alpha = 255;
+            if (show_location.timer.elapsed > 1.0F) {
+                alpha = u8((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
+            }
+
+            engine->drawText(instances, name,
+                             {(float(render_size.x) / 2.0F) - (width / 2.0F),
+                              (float(render_size.y) / 2.0F) - (height / 2.0F)},
+                             height, {skn::WHITE.r, skn::WHITE.g, skn::WHITE.b, alpha});
+        }
+    }
+
+    inventory.updateUI(game, engine, instances, render_size, &scope.tmp);
+
+    if (interaction_frame) {
+        interaction_frame = false;
+    }
 };
+
+void SceneGame::deinit([[maybe_unused]] Engine *engine) {}

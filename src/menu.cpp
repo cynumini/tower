@@ -1,6 +1,7 @@
 #include "menu.hpp"
 
 #include <string_view>
+#include "game.hpp"
 
 void menuUpdateUI(Game &game, const Engine &engine, FixedVector<UIInstance> &instances,
                   Vector2 render_size) {

@@ -39,21 +39,27 @@ find_package(SDL3 CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
-add_executable(tower src/main.cpp src/structure.cpp src/menu.cpp src/font.cpp)
+add_executable(tower
+  src/font.cpp
+  src/game.cpp
+  src/main.cpp
+  src/menu.cpp
+  src/structure.cpp
+)
 
 target_precompile_headers(tower PRIVATE
-    <array>
-    <vector>
-    <string_view>
-    # <string>
-    # <unordered_map>
-    # <algorithm>
-    # <limits>
-    # <fstream>
-    # <iostream>
-    # <inplace_vector>
-    <SDL3/SDL.h>
-    # <nlohmann/json.hpp>
+  <array>
+  <vector>
+  <string_view>
+  # <string>
+  # <unordered_map>
+  # <algorithm>
+  # <limits>
+  # <fstream>
+  # <iostream>
+  # <inplace_vector>
+  <SDL3/SDL.h>
+  # <nlohmann/json.hpp>
 )
 
 target_link_libraries(tower

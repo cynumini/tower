@@ -14,6 +14,8 @@ static constexpr f32 PIXEL = 1.0F / f32(PIXELS_PER_UNIT);
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<u8>::max());
 
+#include <skn/matrix.cpp>
+
 void initMaterialSprite(Engine *engine) {
     // skip air
     for (size_t i = size_t(Material::air) + 1; i < BlockKey.len(); i++) {
