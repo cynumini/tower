@@ -38,12 +38,12 @@ static struct Times {
     f32 ms;
 } times;
 
-void Engine::update([[maybe_unused]]WorldInstances *instances, [[maybe_unused]]Vec2 logical) {
+void Engine::update([[maybe_unused]] WorldInstances *instances, [[maybe_unused]] Vec2 logical) {
     if (isKeyJustPressed(Key::escape)) running = true;
     if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
 }
 
-void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]]Vec2i render_size) {
+void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]] Vec2i render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
         f32 offset_y = 2.0F;
@@ -305,7 +305,11 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     resize(engine.screen);
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
-    engine.default_font.init(engine.sprites.get("font"));
+    {
+        auto texture = engine.sprites.get("font");
+        engine.default_font =
+            createDefaultFont({.x = texture.x, .y = texture.y, .w = texture.w, .h = texture.h});
+    }
 
     game.init(&engine);
 

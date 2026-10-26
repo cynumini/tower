@@ -142,7 +142,7 @@ struct Mod {
     Dynamic<OldSlice<const char>> items;
 };
 
-#include "font.cpp"
+#include "font.hpp"
 
 struct Camera {
     f32 pitch = 60;
@@ -194,7 +194,7 @@ struct Engine {
             const u16 i = c - ' ';
             Vec2 texture_offset = {f32(i % 16) * font.size, int(i / 16.F) * font.size};
             append(renderer, Vec2(int(position.x + advance), position.y), Vec2(size, size),
-                   skn::Rect{font.texture.position() + texture_offset, {font.size, font.size}},
+                   skn::Rect{Vec2{font.texture.x, font.texture.y} + texture_offset, {font.size, font.size}},
                    color);
             advance += (f32(font.widths[c]) + 1) * (size / font.size);
         }
@@ -223,7 +223,7 @@ struct Engine {
         instances->append({
             .position = pos,
             .size = {width * (size / font.size) / 10.F, size / 10.F},
-            .uv = skn::Rect{font.texture.position() + texture_offset, {width, font.size}},
+            .uv = skn::Rect{Vec2i{font.texture.x, font.texture.y} + texture_offset, {width, font.size}},
             .color = color,
             .face = Face::billboard,
             .rotation = 0,

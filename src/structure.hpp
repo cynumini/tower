@@ -5,7 +5,7 @@
 
 struct Structure {
     static constexpr int MAX_SIZE = 32;
-    Vector3i pos;
+    Vector3 pos;
     std::array<std::array<std::array<Cell, MAX_SIZE>, MAX_SIZE>, MAX_SIZE> data;
     std::vector<Object> objects;
 };

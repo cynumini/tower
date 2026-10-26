@@ -3,7 +3,7 @@
 #include <string_view>
 
 void menuUpdateUI(Game &game, const Engine &engine, FixedVector<UIInstance> &instances,
-                  Vector2i render_size) {
+                  Vector2 render_size) {
     std::string_view text_play = "Play (ENTER)";
     std::string_view text_exit = "Exit (ESC)";
     float text_play_w = engine.measureText(text_play);

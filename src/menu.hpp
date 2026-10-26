@@ -5,4 +5,4 @@
 #include "shared.cpp"
 
 void menuUpdateUI(Game &game, const Engine &engine, FixedVector<UIInstance> &instances,
-                  Vector2i render_size);
+                  Vector2 render_size);
