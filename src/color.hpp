@@ -1,3 +1,5 @@
+#pragma once
+
 using Color = SDL_Color;
 
 constexpr Color toColor(uint32_t value) {

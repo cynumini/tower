@@ -41,12 +41,14 @@ find_package(glm CONFIG REQUIRED)
 
 add_executable(tower
   src/font.cpp
+  src/engine.cpp
   src/game.cpp
   src/inventory.cpp
   src/main.cpp
   src/menu.cpp
   src/structure.cpp
   src/ui_pipeline.cpp
+  src/world_pipeline.cpp
 )
 
 target_precompile_headers(tower PRIVATE

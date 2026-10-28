@@ -69,7 +69,8 @@ constexpr FVector2 normalize(FVector2 v) {
     if (l > 0) return {.x = v.x / l, .y = v.y / l};
     return {.x = v.x, .y = v.y};
 }
-constexpr FVector2 size(FRect rect) { return {.x = rect.w, .y = rect.h}; }
+constexpr FVector2 fRectSize(FRect rect) { return {.x = rect.w, .y = rect.h}; }
+constexpr FVector2 fRectPos(FRect rect) { return {.x = rect.x, .y = rect.y}; }
 constexpr FVector2 rotate(const FVector2 &v, float rad) {
     float c = std::cos(rad);
     float s = std::sin(rad);
@@ -81,6 +82,9 @@ constexpr FVector2 toFVector2(FVector3 v) { return {.x = v.x, .y = v.y}; }
 constexpr FVector2 operator-(const FVector2 &v) { return {.x = -v.x, .y = -v.y}; }
 constexpr FVector2 operator+(const FVector2 &self, const FVector2 &other) {
     return {.x = self.x + other.x, .y = self.y + other.y};
+}
+constexpr FVector2 operator+(const FVector2 &a, const float b) {
+    return {.x = a.x + b, .y = a.y + b};
 }
 constexpr FVector2 operator*(const Vector2 &self, const FVector2 &other) {
     return {.x = float(self.x) * other.x, .y = float(self.y) * other.y};

@@ -85,13 +85,13 @@ template <typename T, bool zero = false> struct OldSlice {
 
 template <typename T> using SliceZ = OldSlice<T, true>;
 
-static OldSlice<const char> getStem(const char *str_z) {
+static std::string_view getStem(const char *str_z) {
     ptrdiff_t len = strlen(str_z);
     SDL_assert(len > 0);
     for (ptrdiff_t i = len - 1; i >= 0; i--) {
-        if (str_z[i] == '.') return {size_t(i), str_z};
+        if (str_z[i] == '.') return {str_z, size_t(i)};
     }
-    return {size_t(len), str_z};
+    return {str_z, size_t(len)};
 }
 
 // Array

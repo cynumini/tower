@@ -1,8 +1,12 @@
+#include "engine.hpp"
+
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#include "ui_pipeline.hpp"
-#include "world_pipeline.cpp"
+#include <algorithm>
+#include <cstddef>
+
+#include "skn_sdl.cpp"
 
 #include "game.hpp"
 
@@ -17,68 +21,10 @@ static SDL_GPUTransferBuffer *instance_transfer_buffer;
 
 static Texture atlas;
 
-void Engine::log(const char *fmt, ...) {
-    va_list args;
-    va_start(args, fmt);
-    SDL_LogMessageV(SDL_LOG_CATEGORY_APPLICATION, SDL_LOG_PRIORITY_INFO, fmt, args);
-    va_end(args);
-}
-
-int Engine::rand(int n) const { return SDL_rand(n); }
-
-Engine engine;
-
-static struct Times {
-    uint64_t counter;
-    uint64_t frames;
-    float seconds;
-    float frequency;
-    uint16_t fps;
-    float ms;
-} times;
-
-void Engine::update([[maybe_unused]] WorldInstances *instances,
-                    [[maybe_unused]] FVector2 logical) {
-    if (isKeyJustPressed(Key::escape)) running = true;
-    if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
-}
-
-void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]] Vector2 render_size) {
-    if (debug_mode) {
-        ScopeArena scope(&arena);
-        int offset_y = 2;
-
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "FPS: %d", times.fps);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "%.2fms", times.ms);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Screen: %dx%d", screen.x, screen.y);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Mouse: %dx%d", mouse.x, mouse.y);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Pitch: %.0f", camera.pitch);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Yaw: %.0f", camera.yaw);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Roll: %.0f", camera.roll);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
-                  camera.pos.x, camera.pos.y, camera.pos.z);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "UI instances: %d/%d",
-                  ui.prev_instances_len, ui.MAX_INSTANCES);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "World square instances: %d/%d",
-                  world.prev_squares_len, world.MAX_INSTANCES / 2);
-        offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2, offset_y}, "World triangle instances: %d/%d",
-                  world.prev_triangles_len, world.MAX_INSTANCES / 2);
-        offset_y += 12;
-    }
-}
+Engine engine; // NOLINT
 
 struct AtlasItem {
-    OldSlice<const char> name;
+    std::string name;
     SDL_Surface *surface;
 };
 
@@ -165,14 +111,15 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         defer(SDL_free((void *)mods));
         SDL_CHECK(mods);
 
-        engine.mods.init(&arena, mods_len);
+        engine.mods.reserve(mods_len);
 
         for (char *const *it = mods; *it; it++) {
-            engine.mods.append(&arena, {arena.dupeConst(*it), {}});
+            engine.mods.emplace_back(*it, std::vector<std::string_view>{});
         }
 
         for (auto &mod : engine.mods) {
-            auto path = scope.tmp.allocPrintZ("mods/%*s/", int(mod.name.len), mod.name.ptr);
+            auto path =
+                scope.tmp.allocPrintZ("mods/%*s/", int(mod.name.size()), mod.name.c_str());
 
             int items_len = 0;
 
@@ -181,10 +128,10 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             defer(SDL_free((void *)items));
             SDL_CHECK(items);
 
-            mod.items.init(&arena, items_len);
+            mod.items.reserve(items_len);
 
             for (char *const *it = items; *it; it++) {
-                mod.items.append(&arena, arena.dupeConst(getStem(*it)));
+                mod.items.emplace_back(*it);
             }
         }
     }
@@ -203,13 +150,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
         SDL_CHECK(mods_files);
 
-        engine.sprites = HashMap<FRect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+        engine.sprites.reserve(size_t(files_len + mods_files_len) * 2);
 
-        auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
-        defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
+        auto atlas_items = std::vector<AtlasItem>();
+        atlas_items.reserve(files_len + mods_files_len);
 
         for (char *const *it = files; *it; it++) {
-            const OldSlice<const char> file = arena.dupeConst(getStem(*it));
+            auto file = getStem(*it);
             const SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
@@ -222,11 +169,11 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                 SDL_CHECK(surface);
             }
 
-            atlas_items.append(&scope.tmp, {file, surface});
+            atlas_items.emplace_back(std::string(file), surface);
         }
 
         for (char *const *it = mods_files; *it; it++) {
-            const OldSlice<const char> file = arena.dupeConst(getStem(*it));
+            auto file = getStem(*it);
             const SliceZ<char> path = scope.tmp.allocPrintZ("mods/%s", *it);
             auto *surface = SDL_LoadPNG(path.ptr);
             SDL_CHECK(surface);
@@ -239,15 +186,11 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                 SDL_CHECK(surface);
             }
 
-            atlas_items.append(&scope.tmp, {file, surface});
+            atlas_items.emplace_back(std::string(file), surface);
         }
 
-        atlas_items.sort([](const void *a, const void *b) {
-            auto *s_a = (AtlasItem *)a;
-            auto *s_b = (AtlasItem *)b;
-            if (s_a->surface->h > s_b->surface->h) return -1;
-            if (s_a->surface->h < s_b->surface->h) return 1;
-            return 0;
+        std::ranges::sort(atlas_items, [](const AtlasItem &a, const AtlasItem &b) {
+            return a.surface->h > b.surface->h;
         });
 
         uint x_offset = 0;
@@ -261,7 +204,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_CHECK(transfer_buffer);
 
             {
-                uint8_t *memory = (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
+                uint8_t *memory =
+                    (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
                 defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
                 SDL_CHECK(memory);
 
@@ -284,9 +228,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_assert(x_offset + uint(surface->w) <= uint(atlas.w));
             SDL_assert(y_offset + uint(surface->h) <= uint(atlas.h));
 
-            engine.sprites.put(
-                &arena, name,
-                toFRect({float(x_offset), float(y_offset)}, {float(surface->w), float(surface->h)}));
+            engine.sprites.emplace(name, toFRect({float(x_offset), float(y_offset)},
+                                                 {float(surface->w), float(surface->h)}));
 
             y_max = std::max(surface->h, y_max);
 
@@ -306,15 +249,15 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     engine.keyboard_state = SDL_GetKeyboardState(0);
     {
-        auto texture = engine.sprites.get("font");
+        auto texture = engine.sprites.at("font");
         engine.default_font =
             createDefaultFont({.x = texture.x, .y = texture.y, .w = texture.w, .h = texture.h});
     }
 
     initGame(game, engine);
 
-    times.frequency = float(SDL_GetPerformanceFrequency());
-    times.counter = SDL_GetPerformanceCounter();
+    engine.times.frequency = float(SDL_GetPerformanceFrequency());
+    engine.times.counter = SDL_GetPerformanceCounter();
 
     {
         SDL_Time ticks; // NOLINT
@@ -349,13 +292,13 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         if (event->button.button == SDL_BUTTON_LEFT) {
-            engine.mouse_button_state[MouseButton::left] = ButtonState::pressed;
+            engine.mouse_button_state[int(MouseButton::left)] = ButtonState::pressed;
         }
         if (event->button.button == SDL_BUTTON_MIDDLE) {
-            engine.mouse_button_state[MouseButton::middle] = ButtonState::pressed;
+            engine.mouse_button_state[int(MouseButton::middle)] = ButtonState::pressed;
         }
         if (event->button.button == SDL_BUTTON_RIGHT) {
-            engine.mouse_button_state[MouseButton::right] = ButtonState::pressed;
+            engine.mouse_button_state[int(MouseButton::right)] = ButtonState::pressed;
         }
         break;
     }
@@ -382,7 +325,6 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
 
             updateGame(game, engine, &instances, world.logical);
-            engine.update(&instances, world.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
             for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
@@ -394,7 +336,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
                 ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
             updateGameUI(game, engine, upload.instances, toVector2(ui.logical));
-            engine.updateUI(upload.instances, toVector2(ui.logical));
+            updateEngineUI(upload.instances);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
         }
@@ -434,19 +376,20 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         ui.draw(command_buffer, render_pass, atlas, sampler);
     }
 
-    memset(engine.key_state, 0, sizeof(engine.key_state));
-    memset(engine.mouse_button_state, 0, sizeof(engine.mouse_button_state));
+    engine.key_state = {};
+    engine.mouse_button_state = {};
 
-    auto prev = times.counter;
-    times.counter = SDL_GetPerformanceCounter();
-    times.frames += 1;
-    engine.dt = float(times.counter - prev) / times.frequency;
-    times.seconds += engine.dt;
-    times.ms = engine.dt * 1000;
-    if (times.seconds >= 0.5F) {
-        times.fps = (uint16_t)SDL_roundf((float)times.frames / times.seconds);
-        times.frames = 0;
-        times.seconds = 0;
+    auto prev = engine.times.counter;
+    engine.times.counter = SDL_GetPerformanceCounter();
+    engine.times.frames += 1;
+    engine.dt = float(engine.times.counter - prev) / engine.times.frequency;
+    engine.times.seconds += engine.dt;
+    engine.times.ms = engine.dt * 1000;
+    if (engine.times.seconds >= 0.5F) {
+        engine.times.fps =
+            (uint16_t)SDL_roundf((float)engine.times.frames / engine.times.seconds);
+        engine.times.frames = 0;
+        engine.times.seconds = 0;
     }
     return SDL_APP_CONTINUE;
 }

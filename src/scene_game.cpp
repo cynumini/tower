@@ -205,7 +205,7 @@ static struct ShowLocation {
 void SceneGame::init(Engine *engine) {
     // globals
     inventory = createInventory(*engine);
-    solid = engine->sprites.get("solid");
+    solid = engine->sprites.at("solid");
     engine->clear_color = toColor(0x8bbbffff);
 
     // invertory
@@ -225,10 +225,10 @@ void SceneGame::init(Engine *engine) {
     inventory = createInventory(*engine);
 
     // animations
-    player_down.init(engine->sprites.get("player_down"), 3);
-    player_up.init(engine->sprites.get("player_up"), 3);
-    player_right.init(engine->sprites.get("player_right"), 3);
-    player_left.init(engine->sprites.get("player_right"), 3, true);
+    player_down.init(engine->sprites.at("player_down"), 3);
+    player_up.init(engine->sprites.at("player_up"), 3);
+    player_right.init(engine->sprites.at("player_right"), 3);
+    player_left.init(engine->sprites.at("player_right"), 3, true);
 
     // entities
     using Kind = Entity::Kind;
@@ -240,15 +240,15 @@ void SceneGame::init(Engine *engine) {
     player->direction = {0.0F, 1.0F};
     player->addCollision(Body::movable, toFRect({0.0F, 0.0F}, {0.5F, 0.5F}));
 
-    attack = &entities.emplace_back(
-        Entity::create(Kind::attack, engine->sprites.get("attack_trail1")));
+    attack =
+        &entities.emplace_back(Entity::create(Kind::attack, engine->sprites.at("attack_trail1")));
     attack->timer = Timer::init(0.1F);
 
-    spell = &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.get("spell0")));
+    spell = &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.at("spell0")));
 
     {
         auto &entity = entities.emplace_back(Entity::create(
-            Kind::npc, engine->sprites.get("character"), true, {25.5, 9.5, SEA_LEVEL}));
+            Kind::npc, engine->sprites.at("character"), true, {25.5, 9.5, SEA_LEVEL}));
         entity.addCollision(Body::immovable, toFRect({0.0F, 0.0F}, {0.5F, 0.5F}));
         entity.interaction_rel = FRect(0, 0, 1, 1);
     }
@@ -267,9 +267,9 @@ void SceneGame::init(Engine *engine) {
     const uint8_t ENEMY_COUNT = 50;
     for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
         auto &entity = entities.emplace_back(
-            Entity::create(Kind::enemy, engine->sprites.get("zombie"), true,
-                           {float(engine->rand(MAX_X)) - MAX_X / 4.0F,
-                            float(engine->rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
+            Entity::create(Kind::enemy, engine->sprites.at("zombie"), true,
+                           {float(SDL_rand(MAX_X)) - MAX_X / 4.0F,
+                            float(SDL_rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
         entity.addCollision(Body::movable, toFRect({0, 0}, {0.5F, 0.5F}));
         entity.hp = 5;
         entity.timer = Timer::init(0.2F);
@@ -281,9 +281,12 @@ void SceneGame::init(Engine *engine) {
 void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logical) {
     player_action = false;
 
-    float yaw = engine->isKeyJustReleased(Key::kp_4) - engine->isKeyJustReleased(Key::kp_6);
-    float pitch = engine->isKeyJustReleased(Key::kp_2) - engine->isKeyJustReleased(Key::kp_8);
-    float roll = engine->isKeyJustReleased(Key::kp_7) - engine->isKeyJustReleased(Key::kp_9);
+    float yaw =
+        isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6);
+    float pitch =
+        isKeyJustReleased(Scancode::kp_2) - isKeyJustReleased(Scancode::kp_8);
+    float roll =
+        isKeyJustReleased(Scancode::kp_7) - isKeyJustReleased(Scancode::kp_9);
 
     engine->camera.yaw += yaw * 45;
     engine->camera.yaw = int(engine->camera.yaw) % 360;
@@ -296,12 +299,12 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
     // TODO: show debug collision only realted to current level
 
     // cheat && system
-    if (engine->isKeyJustPressed(Key::key_1)) quest.status = Quest::COMPLETED;
+    if (isKeyJustPressed(Scancode::sc_1)) quest.status = Quest::COMPLETED;
 
     auto collisions = map.getCollision(player->pos);
 
-    player_action = engine->isMouseButtonJustPressed(MouseButton::left) or
-                    engine->isKeyJustPressed(Key::space);
+    player_action = isMouseButtonJustPressed(MouseButton::left) or
+                    isKeyJustPressed(Scancode::space);
 
     for (auto &entity : entities) {
         if (!entity.alive) continue;
@@ -315,7 +318,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                     map.hide_above_level = false;
                 }
 
-                if (engine->isKeyJustPressed(Key::f)) {
+                if (isKeyJustPressed(Scancode::f)) {
                     spell->alive = true;
                     spell->pos = entity.pos;
                     spell->direction = player->direction;
@@ -354,18 +357,18 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                     }
                 }
                 const FVector2 velocity =
-                    rotate(normalize(FVector2{float(engine->isKeyPressed(Key::d)) -
-                                                  float(engine->isKeyPressed(Key::a)),
-                                              float(engine->isKeyPressed(Key::w)) -
-                                                  float(engine->isKeyPressed(Key::s))}),
+                    rotate(normalize(FVector2{float(isKeyPressed(Scancode::d)) -
+                                                  float(isKeyPressed(Scancode::a)),
+                                              float(isKeyPressed(Scancode::w)) -
+                                                  float(isKeyPressed(Scancode::s))}),
                            deg2rad(engine->camera.yaw));
 
-                int level_diff = engine->isKeyJustReleased(Key::pageup) -
-                                 engine->isKeyJustReleased(Key::pagedown);
+                int level_diff = isKeyJustReleased(Scancode::pageup) -
+                                 isKeyJustReleased(Scancode::pagedown);
                 player->pos.z =
                     std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
 
-                if (engine->isKeyJustReleased(Key::kp_5)) {
+                if (isKeyJustReleased(Scancode::kp_5)) {
                     map.hide_above_level = !map.hide_above_level;
                 }
 
@@ -510,12 +513,12 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             break;
         case Entity::Kind::attack: {
             use_default = false;
-            instances->squares.append({{entity.pos + pos_offset},
+            append(instances->squares, entity.pos + pos_offset,
                                        entity.size,
                                        entity.sprite,
                                        entity.tint,
                                        Face::z_pos,
-                                       entity.angle});
+                                       entity.angle);
             break;
         }
         case Entity::Kind::spell:
@@ -524,12 +527,12 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             break;
         }
         if (use_default) {
-            instances->squares.append({{entity.pos + pos_offset},
+            append(instances->squares, entity.pos + pos_offset,
                                        entity.size,
                                        entity.sprite,
                                        entity.tint,
                                        Face::billboard,
-                                       0.0F});
+                                       0.0F);
         }
     }
 
@@ -570,7 +573,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             sign = '?';
             if (quest.status == Quest::ACTIVE) color = WHITE;
         }
-        engine->drawWorldSymbol(&instances->squares, quest.pos + FVector3{0.5, 0.5, 1.25F}, sign,
+        drawWorldSymbol(instances->squares, sign, quest.pos + FVector3{0.5, 0.5, 1.25F},
                                 SIZE, color, engine->default_font);
     }
 
@@ -593,40 +596,39 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             if (!entity.alive) continue;
 
             if (entity.kind == Entity::Kind::attack) {
-                instances->squares.append({
-                    .position = pos,
-                    .size = entity.size,
-                    .uv = solid,
-                    .color = toColor(0xff00FF7f),
-                    .face = Face::z_pos,
-                    .rotation = entity.angle,
-
-                });
+                append(instances->squares, 
+                     pos,
+                     entity.size,
+                     solid,
+                     toColor(0xff00FF7f),
+                     Face::z_pos,
+                     entity.angle
+                );
             }
 
             if (entity.isInteractable()) {
                 auto collision = entity.getInteraction();
-                instances->squares.append({
-                    .position = pos,
-                    .size = {collision.w, collision.h},
-                    .uv = solid,
-                    .color = toColor(0xff00007f),
-                    .face = Face::z_pos,
-                    .rotation = entity.angle,
+                append(instances->squares,
+                       pos,
+                       FVector2{collision.w, collision.h},
+                     solid,
+                     toColor(0xff00007f),
+                     Face::z_pos,
+                     entity.angle
 
-                });
+                );
             }
 
             if (entity.isSolid()) {
                 auto collision = entity.getCollision();
-                instances->squares.append({
-                    .position = pos,
-                    .size = {collision.w, collision.h},
-                    .uv = solid,
-                    .color = toColor(0x0000ff7f),
-                    .face = Face::z_pos,
-                    .rotation = entity.angle,
-                });
+                append(instances->squares,
+                     pos,
+                     FVector2{collision.w, collision.h},
+                     solid,
+                     toColor(0x0000ff7f),
+                     Face::z_pos,
+                     entity.angle
+                );
             }
         }
     };
@@ -666,8 +668,8 @@ void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &in
                               .uv = solid,
                               .color = BLACK,
                           });
-        append(instances, pos, FVector2{128, 128}, engine->sprites.get("alice_portrait"), WHITE);
-        engine->drawText(instances, text, toVector2(pos + FVector2(128 + 4, 4)));
+        append(instances, pos, FVector2{128, 128}, engine->sprites.at("alice_portrait"), WHITE);
+        drawText(instances, text, toVector2(pos + FVector2(128 + 4, 4)));
         break;
     }
     if (show_location.active) {
@@ -683,14 +685,14 @@ void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &in
                 name = locations[show_location.curr_id].name;
             }
 
-            auto width = engine->measureText(name, height);
+            auto width = measureText(name, height);
 
             uint8_t alpha = 255;
             if (show_location.timer.elapsed > 1.0F) {
                 alpha = uint8_t((1.0F - (show_location.timer.elapsed - 1.0F)) * 255);
             }
 
-            engine->drawText(instances, name,
+            drawText(instances, name,
                              {int((float(render_size.x) / 2.0F) - (width / 2.0F)),
                               int((float(render_size.y) / 2.0F) - (height / 2.0F))},
                              height, {WHITE.r, WHITE.g, WHITE.b, alpha});

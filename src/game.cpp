@@ -20,19 +20,19 @@ void updateGameUI(Game &self, Engine &engine, FixedVector<UIInstance> &instances
     case Scene::menu: {
         std::string_view text_play = "Play (ENTER)";
         std::string_view text_exit = "Exit (ESC)";
-        int text_play_w = int(engine.measureText(text_play));
-        int text_exit_w = int(engine.measureText(text_exit));
+        int text_play_w = int(measureText(text_play));
+        int text_exit_w = int(measureText(text_exit));
         int y = 2;
         const int height = 26;
-        engine.drawText(
+        drawText(
             instances, text_play,
             {.x = render_size.x / 2 - text_play_w / 2, .y = render_size.y / 2 - height / 2 + y});
         y += 12;
-        engine.drawText(
+        drawText(
             instances, text_exit,
             {.x = render_size.x / 2 - text_exit_w / 2, .y = render_size.y / 2 - height / 2 + y});
 
-        if (engine.isKeyJustPressed(Key::enter)) {
+        if (isKeyJustPressed(Scancode::enter)) {
             self.current_scene = Scene::game;
         }
     } break;

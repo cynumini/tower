@@ -1,8 +1,16 @@
 #pragma once
 
+#include "color.hpp"
+#include "fixed_vector.hpp"
+#include "math.hpp"
 #include "skn_sdl.cpp"
 
-#include "shared.cpp"
+struct UIInstance {
+    FVector2 position;
+    FVector2 size;
+    FRect uv;
+    Color color;
+};
 
 #include "matrix.hpp"
 

@@ -29,8 +29,8 @@ void structureInit(const Engine &engine, std::vector<Structure> &structures) {
 
     for (int i = 0; i < 16; i++) {
         while (true) {
-            int x = engine.rand(16);
-            int y = engine.rand(16);
+            int x = SDL_rand(16);
+            int y = SDL_rand(16);
             Vector3 pos = {x, y, 0};
 
             if (!road.data[x][y][0].isEmpty(true)) continue;
