@@ -1,21 +1,21 @@
 #include "game.hpp"
 
+#include "engine.hpp"
 #include "scene_game.cpp"
 
-void initGame(Game &self, Engine &engine) { self.scene_game.init(&engine); }
+void initGame(Game &self) { self.scene_game.init(); }
 
-void updateGame(Game &self, Engine &engine, WorldInstances *instances, FVector2 logical) {
+void updateGame(Game &self, WorldInstances *instances, FVector2 logical) {
     switch (self.current_scene) {
     case Scene::menu:
         break;
     case Scene::game:
-        self.scene_game.update(&engine, instances, logical);
+        self.scene_game.update(instances, logical);
         break;
     }
 }
 
-void updateGameUI(Game &self, Engine &engine, FixedVector<UIInstance> &instances,
-                  Vector2 render_size) {
+void updateGameUI(Game &self, FixedVector<UIInstance> &instances, Vector2 render_size) {
     switch (self.current_scene) {
     case Scene::menu: {
         std::string_view text_play = "Play (ENTER)";
@@ -37,9 +37,9 @@ void updateGameUI(Game &self, Engine &engine, FixedVector<UIInstance> &instances
         }
     } break;
     case Scene::game:
-        self.scene_game.updateUI(&self, &engine, instances, render_size);
+        self.scene_game.updateUI(&self, instances, render_size);
         break;
     }
 }
 
-void deinitGame(Game &self, Engine &engine) { self.scene_game.deinit(&engine); }
+void deinitGame(Game &self) { self.scene_game.deinit(); }

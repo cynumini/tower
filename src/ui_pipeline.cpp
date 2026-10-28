@@ -2,7 +2,7 @@
 
 #include "../build/shaders.hpp"
 
-UI ui;
+
 
 void UI::resize(FVector2 size) {
     logical.x = 640, logical.y = 360;

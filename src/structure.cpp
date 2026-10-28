@@ -4,7 +4,7 @@
 
 using json = nlohmann::json;
 
-void structureInit(const Engine &engine, std::vector<Structure> &structures) {
+void structureInit(std::vector<Structure> &structures) {
     // road
     auto &road = structures.emplace_back();
     road.pos = {0, 6, 1}; // NOLINT

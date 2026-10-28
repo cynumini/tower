@@ -45,7 +45,6 @@ add_executable(tower
   src/game.cpp
   src/inventory.cpp
   src/main.cpp
-  src/menu.cpp
   src/structure.cpp
   src/ui_pipeline.cpp
   src/world_pipeline.cpp

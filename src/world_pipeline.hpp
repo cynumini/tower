@@ -63,5 +63,4 @@ struct World {
     void draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass, Texture atlas,
               SDL_GPUSampler *sampler, Camera *camera);
 };
-
-static World world;
+extern World world;

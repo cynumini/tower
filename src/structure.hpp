@@ -10,4 +10,4 @@ struct Structure {
     std::vector<Object> objects;
 };
 
-void structureInit(const Engine &engine, std::vector<Structure> &structures);
+void structureInit(std::vector<Structure> &structures);

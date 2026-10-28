@@ -1,6 +1,7 @@
 #include "inventory.hpp"
+#include "engine.hpp"
 
-Inventory createInventory(Engine &engine) {
+Inventory createInventory() {
     Inventory inventory{
         .items =
             {
@@ -36,7 +37,7 @@ static void drawSlot(Inventory &self, FixedVector<UIInstance> &instances,
     }
 }
 
-void updateInventoryUI(Inventory &self, Engine *engine, FixedVector<UIInstance> &instances,
+void updateInventoryUI(Inventory &self, FixedVector<UIInstance> &instances,
                        Vector2 render_size) {
     const FVector2 slot_size = fRectSize(self.slot_sprite);
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "shared.cpp"
+#include "game.hpp"
 
 #include "skn.cpp"
 
@@ -202,19 +202,19 @@ static struct ShowLocation {
     Timer timer;
 } show_location = {false, -1, -1, Timer::init(2)};
 
-void SceneGame::init(Engine *engine) {
+void SceneGame::init() {
     // globals
-    inventory = createInventory(*engine);
-    solid = engine->sprites.at("solid");
-    engine->clear_color = toColor(0x8bbbffff);
+    inventory = createInventory();
+    solid = engine.sprites.at("solid");
+    engine.clear_color = toColor(0x8bbbffff);
 
     // invertory
     uint items_len = 1;
-    for (auto &mod : engine->mods) {
+    for (auto &mod : engine.mods) {
         for (auto &_ : mod.items) items_len++;
     }
     // items.append(&arena, "wheat_seeds");
-    // for (auto &mod : engine->mods) {
+    // for (auto &mod : engine.mods) {
     //     for (auto &item : mod.items) {
     //         auto key = arena.allocPrint("%*s/%*s", int(mod.name.len), mod.name.ptr,
     //                                     int(item.len), item.ptr);
@@ -222,13 +222,13 @@ void SceneGame::init(Engine *engine) {
     //     }
     // }
 
-    inventory = createInventory(*engine);
+    inventory = createInventory();
 
     // animations
-    player_down.init(engine->sprites.at("player_down"), 3);
-    player_up.init(engine->sprites.at("player_up"), 3);
-    player_right.init(engine->sprites.at("player_right"), 3);
-    player_left.init(engine->sprites.at("player_right"), 3, true);
+    player_down.init(engine.sprites.at("player_down"), 3);
+    player_up.init(engine.sprites.at("player_up"), 3);
+    player_right.init(engine.sprites.at("player_right"), 3);
+    player_left.init(engine.sprites.at("player_right"), 3, true);
 
     // entities
     using Kind = Entity::Kind;
@@ -241,20 +241,20 @@ void SceneGame::init(Engine *engine) {
     player->addCollision(Body::movable, toFRect({0.0F, 0.0F}, {0.5F, 0.5F}));
 
     attack =
-        &entities.emplace_back(Entity::create(Kind::attack, engine->sprites.at("attack_trail1")));
+        &entities.emplace_back(Entity::create(Kind::attack, engine.sprites.at("attack_trail1")));
     attack->timer = Timer::init(0.1F);
 
-    spell = &entities.emplace_back(Entity::create(Kind::spell, engine->sprites.at("spell0")));
+    spell = &entities.emplace_back(Entity::create(Kind::spell, engine.sprites.at("spell0")));
 
     {
         auto &entity = entities.emplace_back(Entity::create(
-            Kind::npc, engine->sprites.at("character"), true, {25.5, 9.5, SEA_LEVEL}));
+            Kind::npc, engine.sprites.at("character"), true, {25.5, 9.5, SEA_LEVEL}));
         entity.addCollision(Body::immovable, toFRect({0.0F, 0.0F}, {0.5F, 0.5F}));
         entity.interaction_rel = FRect(0, 0, 1, 1);
     }
 
     // {
-    //     auto house = engine->sprites.get("house");
+    //     auto house = engine.sprites.get("house");
     //     auto *object = objects.append(Object::create(Kind::building, house, true));
     //     object->addCollision(Body::immovable, {{1.0F, 47.0F}, {192.0F, 162.0F}});
     //     object->pos = {(TITLE_SIZE * 48.0F) - (house.w / 2.0F), 0};
@@ -267,7 +267,7 @@ void SceneGame::init(Engine *engine) {
     const uint8_t ENEMY_COUNT = 50;
     for (uint8_t i = 0; i < ENEMY_COUNT; i++) {
         auto &entity = entities.emplace_back(
-            Entity::create(Kind::enemy, engine->sprites.at("zombie"), true,
+            Entity::create(Kind::enemy, engine.sprites.at("zombie"), true,
                            {float(SDL_rand(MAX_X)) - MAX_X / 4.0F,
                             float(SDL_rand(MAX_Y)) - MAX_Y / 2.0F, SEA_LEVEL}));
         entity.addCollision(Body::movable, toFRect({0, 0}, {0.5F, 0.5F}));
@@ -275,10 +275,10 @@ void SceneGame::init(Engine *engine) {
         entity.timer = Timer::init(0.2F);
     }
 
-    map.init(engine, player->pos);
+    map.init(player->pos);
 }
 
-void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logical) {
+void SceneGame::update(WorldInstances *instances, FVector2 logical) {
     player_action = false;
 
     float yaw =
@@ -288,10 +288,10 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
     float roll =
         isKeyJustReleased(Scancode::kp_7) - isKeyJustReleased(Scancode::kp_9);
 
-    engine->camera.yaw += yaw * 45;
-    engine->camera.yaw = int(engine->camera.yaw) % 360;
-    engine->camera.pitch += pitch * 5;
-    engine->camera.roll += roll * 5;
+    engine.camera.yaw += yaw * 45;
+    engine.camera.yaw = int(engine.camera.yaw) % 360;
+    engine.camera.pitch += pitch * 5;
+    engine.camera.roll += roll * 5;
 
     // TODO: way to exit house
     // TODO: move NPC to house
@@ -361,7 +361,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                                                   float(isKeyPressed(Scancode::a)),
                                               float(isKeyPressed(Scancode::w)) -
                                                   float(isKeyPressed(Scancode::s))}),
-                           deg2rad(engine->camera.yaw));
+                           deg2rad(engine.camera.yaw));
 
                 int level_diff = isKeyJustReleased(Scancode::pageup) -
                                  isKeyJustReleased(Scancode::pagedown);
@@ -374,7 +374,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
 
                 uint8_t frame = 0;
                 if (length(velocity) > 0.0F) {
-                    if (entity.timer.advanceAndCheck(engine->dt)) {
+                    if (entity.timer.advanceAndCheck(engine.dt)) {
                         entity.frame += 1;
                         entity.frame %= 4;
                     };
@@ -393,7 +393,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                     entity.timer.reset();
                 }
 
-                auto d = rotate(entity.direction, deg2rad(-engine->camera.yaw));
+                auto d = rotate(entity.direction, deg2rad(-engine.camera.yaw));
                 if (d.y > 0) {
                     entity.sprite = player_up.get(frame);
                 } else if (d.y < 0) {
@@ -409,14 +409,14 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             case Entity::Kind::enemy: {
                 if (entity.speed > 0.0F) {
                     const float KNOCKBACK_FRICTION = 40;
-                    entity.speed -= KNOCKBACK_FRICTION * engine->dt;
+                    entity.speed -= KNOCKBACK_FRICTION * engine.dt;
                 } else {
                     entity.speed = 0.0F;
                 }
 
                 if (entity.invincible) {
                     entity.tint = RED;
-                    if (entity.timer.advanceAndCheck(engine->dt)) {
+                    if (entity.timer.advanceAndCheck(engine.dt)) {
                         entity.invincible = false;
                         entity.tint = WHITE;
                     }
@@ -439,7 +439,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                 entity.direction = player->direction;
                 entity.angle = atan2f(player->direction.y, player->direction.x);
                 entity.pos = player->pos + entity.direction * 0.5F;
-                if (entity.timer.advanceAndCheck(engine->dt)) entity.alive = false;
+                if (entity.timer.advanceAndCheck(engine.dt)) entity.alive = false;
                 break;
             }
             case Entity::Kind::npc: {
@@ -465,7 +465,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             if (entity.isSolid() and entity.body == Entity::Body::movable) {
                 Filter q = makeFilter(
                     entities, [](Entity *other) { return other->isSolid() and other->alive; });
-                FVector2 velocity = entity.direction * engine->dt * entity.speed;
+                FVector2 velocity = entity.direction * engine.dt * entity.speed;
                 entity.pos.x += velocity.x;
 
                 for (Entity &other : q) {
@@ -498,7 +498,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
                     }
                 }
             } else {
-                entity.pos += entity.direction * engine->dt * entity.speed;
+                entity.pos += entity.direction * engine.dt * entity.speed;
             }
         }
     }
@@ -536,7 +536,7 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
         }
     }
 
-    engine->camera.pos = player->pos + FVector3(0.5, 0.5, 0.0);
+    engine.camera.pos = player->pos + FVector3(0.5, 0.5, 0.0);
 
     // current location
     {
@@ -574,13 +574,13 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
             if (quest.status == Quest::ACTIVE) color = WHITE;
         }
         drawWorldSymbol(instances->squares, sign, quest.pos + FVector3{0.5, 0.5, 1.25F},
-                                SIZE, color, engine->default_font);
+                                SIZE, color, engine.default_font);
     }
 
-    map.update(engine, instances, player->pos, logical);
+    map.update(instances, player->pos, logical);
 
     // debug (show collision)
-    if (engine->debug_mode) {
+    if (engine.debug_mode) {
         // auto home = locations->rect;
         // instances->append({
         //     .position = FVector3(home.position(), 0),
@@ -634,9 +634,8 @@ void SceneGame::update(Engine *engine, WorldInstances *instances, FVector2 logic
     };
 }
 
-void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances,
+void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances,
                          Vector2 render_size) {
-    ScopeArena scope(&arena);
 
     while (dialog) {
         std::string_view text = {};
@@ -668,12 +667,12 @@ void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &in
                               .uv = solid,
                               .color = BLACK,
                           });
-        append(instances, pos, FVector2{128, 128}, engine->sprites.at("alice_portrait"), WHITE);
+        append(instances, pos, FVector2{128, 128}, engine.sprites.at("alice_portrait"), WHITE);
         drawText(instances, text, toVector2(pos + FVector2(128 + 4, 4)));
         break;
     }
     if (show_location.active) {
-        if (show_location.timer.advanceAndCheck(engine->dt)) {
+        if (show_location.timer.advanceAndCheck(engine.dt)) {
             show_location.active = false;
         } else {
             auto height = 20.0F;
@@ -699,11 +698,11 @@ void SceneGame::updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &in
         }
     }
 
-    updateInventoryUI(inventory, engine, instances, render_size);
+    updateInventoryUI(inventory, instances, render_size);
 
     if (interaction_frame) {
         interaction_frame = false;
     }
 };
 
-void SceneGame::deinit([[maybe_unused]] Engine *engine) {}
+void SceneGame::deinit() {}

@@ -136,55 +136,55 @@ Instances World::beginUpload(SDL_GPUDevice *device, SDL_GPUTransferBuffer *trans
     constexpr auto half = MAX_INSTANCES / 2;
 
     return {.squares = FixedVector<Instance>{.ptr = instances_raw, .capacity = half},
-       .triangles=     FixedVector<Instance>{.ptr = instances_raw + half, .capacity = half}};
+            .triangles = FixedVector<Instance>{.ptr = instances_raw + half, .capacity = half}};
+}
+
+void World::endUpload(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,
+                      SDL_GPUTransferBuffer *transfer_buffer, Instances *instances) {
+    squares_len = instances->squares.size;
+    triangles_len = instances->triangles.size;
+    SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+
+    constexpr auto half = MAX_INSTANCES / 2;
+    constexpr auto half_offset = half * sizeof(Instance);
+
+    if (squares_len) {
+        uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, buffer,
+                          sizeof(Instance) * squares_len);
     }
-
-    void World::endUpload(SDL_GPUDevice * device, SDL_GPUCopyPass * copy_pass,
-                          SDL_GPUTransferBuffer * transfer_buffer, Instances * instances) {
-        squares_len = instances->squares.size;
-        triangles_len = instances->triangles.size;
-        SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
-
-        constexpr auto half = MAX_INSTANCES / 2;
-        constexpr auto half_offset = half * sizeof(Instance);
-
-        if (squares_len) {
-            uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, buffer,
-                              sizeof(Instance) * squares_len);
-        }
-        if (triangles_len) {
-            uploadToGPUBuffer(copy_pass, transfer_buffer, half_offset, half_offset, buffer,
-                              sizeof(Instance) * triangles_len);
-        }
+    if (triangles_len) {
+        uploadToGPUBuffer(copy_pass, transfer_buffer, half_offset, half_offset, buffer,
+                          sizeof(Instance) * triangles_len);
     }
+}
 
-    void World::draw(SDL_GPUCommandBuffer * command_buffer, SDL_GPURenderPass * render_pass,
-                     Texture atlas, SDL_GPUSampler * sampler, Camera * camera) {
-        SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
+void World::draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render_pass,
+                 Texture atlas, SDL_GPUSampler *sampler, Camera *camera) {
+    SDL_BindGPUGraphicsPipeline(render_pass, pipeline);
 
-        SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer_squre, 0}, {buffer, 0}};
-        SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
+    SDL_GPUBufferBinding buffer_bindings[2] = {{vertex_buffer_squre, 0}, {buffer, 0}};
+    SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
 
-        const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
-        SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
+    const SDL_GPUBufferBinding buffer_binding = {index_buffer, 0};
+    SDL_BindGPUIndexBuffer(render_pass, &buffer_binding, SDL_GPU_INDEXELEMENTSIZE_16BIT);
 
-        const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
-                                                                      .sampler = sampler};
-        SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
+    const SDL_GPUTextureSamplerBinding texture_sampler_binding = {.texture = atlas.ptr,
+                                                                  .sampler = sampler};
+    SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
-                   Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
-        ubo.yaw = deg2rad(camera->yaw);
-        ubo.atlas_size = {float(atlas.w), float(atlas.h)};
+    ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
+               Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
+    ubo.yaw = deg2rad(camera->yaw);
+    ubo.atlas_size = {float(atlas.w), float(atlas.h)};
 
-        SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
-        SDL_DrawGPUIndexedPrimitives(render_pass, 6, squares_len, 0, 0, 0);
+    SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
+    SDL_DrawGPUIndexedPrimitives(render_pass, 6, squares_len, 0, 0, 0);
 
-        // triangle
-        buffer_bindings[0] = {vertex_buffer_triangle, 0};
-        SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
-        SDL_DrawGPUPrimitives(render_pass, 3, triangles_len, 0, MAX_INSTANCES / 2);
+    // triangle
+    buffer_bindings[0] = {vertex_buffer_triangle, 0};
+    SDL_BindGPUVertexBuffers(render_pass, 0, buffer_bindings, 2);
+    SDL_DrawGPUPrimitives(render_pass, 3, triangles_len, 0, MAX_INSTANCES / 2);
 
-        prev_squares_len = squares_len;
-        prev_triangles_len = triangles_len;
-    }
+    prev_squares_len = squares_len;
+    prev_triangles_len = triangles_len;
+}

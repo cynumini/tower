@@ -1,6 +1,7 @@
 #pragma once
 
-#include "shared.cpp"
+#include "math.hpp"
+#include "ui_pipeline.hpp"
 
 struct Slot {
     std::string_view name;
@@ -18,8 +19,7 @@ struct Inventory {
     size_t select = 0;
 };
 
-Inventory createInventory(Engine &engine);
-void updateInventoryUI(Inventory &self, Engine *engine, FixedVector<UIInstance> &instances,
-                       Vector2 render_size);
+Inventory createInventory();
+void updateInventoryUI(Inventory &self, FixedVector<UIInstance> &instances, Vector2 render_size);
 void addToInventory(Inventory &self, std::string_view name, uint8_t amount);
 std::string_view getCurrentInventoryItem(const Inventory &self);

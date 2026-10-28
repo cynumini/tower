@@ -1,11 +1,11 @@
 #pragma once
 
-#include "shared.cpp"
-
 #include "map.hpp"
+#include "engine.hpp"
 #include "structure.hpp"
 
 #include <inplace_vector>
+
 
 static constexpr int MAP_Z_LEN = 3;
 static constexpr int SEA_LEVEL = 1;
@@ -14,10 +14,10 @@ static constexpr float PIXEL = 1.0F / float(PIXELS_PER_UNIT);
 
 static_assert(ARRAY_LEN(BlockKey) <= std::numeric_limits<uint8_t>::max());
 
-void initMaterialSprite(Engine *engine) {
+void initMaterialSprite() {
     // skip air
     for (size_t i = size_t(Material::air) + 1; i < BlockKey.len(); i++) {
-        MaterialSprite[i] = engine->sprites.at(BlockKey[i]);
+        MaterialSprite[i] = engine.sprites.at(BlockKey[i]);
     }
 }
 
@@ -82,7 +82,7 @@ static void initLocations() {
 }
 
 struct Map {
-    Fixed<Chunk> chunks;
+    std::vector<Chunk> chunks;
     bool hide_above_level = false;
     Vector2 center;
     int range = 1;
@@ -133,19 +133,18 @@ struct Map {
     }
 
     void updateChunksAndApplyStructures(Vector2 new_center) {
-        auto scope = ScopeArena(&arena);
         // calc list of chunks that needed for current player position
         center = new_center;
         size_t side = 2 * range + 1;
-        auto indices = scope.tmp.alloc<Vector2>(side * side);
+        auto indices = std::vector<Vector2>(side * side);
         for (int y = center.y - range, i = 0; y <= center.y + range; y++) {
             for (int x = center.x - range; x <= center.x + range; x++, i++) {
                 indices[i] = {x, y};
             }
         }
         // remove old chunk
-        if (chunks.len > 0) {
-            for (int i = chunks.len - 1; i >= 0; i--) {
+        if (chunks.size() > 0) {
+            for (int i = chunks.size() - 1; i >= 0; i--) {
                 bool need = false;
                 for (auto &index : indices) {
                     if (index == chunks[i].index) {
@@ -153,7 +152,11 @@ struct Map {
                         break;
                     }
                 }
-                if (!need) chunks.swapRemove(i);
+                if (!need) {
+                    std::swap(chunks[i], chunks.back());
+                    chunks.pop_back();
+
+                }
             }
         }
         // add new chunk
@@ -163,8 +166,8 @@ struct Map {
                 if (chunk.index == index) add = false;
             }
             if (add) {
-                auto *chunk = chunks.append({});
-                chunk->init(index);
+                auto &chunk = chunks.emplace_back(Chunk{});
+                chunk.init(index);
                 // apply struct
                 for (size_t i = 0; i < structures.size(); i++) {
                     auto &s = structures[i];
@@ -172,11 +175,11 @@ struct Map {
                     for (auto &object : s.objects) {
                         Vector3 world = origin + object.pos;
                         Vector2 target_index = indexFromPos(world);
-                        if (target_index != chunk->index) continue;
-                        Vector3 local = world - posFromIndex(chunk->index);
+                        if (target_index != chunk.index) continue;
+                        Vector3 local = world - posFromIndex(chunk.index);
                         Object o = object;
                         o.pos = local;
-                        chunk->objects.emplace_back(o);
+                        chunk.objects.emplace_back(o);
                     }
                     for (int z = 0; z < Structure::MAX_SIZE; z++) {
                         for (int y = 0; y < Structure::MAX_SIZE; y++) {
@@ -185,13 +188,13 @@ struct Map {
                                 if (cell.isEmpty()) continue;
                                 Vector3 world = origin + Vector3(x, y, z);
                                 Vector2 target_index = indexFromPos(world);
-                                if (target_index != chunk->index) continue;
-                                Vector3 local = world - posFromIndex(chunk->index);
+                                if (target_index != chunk.index) continue;
+                                Vector3 local = world - posFromIndex(chunk.index);
                                 if (local.x < 0 or local.x >= Chunk::SIZE.x or local.y < 0 or
                                     local.y >= Chunk::SIZE.y or local.z < 0 or
                                     local.z >= MAP_Z_LEN)
                                     continue;
-                                chunk->data[local.x][local.y][local.z] = cell;
+                                chunk.data[local.x][local.y][local.z] = cell;
                             }
                         }
                     }
@@ -200,17 +203,17 @@ struct Map {
         }
     }
 
-    void init(Engine *engine, FVector3 player_pos) {
-        initMaterialSprite(engine);
-        structureInit(*engine, structures);
+    void init(FVector3 player_pos) {
+        initMaterialSprite();
+        structureInit(structures);
         initLocations();
 
         size_t side = 2 * range + 1;
         size_t len = side * side; // 1 9 25 49
-        chunks.init(arena.alloc<Chunk>(len));
+        chunks.reserve(len);
         updateChunksAndApplyStructures(indexFromPos(player_pos));
 
-        selection_sprite = engine->sprites.at("selection");
+        selection_sprite = engine.sprites.at("selection");
     }
 
     struct Ray {
@@ -218,12 +221,12 @@ struct Map {
         FVector3 direction;
     };
 
-    Ray screenToRay(Engine *engine, FVector2 logical) {
-        FVector2 ndc = {float(engine->mouse.x) / float(engine->screen.x) * 2.F - 1.F,
-                        1.F - float(engine->mouse.y) / float(engine->screen.y) * 2.F};
-        Mat4 inv_view = Mat4::translation(engine->camera.pos) *
-                        Mat4::rotationY(-deg2rad(engine->camera.roll)) *
-                        Mat4::rotationZ(-deg2rad(engine->camera.yaw)) * Mat4::inverseIso45();
+    Ray screenToRay(FVector2 logical) {
+        FVector2 ndc = {float(engine.mouse.x) / float(engine.screen.x) * 2.F - 1.F,
+                        1.F - float(engine.mouse.y) / float(engine.screen.y) * 2.F};
+        Mat4 inv_view = Mat4::translation(engine.camera.pos) *
+                        Mat4::rotationY(-deg2rad(engine.camera.roll)) *
+                        Mat4::rotationZ(-deg2rad(engine.camera.yaw)) * Mat4::inverseIso45();
         float left = -logical.x / 2.0F;
         float right = logical.x / 2.0F;
         float bottom = -logical.y / 2.0F;
@@ -247,7 +250,7 @@ struct Map {
     //     return ray.origin + ray.direction * t;
     // }
 
-    void update(Engine *engine, WorldInstances *instances, FVector3 player_pos,
+    void update(WorldInstances *instances, FVector3 player_pos,
                 FVector2 logical) {
         static constexpr Color tint[] = {toColor(0xDFDFDFFF), WHITE, toColor(0xDFDFDFFF),
                                          toColor(0xBFBFBFFF), WHITE};
@@ -458,7 +461,7 @@ struct Map {
         }
 
         if (selection) {
-            Ray ray = screenToRay(engine, logical);
+            Ray ray = screenToRay(logical);
             FVector3 goal = floor(ray.origin);
             FVector3 voxel = goal;
             goal.x += ray.direction.x > 0 ? 1 : 0; // why not -1? Because floor imply "-"

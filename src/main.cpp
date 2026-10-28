@@ -11,7 +11,6 @@
 #include "game.hpp"
 
 static Game game;
-Arena arena;
 
 static SDL_GPUDevice *device;
 static SDL_Window *window;
@@ -21,6 +20,8 @@ static SDL_GPUTransferBuffer *instance_transfer_buffer;
 
 static Texture atlas;
 
+UI ui;
+World world;
 Engine engine; // NOLINT
 
 struct AtlasItem {
@@ -54,7 +55,6 @@ void resize(Vector2 size) {
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
-    arena = Arena::init(MB(1));
 
     const char *name = "tower";
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -105,7 +105,6 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     world.uploadStaticBuffers(device, copy_pass);
 
     {
-        ScopeArena scope(&arena);
         int mods_len = 0;
         char **mods = SDL_GlobDirectory("mods/", "*", SDL_GLOB_CASEINSENSITIVE, &mods_len);
         defer(SDL_free((void *)mods));
@@ -118,13 +117,12 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         }
 
         for (auto &mod : engine.mods) {
-            auto path =
-                scope.tmp.allocPrintZ("mods/%*s/", int(mod.name.size()), mod.name.c_str());
+            auto path = std::format("mods/{}/", mod.name);
 
             int items_len = 0;
 
             char **items =
-                SDL_GlobDirectory(path.ptr, "*.png", SDL_GLOB_CASEINSENSITIVE, &items_len);
+                SDL_GlobDirectory(path.c_str(), "*.png", SDL_GLOB_CASEINSENSITIVE, &items_len);
             defer(SDL_free((void *)items));
             SDL_CHECK(items);
 
@@ -137,7 +135,6 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     }
 
     {
-        ScopeArena scope(&arena);
 
         int files_len = 0;
         char **files =
@@ -157,10 +154,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         for (char *const *it = files; *it; it++) {
             auto file = getStem(*it);
-            const SliceZ<char> path = scope.tmp.allocPrintZ("resources/%s", *it);
-            auto *surface = SDL_LoadPNG(path.ptr);
+            const auto path = std::format("resources/{}", *it);
+            auto *surface = SDL_LoadPNG(path.c_str());
             SDL_CHECK(surface);
-            scope.tmp.free(path);
 
             if (surface->format != SDL_PIXELFORMAT_RGBA32) {
                 SDL_Surface *old_surface = surface;
@@ -174,10 +170,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         for (char *const *it = mods_files; *it; it++) {
             auto file = getStem(*it);
-            const SliceZ<char> path = scope.tmp.allocPrintZ("mods/%s", *it);
-            auto *surface = SDL_LoadPNG(path.ptr);
+            auto path = std::format("mods/{}", *it);
+            auto *surface = SDL_LoadPNG(path.c_str());
             SDL_CHECK(surface);
-            scope.tmp.free(path);
 
             if (surface->format != SDL_PIXELFORMAT_RGBA32) {
                 SDL_Surface *old_surface = surface;
@@ -254,7 +249,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             createDefaultFont({.x = texture.x, .y = texture.y, .w = texture.w, .h = texture.h});
     }
 
-    initGame(game, engine);
+    initGame(game);
 
     engine.times.frequency = float(SDL_GetPerformanceFrequency());
     engine.times.counter = SDL_GetPerformanceCounter();
@@ -324,7 +319,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             auto instances = world.beginUpload(device, instance_transfer_buffer);
             defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
 
-            updateGame(game, engine, &instances, world.logical);
+            updateGame(game, &instances, world.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
             for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
@@ -335,7 +330,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(
                 ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
-            updateGameUI(game, engine, upload.instances, toVector2(ui.logical));
+            updateGameUI(game, upload.instances, toVector2(ui.logical));
             updateEngineUI(upload.instances);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
@@ -395,7 +390,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    deinitGame(game, engine);
+    deinitGame(game);
 
     SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
 
@@ -410,6 +405,4 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
 
     SDL_DestroyGPUDevice(device);
     SDL_DestroyWindow(window);
-
-    arena.deinit();
 }

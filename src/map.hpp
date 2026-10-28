@@ -1,9 +1,8 @@
 #pragma once
 
-#include "shared.cpp"
-
-#include <unordered_map>
-#include <string_view>
+#include "math.hpp"
+#include "skn.cpp"
+#include "world_pipeline.hpp"
 
 // Material
 enum struct Material : uint8_t {
@@ -44,10 +43,10 @@ extern const std::unordered_map<std::string_view, Rotation> rotations;
 struct Cell {
     enum class Type : uint8_t { block, slope, surface, frame };
     static const std::unordered_map<std::string_view, Type> types;
-    Material a : 8{};        // block, floor, slope
-    Material b : 8{};        // ceiling
-    Type type : 2{};         // 4
-    Rotation rotation : 2{}; // 4
+    Material a : 8 {};        // block, floor, slope
+    Material b : 8 {};        // ceiling
+    Type type : 2 {};         // 4
+    Rotation rotation : 2 {}; // 4
 
     static constexpr Cell air() { return {.a = Material::air, .type = Type::block}; }
 
