@@ -1,11 +1,7 @@
-#include <skn_sdl.cpp>
-
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#include "shared.cpp"
-
-#include "ui_pipeline.cpp"
+#include "ui_pipeline.hpp"
 #include "world_pipeline.cpp"
 
 #include "game.hpp"
@@ -33,48 +29,49 @@ int Engine::rand(int n) const { return SDL_rand(n); }
 Engine engine;
 
 static struct Times {
-    u64 counter;
-    u64 frames;
-    f32 seconds;
-    f32 frequency;
-    u16 fps;
-    f32 ms;
+    uint64_t counter;
+    uint64_t frames;
+    float seconds;
+    float frequency;
+    uint16_t fps;
+    float ms;
 } times;
 
-void Engine::update([[maybe_unused]] WorldInstances *instances, [[maybe_unused]] Vec2 logical) {
+void Engine::update([[maybe_unused]] WorldInstances *instances,
+                    [[maybe_unused]] FVector2 logical) {
     if (isKeyJustPressed(Key::escape)) running = true;
     if (isKeyJustPressed(Key::f3)) debug_mode = !debug_mode;
 }
 
-void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]] Vec2i render_size) {
+void Engine::updateUI(FixedVector<UIInstance> &instances, [[maybe_unused]] Vector2 render_size) {
     if (debug_mode) {
         ScopeArena scope(&arena);
-        f32 offset_y = 2.0F;
+        int offset_y = 2;
 
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "FPS: %d", times.fps);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "FPS: %d", times.fps);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "%.2fms", times.ms);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "%.2fms", times.ms);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Screen: %dx%d", screen.x, screen.y);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Screen: %dx%d", screen.x, screen.y);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Mouse: %dx%d", mouse.x, mouse.y);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Mouse: %dx%d", mouse.x, mouse.y);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Pitch: %.0f", camera.pitch);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Pitch: %.0f", camera.pitch);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Yaw: %.0f", camera.yaw);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Yaw: %.0f", camera.yaw);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Roll: %.0f", camera.roll);
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Roll: %.0f", camera.roll);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "Camera: x = %.2f, y = %.2f, z = %.2f",
                   camera.pos.x, camera.pos.y, camera.pos.z);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "UI instances: %d/%d",
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "UI instances: %d/%d",
                   ui.prev_instances_len, ui.MAX_INSTANCES);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World square instances: %d/%d",
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "World square instances: %d/%d",
                   world.prev_squares_len, world.MAX_INSTANCES / 2);
         offset_y += 12;
-        drawTextF(&scope.tmp, instances, {2.0F, offset_y}, "World triangle instances: %d/%d",
+        drawTextF(&scope.tmp, instances, {2, offset_y}, "World triangle instances: %d/%d",
                   world.prev_triangles_len, world.MAX_INSTANCES / 2);
         offset_y += 12;
     }
@@ -85,12 +82,12 @@ struct AtlasItem {
     SDL_Surface *surface;
 };
 
-static Vec2i last_size;
+static Vector2 last_size;
 
-void resize(Vec2i size) {
+void resize(Vector2 size) {
     if (size == last_size) return;
-    world.resize(size);
-    ui.resize(size);
+    world.resize(toFVector2(size));
+    ui.resize(toFVector2(size));
 
     if (depth) SDL_ReleaseGPUTexture(device, depth);
     SDL_GPUTextureCreateInfo depth_info = {
@@ -206,7 +203,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             SDL_GlobDirectory("mods/", "*/*.png", SDL_GLOB_CASEINSENSITIVE, &mods_files_len);
         SDL_CHECK(mods_files);
 
-        engine.sprites = HashMap<skn::Rect>::init(&arena, size_t(files_len + mods_files_len) * 2);
+        engine.sprites = HashMap<FRect>::init(&arena, size_t(files_len + mods_files_len) * 2);
 
         auto atlas_items = Dynamic<AtlasItem>::init(&scope.tmp, files_len + mods_files_len);
         defer(for (auto &item : atlas_items) SDL_DestroySurface(item.surface));
@@ -259,16 +256,16 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
-                createGPUTransferBuffer(device, sizeof(skn::Color) * surface->w * surface->h);
+                createGPUTransferBuffer(device, sizeof(Color) * surface->w * surface->h);
             defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
             SDL_CHECK(transfer_buffer);
 
             {
-                u8 *memory = (u8 *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
+                uint8_t *memory = (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
                 defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
                 SDL_CHECK(memory);
 
-                const auto *src = (u8 *)surface->pixels;
+                const auto *src = (uint8_t *)surface->pixels;
                 const auto row_bytes = size_t(surface->w) * 4;
                 if (row_bytes == size_t(surface->pitch)) {
                     SDL_memcpy(memory, src, row_bytes * surface->h);
@@ -289,7 +286,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
             engine.sprites.put(
                 &arena, name,
-                {{f32(x_offset), f32(y_offset)}, {f32(surface->w), f32(surface->h)}});
+                toFRect({float(x_offset), float(y_offset)}, {float(surface->w), float(surface->h)}));
 
             y_max = std::max(surface->h, y_max);
 
@@ -316,7 +313,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     initGame(game, engine);
 
-    times.frequency = f32(SDL_GetPerformanceFrequency());
+    times.frequency = float(SDL_GetPerformanceFrequency());
     times.counter = SDL_GetPerformanceCounter();
 
     {
@@ -347,7 +344,7 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         engine.key_state[event->key.scancode] = ButtonState::released;
         break;
     case SDL_EVENT_MOUSE_MOTION: {
-        engine.mouse = {event->motion.x, event->motion.y};
+        engine.mouse = {int(event->motion.x), int(event->motion.y)};
         break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
@@ -396,8 +393,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
             defer(
                 ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
-            updateGameUI(game, engine, upload.instances, ui.logical);
-            engine.updateUI(upload.instances, ui.logical);
+            updateGameUI(game, engine, upload.instances, toVector2(ui.logical));
+            engine.updateUI(upload.instances, toVector2(ui.logical));
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
         }
@@ -408,16 +405,16 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     uint width = 0, height = 0;
     SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
                                                     &width, &height));
-    resize({width, height});
+    resize({int(width), int(height)});
 
     if (swapchain_texture) {
         SDL_GPUColorTargetInfo color_target_info = {};
         color_target_info.texture = swapchain_texture;
         color_target_info.clear_color = {
-            .r = f32(engine.clear_color.r) / 255.0F,
-            .g = f32(engine.clear_color.g) / 255.0F,
-            .b = f32(engine.clear_color.b) / 255.0F,
-            .a = f32(engine.clear_color.a) / 255.0F,
+            .r = float(engine.clear_color.r) / 255.0F,
+            .g = float(engine.clear_color.g) / 255.0F,
+            .b = float(engine.clear_color.b) / 255.0F,
+            .a = float(engine.clear_color.a) / 255.0F,
         };
         color_target_info.load_op = SDL_GPU_LOADOP_CLEAR;
         color_target_info.store_op = SDL_GPU_STOREOP_STORE;
@@ -443,11 +440,11 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     auto prev = times.counter;
     times.counter = SDL_GetPerformanceCounter();
     times.frames += 1;
-    engine.dt = f32(times.counter - prev) / times.frequency;
+    engine.dt = float(times.counter - prev) / times.frequency;
     times.seconds += engine.dt;
     times.ms = engine.dt * 1000;
     if (times.seconds >= 0.5F) {
-        times.fps = (u16)SDL_roundf((f32)times.frames / times.seconds);
+        times.fps = (uint16_t)SDL_roundf((float)times.frames / times.seconds);
         times.frames = 0;
         times.seconds = 0;
     }

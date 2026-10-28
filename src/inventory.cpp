@@ -1,112 +1,99 @@
-#pragma once
+#include "inventory.hpp"
 
-#include "shared.cpp"
-
-HashMap<skn::Rect> items;
-
-static struct Inventory {
-    struct Slot {
-        const char *name;
-        u8 count;
+Inventory createInventory(Engine &engine) {
+    Inventory inventory{
+        .items =
+            {
+                {"gold", engine.sprites.get("gold")},
+                {"iron_ore", engine.sprites.get("iron_ore")},
+                {"sword", engine.sprites.get("sword")},
+                {"hoe", engine.sprites.get("hoe")},
+                {"pickaxe", engine.sprites.get("pickaxe")},
+                {"iron_ingot", engine.sprites.get("iron_ingot")},
+            },
+        .slot_sprite = engine.sprites.get("inventory_slot"),
+        .select_sprite = engine.sprites.get("inventory_select"),
     };
+    addToInventory(inventory, "sword", 1);
+    addToInventory(inventory, "hoe", 1);
+    addToInventory(inventory, "pickaxe", 1);
+    addToInventory(inventory, "gold", 10);
+    return inventory;
+}
 
-    static constexpr Vec2i SIZE = {8, 8};
-    OldArray<Slot, SIZE.x * SIZE.y> slots;
-    bool visible;
-    skn::Rect slot_sprite;
-    skn::Rect select_sprite;
-    size_t select = 0;
+static void drawSlot(Inventory &self, Engine *engine, FixedVector<UIInstance> &instances,
+                     FVector2 position, size_t index) {
+    SDL_assert(index < self.slots.size());
+    Slot &slot = self.slots[index];
+    append(instances, position, size(self.slot_sprite), self.slot_sprite, WHITE);
+    if (slot.count > 0) {
+        append(instances, position, size(self.slot_sprite), self.items.at(slot.name), WHITE);
+        auto buffer = std::to_string(slot.count);
+        constexpr float FONT_SIZE = 10.F;
+        auto width = engine->measureText(buffer, FONT_SIZE);
+        engine->drawText(
+            instances, buffer,
+            toVector2(position + size(self.slot_sprite) - FVector2{.x = width, .y = FONT_SIZE}),
+            FONT_SIZE);
+    }
+}
 
-    void init(Engine *engine) {
-        // items
-        items.init(&arena, 1);
-        items.put(&arena, "gold", engine->sprites.get("gold"));
-        items.put(&arena, "iron_ore", engine->sprites.get("iron_ore"));
-        items.put(&arena, "sword", engine->sprites.get("sword"));
-        items.put(&arena, "hoe", engine->sprites.get("hoe"));
-        items.put(&arena, "pickaxe", engine->sprites.get("pickaxe"));
-        items.put(&arena, "iron_ingot", engine->sprites.get("iron_ingot"));
+void updateInventoryUI(Inventory &self, Engine *engine, FixedVector<UIInstance> &instances,
+                       Vector2 render_size) {
+    const FVector2 slot_size = size(self.slot_sprite);
 
-        // inventory
-        slot_sprite = engine->sprites.get("inventory_slot");
-        select_sprite = engine->sprites.get("inventory_select");
-        add("sword", 1);
-        add("hoe", 1);
-        add("pickaxe", 1);
-        add("gold", 10);
+    // hud
+    constexpr int hud_len = 3;
+    FVector2 hud_offset = {.x = (float(render_size.x) - self.slot_sprite.w * hud_len) / 2,
+                           .y = float(render_size.y) - self.slot_sprite.h};
+    constexpr auto key_1 = size_t(Key::key_1);
+    for (size_t i = 0; i < hud_len; i++) {
+        if (engine->isKeyPressed(Key(key_1 + i))) self.select = i;
+        drawSlot(self, engine, instances, hud_offset, i);
+        if (i == self.select) {
+            append(instances, hud_offset, slot_size, self.select_sprite, WHITE);
+        }
+        hud_offset.x += self.slot_sprite.w;
     }
 
-    void drawSlot(Engine *engine, FixedVector<UIInstance> &instances, Vec2 position, size_t index) {
-        assert(index < slots.len());
-        Slot *slot = &slots[index];
-        append(instances, position, slot_sprite.size(), slot_sprite, skn::WHITE);
-        if (slot->count > 0) {
-            append(instances,position, slot_sprite.size(), items.get(slot->name), skn::WHITE);
-            char buffer[3] = {};
-            sprintf(buffer, "%d", slot->count);
-            constexpr float FONT_SIZE = 10.F;
-            auto width = engine->measureText(buffer, FONT_SIZE);
-            engine->drawText(instances, buffer,
-                             position + slot_sprite.size() - Vec2{width, FONT_SIZE}, FONT_SIZE);
-        }
-    }
-
-    void updateUI([[maybe_unused]] Game *game, Engine *engine, FixedVector<UIInstance> &instances,
-                  Vec2i render_size, [[maybe_unused]] Arena *a) {
-
-        // hud
-        constexpr int hud_len = 3;
-        for (int i = 0; i < hud_len; i++) {
-            if (engine->isKeyPressed(Key(int(Key::key_1) + i))) select = i;
-        }
-
-        Vec2 hud_offset = {(render_size.x - slot_sprite.w * hud_len) / 2,
-                           render_size.y - slot_sprite.h};
-        for (size_t i = 0; i < hud_len; i++) {
-            drawSlot(engine, instances, hud_offset, i);
-            if (i == select) {
-                append(instances, hud_offset, select_sprite.size(), select_sprite, skn::WHITE);
-            }
-            hud_offset.x += slot_sprite.w;
-        }
-
-        // inventory
-        if (engine->isKeyJustPressed(Key::e)) visible = !visible;
-        const Vec2 slot_size = slot_sprite.size();
-        if (visible) {
-            for (int x = 0; x < 8; x++) {
-                for (int y = 0; y < 8; y++) {
-                    const Vec2 position =
-                        Vec2(x, y) * slot_size + (render_size - (slot_size * SIZE.x));
-                    drawSlot(engine, instances, position, y * SIZE.y + x);
-                }
+    // inventory
+    if (engine->isKeyJustPressed(Key::e)) self.visible = !self.visible;
+    if (self.visible) {
+        const auto inventory_size = slot_size * INVENTORY_SIZE;
+        const auto inventory_offset = render_size - inventory_size;
+        for (int x = 0; x < 8; x++) {
+            for (int y = 0; y < 8; y++) {
+                const FVector2 position = Vector2{.x = x, .y = y} * slot_size + inventory_offset;
+                auto slot_index = y * INVENTORY_SIZE.y + x;
+                drawSlot(self, engine, instances, position, slot_index);
             }
         }
     }
+}
 
-    void add(const char *name, int amount) {
-        assert(items.contains(name));
-        for (auto &slot : slots) {
-            if (slot.name == 0) continue;
-            if (strcmp(slot.name, name) == 0) {
-                slot.count += amount;
-                assert(slot.count < 100);
-                return;
-            }
+void addToInventory(Inventory &self, std::string_view name, uint8_t amount) {
+    SDL_assert(self.items.contains(name));
+    for (auto &slot : self.slots) {
+        if (slot.name.empty()) continue;
+        if (slot.name == name) {
+            slot.count += amount;
+            SDL_assert(slot.count < 100);
+            return;
         }
-        for (auto &slot : slots) {
-            if (slot.count == 0) {
-                slot.name = name;
-                slot.count = amount;
-                assert(slot.count < 100);
-                return;
-            }
-        }
-        TODO("What if there is no such item in the inventory nor empty inventory slots?");
     }
+    for (auto &slot : self.slots) {
+        if (slot.count == 0) {
+            slot.name = name;
+            slot.count = amount;
+            SDL_assert(slot.count < 100);
+            return;
+        }
+    }
+    std::cerr << "What if there is no such item in the inventory nor empty inventory slots?";
+    std::abort();
+}
 
-    const char *getCurrent() {
-        assert(slots.len() > select);
-        return slots[select].name;
-    }
-} inventory;
+std::string_view getCurrentInventoryItem(const Inventory &self) {
+    SDL_assert(self.slots.size() > self.select);
+    return self.slots[self.select].name;
+}

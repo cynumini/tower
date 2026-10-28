@@ -31,7 +31,7 @@ void structureInit(const Engine &engine, std::vector<Structure> &structures) {
         while (true) {
             int x = engine.rand(16);
             int y = engine.rand(16);
-            Vec3i pos = {x, y, 0};
+            Vector3 pos = {x, y, 0};
 
             if (!road.data[x][y][0].isEmpty(true)) continue;
             bool ok = true;

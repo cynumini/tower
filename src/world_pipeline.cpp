@@ -1,8 +1,7 @@
 #pragma once
 
-#include <skn/matrix.cpp>
 
-#include <skn_sdl.cpp>
+#include "skn_sdl.cpp"
 
 #include "shared.cpp"
 
@@ -25,16 +24,16 @@ struct World {
     uint prev_squares_len;
     uint prev_triangles_len;
 
-    Vec2 logical;
+    FVector2 logical;
 
     struct UBO {
-        skn::Mat4 view;
-        skn::Mat4 projection;
-        Vec2 atlas_size;
+        Mat4 view;
+        Mat4 projection;
+        FVector2 atlas_size;
         float yaw;
     } ubo;
 
-    void resize(Vec2 size) {
+    void resize(FVector2 size) {
         constexpr float blocks = 15;
         logical.y = blocks;
         logical.x = logical.y * 16.0F / 9.0F;
@@ -43,7 +42,7 @@ struct World {
         } else {
             logical.x = size.x * logical.y / size.y;
         }
-        ubo.projection = skn::Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
+        ubo.projection = Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
                                      logical.y / 2.0F, 100.0F, -100.0F);
     }
 
@@ -62,7 +61,7 @@ struct World {
         SDL_assert(createinfo.fragment_shader);
 
         const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-            {0, sizeof(Vec2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
+            {0, sizeof(FVector2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
             {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
         createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
         createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
@@ -109,9 +108,9 @@ struct World {
     }
 
     void uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
-        Vec2 vertices_squre[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
-        Vec2 vertices_triangle[3] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}};
-        i16 indices[6]{0, 1, 2, 0, 2, 3};
+        FVector2 vertices_squre[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
+        FVector2 vertices_triangle[3] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}};
+        int16_t indices[6]{0, 1, 2, 0, 2, 3};
 
         vertex_buffer_squre =
             createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices_squre));
@@ -134,7 +133,7 @@ struct World {
         SDL_assert(transfer_buffer);
 
         {
-            u8 *memory = (u8 *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
+            uint8_t *memory = (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
             defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
             SDL_assert(memory);
 
@@ -205,10 +204,10 @@ struct World {
                                                                       .sampler = sampler};
         SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-        ubo.view = skn::Mat4::iso45() * skn::Mat4::rotationZ(skn::deg2rad(camera->yaw)) *
-            skn::Mat4::rotationY(skn::deg2rad(camera->roll)) * skn::Mat4::translation(-camera->pos);
-        ubo.yaw = skn::deg2rad(camera->yaw);
-        ubo.atlas_size = {atlas.w, atlas.h};
+        ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
+                   Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
+        ubo.yaw = deg2rad(camera->yaw);
+        ubo.atlas_size = {float(atlas.w), float(atlas.h)};
 
         SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));
         SDL_DrawGPUIndexedPrimitives(render_pass, 6, squares_len, 0, 0, 0);

@@ -6,7 +6,7 @@
 #include <string_view>
 
 // Material
-enum struct Material : u8 {
+enum struct Material : uint8_t {
     air,
     deep,
     stone,
@@ -34,20 +34,20 @@ constexpr OldArray<const char *, 12> initBlockKey() {
 
 static constexpr auto BlockKey = initBlockKey();
 
-static skn::Rect MaterialSprite[ARRAY_LEN(BlockKey)] = {};
+static FRect MaterialSprite[ARRAY_LEN(BlockKey)] = {};
 
 // Cell
-enum class Rotation : u8 { sn, we, ns, ew };
+enum class Rotation : uint8_t { sn, we, ns, ew };
 
 extern const std::unordered_map<std::string_view, Rotation> rotations;
 
 struct Cell {
-    enum class Type : u8 { block, slope, surface, frame };
+    enum class Type : uint8_t { block, slope, surface, frame };
     static const std::unordered_map<std::string_view, Type> types;
-    Material a : 8;        // block, floor, slope
-    Material b : 8;        // ceiling
-    Type type : 2;         // 4
-    Rotation rotation : 2; // 4
+    Material a : 8{};        // block, floor, slope
+    Material b : 8{};        // ceiling
+    Type type : 2{};         // 4
+    Rotation rotation : 2{}; // 4
 
     static constexpr Cell air() { return {.a = Material::air, .type = Type::block}; }
 
@@ -112,38 +112,38 @@ struct Cell {
     inline bool hasFloor() const { return a != Material::air; }
     inline bool hasCeiling() const { return b != Material::air; }
 
-    inline skn::Rect getBlockSprite() const {
-        assert(type == Type::block);
+    inline FRect getBlockSprite() const {
+        SDL_assert(type == Type::block);
         return MaterialSprite[int(a)];
     }
 
-    inline skn::Rect getFrameSprite() const {
-        assert(type == Type::frame);
+    inline FRect getFrameSprite() const {
+        SDL_assert(type == Type::frame);
         return MaterialSprite[int(a)];
     }
 
-    inline skn::Rect getSlopeSprite() const {
-        assert(type == Type::slope);
+    inline FRect getSlopeSprite() const {
+        SDL_assert(type == Type::slope);
         return MaterialSprite[int(a)];
     }
 
-    inline skn::Rect getFloorSprite() const {
-        assert(type == Type::surface);
+    inline FRect getFloorSprite() const {
+        SDL_assert(type == Type::surface);
         return MaterialSprite[int(a)];
     }
 
-    inline skn::Rect getCeilingSprite() const {
-        assert(type == Type::surface);
+    inline FRect getCeilingSprite() const {
+        SDL_assert(type == Type::surface);
         return MaterialSprite[int(b)];
     }
 
     inline void setFloor(Material material = Material::air) {
-        assert(type == Type::surface);
+        SDL_assert(type == Type::surface);
         a = material;
     }
 
     inline Material getFloor() {
-        assert(type == Type::surface);
+        SDL_assert(type == Type::surface);
         return a;
     }
 };
@@ -152,24 +152,24 @@ struct Object {
     enum class Type { door, wall, ore, furnace };
     static const std::unordered_map<std::string_view, Type> types;
     Type type;
-    Vec3i pos;
+    Vector3 pos;
     Material material;
     Rotation rotation;
 
-    static Object door(Vec3i pos, Rotation rotation) {
+    static Object door(Vector3 pos, Rotation rotation) {
         return {Type::door, pos, Material::door, rotation};
     }
-    static Object wall(Vec3i pos, Material material, Rotation rotation) {
+    static Object wall(Vector3 pos, Material material, Rotation rotation) {
         return {Type::wall, pos, material, rotation};
     }
 
-    static Object ore(Vec3i pos) { return {Type::ore, pos, Material::iron_ore, Rotation::sn}; }
+    static Object ore(Vector3 pos) { return {Type::ore, pos, Material::iron_ore, Rotation::sn}; }
 
-    static Object furnace(Vec3i pos) {
+    static Object furnace(Vector3 pos) {
         return {Type::furnace, pos, Material::furnace, Rotation::sn};
     }
 
-    inline skn::Rect getSprite() const { return MaterialSprite[int(material)]; }
+    inline FRect getSprite() const { return MaterialSprite[int(material)]; }
 };
 
 constexpr int OBJECT_LEN = 32;

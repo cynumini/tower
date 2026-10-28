@@ -7,7 +7,7 @@ struct Game {
     SceneGame scene_game;
 };
 
-void initGame(Game &game, Engine &engine);
-void updateGame(Game &game, Engine &engine, WorldInstances *instances, Vec2 logical);
-void updateGameUI(Game &game, Engine &engine, FixedVector<UIInstance> &instances, Vec2i render_size);
-void deinitGame(Game &game, Engine &engine);
+void initGame(Game &self, Engine &engine);
+void updateGame(Game &self, Engine &engine, WorldInstances *instances, FVector2 logical);
+void updateGameUI(Game &self, Engine &engine, FixedVector<UIInstance> &instances, Vector2 render_size);
+void deinitGame(Game &self, Engine &engine);

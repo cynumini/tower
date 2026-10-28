@@ -1,17 +1,16 @@
 #pragma once
 
-#include <skn.cpp>
-#include <skn/color.cpp>
-#include <skn/rect.cpp>
-#include <skn/vec.cpp>
+#include "skn.cpp"
+#include "color.hpp"
 
 #include <string_view>
 
 #include "fixed_vector.hpp"
+#include "math.hpp"
 
 extern Arena arena;
 
-enum class Key : u8 {
+enum class Key : uint8_t {
     a = 4,
     b = 5,
     c = 6,
@@ -112,24 +111,24 @@ enum class Key : u8 {
 
 enum MouseButton { left, middle, right };
 
-enum class ButtonState : u8 { none, pressed, released };
+enum class ButtonState : uint8_t { none, pressed, released };
 
 struct UIInstance {
-    Vec2 position;
-    Vec2 size;
-    skn::Rect uv;
-    skn::Color color;
+    FVector2 position;
+    FVector2 size;
+    FRect uv;
+    Color color;
 };
 
-enum class Face : u32 { y_pos, x_pos, y_neg, x_neg, z_pos, z_neg, billboard, slope };
+enum class Face : uint32_t { y_pos, x_pos, y_neg, x_neg, z_pos, z_neg, billboard, slope };
 
 struct WorldInstance {
-    Vec3 position;
-    Vec2 size;
-    skn::Rect uv;
-    skn::Color color;
+    FVector3 position;
+    FVector2 size;
+    FRect uv;
+    Color color;
     Face face;
-    f32 rotation;
+    float rotation;
 };
 
 struct WorldInstances {
@@ -145,25 +144,25 @@ struct Mod {
 #include "font.hpp"
 
 struct Camera {
-    f32 pitch = 60;
-    f32 yaw = 45;
-    f32 roll = 0;
-    Vec3 pos;
+    float pitch = 60;
+    float yaw = 45;
+    float roll = 0;
+    FVector3 pos;
 };
 
 struct Engine {
     Dynamic<Mod> mods;
-    HashMap<skn::Rect> sprites;
+    HashMap<FRect> sprites;
     const bool *keyboard_state;
     Font default_font;
     ButtonState key_state[512];
     ButtonState mouse_button_state[8];
-    Vec2i mouse;
-    Vec2i screen;
+    Vector2 mouse;
+    Vector2 screen;
     bool running;
-    f32 dt;
+    float dt;
     bool debug_mode;
-    skn::Color clear_color;
+    Color clear_color;
     Camera camera;
 
     bool isKeyPressed(Key key) const { return keyboard_state[int(key)]; }
@@ -176,38 +175,39 @@ struct Engine {
         return mouse_button_state[int(button)] == ButtonState::pressed;
     }
 
-    static f32 measureText(std::string_view text, f32 size, Font font) {
+    static float measureText(std::string_view text, float size, Font font) {
         if (text.size() == 0) return 0;
-        f32 advance = 0;
-        for (u8 c : text) advance += (f32(font.widths[c]) + 1) * (size / font.size);
+        float advance = 0;
+        for (uint8_t c : text) advance += (float(font.widths[c]) + 1) * (size / font.size);
         return advance - (size / font.size);
     }
 
-    f32 measureText(std::string_view text, f32 size = 10.0F) const {
+    float measureText(std::string_view text, float size = 10.0F) const {
         return measureText(text, size, default_font);
     }
 
-    static void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vec2i position,
-                         f32 size, skn::Color color, Font font) {
-        f32 advance = 0;
-        for (u8 c : text) {
-            const u16 i = c - ' ';
-            Vec2 texture_offset = {f32(i % 16) * font.size, int(i / 16.F) * font.size};
-            append(renderer, Vec2(int(position.x + advance), position.y), Vec2(size, size),
-                   skn::Rect{Vec2{font.texture.x, font.texture.y} + texture_offset,
-                             {font.size, font.size}},
+    static void drawText(FixedVector<UIInstance> &renderer, std::string_view text,
+                         Vector2 position, float size, Color color, Font font) {
+        float advance = 0;
+        for (uint8_t c : text) {
+            const uint16_t i = c - ' ';
+            FVector2 texture_offset = {float(i % 16) * font.size, int(i / 16.F) * font.size};
+            append(renderer, FVector2(int(position.x + advance), position.y),
+                   FVector2(size, size),
+                   toFRect(FVector2{font.texture.x, font.texture.y} + texture_offset,
+                           {font.size, font.size}),
                    color);
-            advance += (f32(font.widths[c]) + 1) * (size / font.size);
+            advance += (float(font.widths[c]) + 1) * (size / font.size);
         }
     }
 
-    void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vec2i position,
-                  f32 size = 10.0F, skn::Color color = skn::WHITE) const {
+    void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vector2 position,
+                  float size = 10.0F, Color color = WHITE) const {
         drawText(renderer, text, position, size, color, default_font);
     }
 
-    void drawTextF(Arena *a, FixedVector<UIInstance> &instances, Vec2 pos, const char *fmt, ...)
-        __attribute__((format(gnu_printf, 5, 6))) {
+    void drawTextF(Arena *a, FixedVector<UIInstance> &instances, Vector2 pos, const char *fmt,
+                   ...) __attribute__((format(gnu_printf, 5, 6))) {
         va_list ap;
         va_start(ap, fmt);
         auto slice = a->vAllocPrintZ(fmt, ap);
@@ -216,16 +216,16 @@ struct Engine {
         a->free(slice);
     }
 
-    void drawWorldSymbol(Fixed<WorldInstance> *instances, Vec3 pos, char c, f32 size,
-                         skn::Color color, Font font) {
-        const u16 i = c - ' ';
-        Vec2 texture_offset = {f32(i % 16) * font.size, int(i / 16.F) * font.size};
-        f32 width = font.widths[int(c)];
+    void drawWorldSymbol(Fixed<WorldInstance> *instances, FVector3 pos, char c, float size,
+                         Color color, Font font) {
+        const uint16_t i = c - ' ';
+        FVector2 texture_offset = {float(i % 16) * font.size, int(i / 16.F) * font.size};
+        float width = font.widths[int(c)];
         instances->append({
             .position = pos,
             .size = {width * (size / font.size) / 10.F, size / 10.F},
-            .uv = skn::Rect{Vec2i{font.texture.x, font.texture.y} + texture_offset,
-                            {width, font.size}},
+            .uv = toFRect(FVector2{font.texture.x, font.texture.y} + texture_offset,
+                          {width, font.size}),
             .color = color,
             .face = Face::billboard,
             .rotation = 0,
@@ -236,9 +236,9 @@ struct Engine {
 
     int rand(int n) const;
 
-    void updateUI(FixedVector<UIInstance> &instances, Vec2i size);
+    void updateUI(FixedVector<UIInstance> &instances, Vector2 size);
 
-    void update(WorldInstances *instances, Vec2 logical);
+    void update(WorldInstances *instances, FVector2 logical);
 };
 
 extern Engine engine;
@@ -248,9 +248,11 @@ enum class Scene { menu, game };
 struct Game;
 
 struct SceneGame {
+
+    
     void init(Engine *engine);
-    void update(Engine *engine, WorldInstances *instances, Vec2 logical);
+    void update(Engine *engine, WorldInstances *instances, FVector2 logical);
     void updateUI(Game *game, Engine *engine, FixedVector<UIInstance> &instances,
-                  Vec2i render_size);
+                  Vector2 render_size);
     void deinit(Engine *engine);
 };

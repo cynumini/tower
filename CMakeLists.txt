@@ -42,23 +42,27 @@ find_package(glm CONFIG REQUIRED)
 add_executable(tower
   src/font.cpp
   src/game.cpp
+  src/inventory.cpp
   src/main.cpp
   src/menu.cpp
   src/structure.cpp
+  src/ui_pipeline.cpp
 )
 
 target_precompile_headers(tower PRIVATE
   <array>
-  <vector>
+  <string>
   <string_view>
-  # <string>
-  # <unordered_map>
+  <vector>
+  <print>
+  <unordered_map>
+  <SDL3/SDL.h>
   # <algorithm>
   # <limits>
   # <fstream>
-  # <iostream>
+  <iostream>
   # <inplace_vector>
-  <SDL3/SDL.h>
+
   # <nlohmann/json.hpp>
 )
 

@@ -4,29 +4,8 @@
 
 struct Font {
     std::array<char, 256> widths = {};
-    float size = 10.0F;
+    float size{};
     FRect texture{};
 };
-
-constexpr std::array<char, 256> getDefaultFontWidths() {
-    std::array<char, 256> w = {};
-    w[' '] = 2, w['!'] = 1, w['"'] = 3, w['#'] = 6, w['$'] = 5, w['%'] = 8, w['&'] = 7,
-    w['\''] = 1, w['('] = 2, w[')'] = 2, w['*'] = 5, w['+'] = 5, w[','] = 2, w['-'] = 4,
-    w['.'] = 1, w['/'] = 4, w['0'] = 5, w['1'] = 3, w['2'] = 5, w['3'] = 4, w['4'] = 4,
-    w['5'] = 4, w['6'] = 5, w['7'] = 4, w['8'] = 5, w['9'] = 5, w[':'] = 1, w[';'] = 2,
-    w['<'] = 2, w['='] = 4, w['>'] = 4, w['?'] = 5, w['@'] = 8, w['A'] = 5, w['B'] = 4,
-    w['C'] = 4, w['D'] = 5, w['E'] = 4, w['F'] = 4, w['G'] = 4, w['H'] = 4, w['I'] = 3,
-    w['J'] = 4, w['K'] = 4, w['L'] = 4, w['M'] = 7, w['N'] = 5, w['O'] = 5, w['P'] = 5,
-    w['Q'] = 5, w['R'] = 5, w['S'] = 5, w['T'] = 5, w['U'] = 4, w['V'] = 5, w['W'] = 9,
-    w['X'] = 5, w['Y'] = 5, w['Z'] = 5, w['['] = 3, w['\\'] = 4, w[']'] = 3, w['^'] = 5,
-    w['_'] = 4, w['`'] = 2, w['a'] = 4, w['b'] = 4, w['c'] = 4, w['d'] = 4, w['e'] = 4,
-    w['f'] = 4, w['g'] = 4, w['h'] = 4, w['i'] = 1, w['j'] = 4, w['k'] = 4, w['l'] = 1,
-    w['m'] = 5, w['n'] = 4, w['o'] = 4, w['p'] = 4, w['q'] = 4, w['r'] = 4, w['s'] = 4,
-    w['t'] = 4, w['u'] = 4, w['v'] = 5, w['w'] = 5, w['x'] = 5, w['y'] = 5, w['z'] = 4,
-    w['{'] = 4, w['|'] = 1, w['}'] = 4, w['~'] = 7;
-    return w;
-}
-
-constexpr auto DefaultFontWidths = getDefaultFontWidths();
 
 Font createDefaultFont(FRect texture);
