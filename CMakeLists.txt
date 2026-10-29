@@ -6,7 +6,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # compile options
-set(COMPILE_OPTIONS -Wall -Wextra -Wpedantic -fno-exceptions)
+set(COMPILE_OPTIONS
+  -Wall
+  -Wextra
+  -Wpedantic
+  -fno-exceptions
+  # ignore
+  -Wno-missing-designated-field-initializers
+)
 
 # shader_header_gen
 add_executable(shader_header_gen tools/shader_header_gen.cpp)
@@ -58,7 +65,9 @@ target_precompile_headers(tower PRIVATE
   <print>
   <unordered_map>
   <SDL3/SDL.h>
-  # <algorithm>
+  <algorithm>
+  <cstddef>
+  <filesystem>
   # <limits>
   # <fstream>
   <iostream>

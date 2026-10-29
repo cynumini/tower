@@ -2,10 +2,10 @@
 
 #include "game.hpp"
 
-#include "skn.cpp"
-
 #include "inventory.hpp"
 #include "map.cpp"
+
+#include <ranges>
 
 #include <print>
 
@@ -151,40 +151,8 @@ static struct Animation {
     }
 } player_down, player_right, player_left, player_up;
 
-struct Filter {
-    Entity *ptr;
-    Entity *end_ptr;
-    bool (*predicate)(Entity *);
-
-    void skip() {
-        while (ptr != end_ptr and !predicate(ptr)) ptr++;
-    }
-
-    Filter &operator++() {
-        ptr++;
-        skip();
-        return *this;
-    }
-
-    Filter begin() {
-        skip();
-        return *this;
-    }
-
-    Filter end() { return {end_ptr, end_ptr, predicate}; }
-
-    Entity &operator*() const { return *ptr; }
-
-    bool operator!=(const Filter &query) const { return ptr != query.ptr; }
-};
-
-template <size_t N>
-static Filter makeFilter(std::inplace_vector<Entity, N> &entities, bool (*predicate)(Entity *)) {
-    return Filter{entities.data(), entities.data() + entities.size(), predicate};
-}
-
 static constexpr size_t ENTITIES_MAX = std::numeric_limits<uint8_t>::max();
-static std::inplace_vector<Entity, ENTITIES_MAX> entities;
+static std::vector<Entity> entities;
 
 // Mpas
 static Map map;
@@ -231,6 +199,7 @@ void SceneGame::init() {
     player_left.init(engine.sprites.at("player_right"), 3, true);
 
     // entities
+    entities.reserve(256);
     using Kind = Entity::Kind;
     using Body = Entity::Body;
 
@@ -275,18 +244,15 @@ void SceneGame::init() {
         entity.timer = Timer::init(0.2F);
     }
 
-    map.init(player->pos);
+    initMap(map, player->pos);
 }
 
 void SceneGame::update(WorldInstances *instances, FVector2 logical) {
     player_action = false;
 
-    float yaw =
-        isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6);
-    float pitch =
-        isKeyJustReleased(Scancode::kp_2) - isKeyJustReleased(Scancode::kp_8);
-    float roll =
-        isKeyJustReleased(Scancode::kp_7) - isKeyJustReleased(Scancode::kp_9);
+    float yaw = bool(isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6));
+    float pitch = isKeyJustReleased(Scancode::kp_2) - isKeyJustReleased(Scancode::kp_8);
+    float roll = isKeyJustReleased(Scancode::kp_7) - isKeyJustReleased(Scancode::kp_9);
 
     engine.camera.yaw += yaw * 45;
     engine.camera.yaw = int(engine.camera.yaw) % 360;
@@ -303,8 +269,8 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
 
     auto collisions = map.getCollision(player->pos);
 
-    player_action = isMouseButtonJustPressed(MouseButton::left) or
-                    isKeyJustPressed(Scancode::space);
+    player_action =
+        isMouseButtonJustPressed(MouseButton::left) or isKeyJustPressed(Scancode::space);
 
     for (auto &entity : entities) {
         if (!entity.alive) continue;
@@ -329,7 +295,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                     if (getCurrentInventoryItem(inventory) == "hoe") {
                         Cell *cell = map.getSelected();
                         if (cell->type == Cell::Type::surface and cell->hasFloor() and
-                            cell->getFloor() == Material::grass) {
+                            cell->getFloor() == map.material_ids.at("grass")) {
                             map.deleteFloor();
                         }
                     } else if (getCurrentInventoryItem(inventory) == "pickaxe") {
@@ -356,15 +322,14 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                         }
                     }
                 }
-                const FVector2 velocity =
-                    rotate(normalize(FVector2{float(isKeyPressed(Scancode::d)) -
-                                                  float(isKeyPressed(Scancode::a)),
-                                              float(isKeyPressed(Scancode::w)) -
-                                                  float(isKeyPressed(Scancode::s))}),
-                           deg2rad(engine.camera.yaw));
+                const FVector2 velocity = rotate(
+                    normalize(FVector2{
+                        float(isKeyPressed(Scancode::d)) - float(isKeyPressed(Scancode::a)),
+                        float(isKeyPressed(Scancode::w)) - float(isKeyPressed(Scancode::s))}),
+                    deg2rad(engine.camera.yaw));
 
-                int level_diff = isKeyJustReleased(Scancode::pageup) -
-                                 isKeyJustReleased(Scancode::pagedown);
+                int level_diff =
+                    isKeyJustReleased(Scancode::pageup) - isKeyJustReleased(Scancode::pagedown);
                 player->pos.z =
                     std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
 
@@ -463,8 +428,9 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             }
 
             if (entity.isSolid() and entity.body == Entity::Body::movable) {
-                Filter q = makeFilter(
-                    entities, [](Entity *other) { return other->isSolid() and other->alive; });
+                auto q = entities | std::views::filter([](Entity &other) {
+                             return other.isSolid() and other.alive;
+                         });
                 FVector2 velocity = entity.direction * engine.dt * entity.speed;
                 entity.pos.x += velocity.x;
 
@@ -482,6 +448,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                         break;
                     }
                 }
+
                 entity.pos.y += velocity.y;
                 for (Entity &other : q) {
                     if (other.pos.z != entity.pos.z) continue;
@@ -513,12 +480,8 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             break;
         case Entity::Kind::attack: {
             use_default = false;
-            append(instances->squares, entity.pos + pos_offset,
-                                       entity.size,
-                                       entity.sprite,
-                                       entity.tint,
-                                       Face::z_pos,
-                                       entity.angle);
+            append(instances->squares, entity.pos + pos_offset, entity.size, entity.sprite,
+                   entity.tint, Face::z_pos, entity.angle);
             break;
         }
         case Entity::Kind::spell:
@@ -527,12 +490,8 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             break;
         }
         if (use_default) {
-            append(instances->squares, entity.pos + pos_offset,
-                                       entity.size,
-                                       entity.sprite,
-                                       entity.tint,
-                                       Face::billboard,
-                                       0.0F);
+            append(instances->squares, entity.pos + pos_offset, entity.size, entity.sprite,
+                   entity.tint, Face::billboard, 0.0F);
         }
     }
 
@@ -541,7 +500,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
     // current location
     {
         bool outside = true;
-        for (uint8_t i = 0; i < uint8_t(ARRAY_LEN(locations)); i++) {
+        for (uint8_t i = 0; i < uint8_t(SDL_arraysize(locations)); i++) {
             auto *location = &locations[i];
             bool is_player_inside_location = false;
             auto player_index = Map::indexFromPos(player->pos);
@@ -573,8 +532,8 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             sign = '?';
             if (quest.status == Quest::ACTIVE) color = WHITE;
         }
-        drawWorldSymbol(instances->squares, sign, quest.pos + FVector3{0.5, 0.5, 1.25F},
-                                SIZE, color, engine.default_font);
+        drawWorldSymbol(instances->squares, sign, quest.pos + FVector3{0.5, 0.5, 1.25F}, SIZE,
+                        color, engine.default_font);
     }
 
     map.update(instances, player->pos, logical);
@@ -596,52 +555,34 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             if (!entity.alive) continue;
 
             if (entity.kind == Entity::Kind::attack) {
-                append(instances->squares, 
-                     pos,
-                     entity.size,
-                     solid,
-                     toColor(0xff00FF7f),
-                     Face::z_pos,
-                     entity.angle
-                );
+                append(instances->squares, pos, entity.size, solid, toColor(0xff00FF7f),
+                       Face::z_pos, entity.angle);
             }
 
             if (entity.isInteractable()) {
                 auto collision = entity.getInteraction();
-                append(instances->squares,
-                       pos,
-                       FVector2{collision.w, collision.h},
-                     solid,
-                     toColor(0xff00007f),
-                     Face::z_pos,
-                     entity.angle
+                append(instances->squares, pos, FVector2{collision.w, collision.h}, solid,
+                       toColor(0xff00007f), Face::z_pos, entity.angle
 
                 );
             }
 
             if (entity.isSolid()) {
                 auto collision = entity.getCollision();
-                append(instances->squares,
-                     pos,
-                     FVector2{collision.w, collision.h},
-                     solid,
-                     toColor(0x0000ff7f),
-                     Face::z_pos,
-                     entity.angle
-                );
+                append(instances->squares, pos, FVector2{collision.w, collision.h}, solid,
+                       toColor(0x0000ff7f), Face::z_pos, entity.angle);
             }
         }
     };
 }
 
-void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances,
-                         Vector2 render_size) {
+void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, Vector2 render_size) {
 
     while (dialog) {
         std::string_view text = {};
         if (quest.status == Quest::REWARDED) {
 
-            if (curr_line == ARRAY_LEN(lines)) {
+            if (curr_line == SDL_arraysize(lines)) {
                 dialog = pause = false;
                 curr_line = 0;
                 break;
@@ -692,9 +633,9 @@ void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances,
             }
 
             drawText(instances, name,
-                             {int((float(render_size.x) / 2.0F) - (width / 2.0F)),
-                              int((float(render_size.y) / 2.0F) - (height / 2.0F))},
-                             height, {WHITE.r, WHITE.g, WHITE.b, alpha});
+                     {int((float(render_size.x) / 2.0F) - (width / 2.0F)),
+                      int((float(render_size.y) / 2.0F) - (height / 2.0F))},
+                     height, {WHITE.r, WHITE.g, WHITE.b, alpha});
         }
     }
 

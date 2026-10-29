@@ -18,20 +18,18 @@ void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat sh
     SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
     createinfo.vertex_shader = createGPUShader(device, ShaderCode(ui_vert_spv, ui_vert_dxil),
                                                SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
-    defer(SDL_ReleaseGPUShader(device, createinfo.vertex_shader));
     SDL_assert(createinfo.vertex_shader);
 
     createinfo.fragment_shader =
         createGPUShader(device, ShaderCode(ui_frag_spv, ui_frag_dxil),
                         SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
-    defer(SDL_ReleaseGPUShader(device, createinfo.fragment_shader));
     SDL_assert(createinfo.fragment_shader);
 
     const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
         {0, sizeof(FVector2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
         {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
-    createinfo.vertex_input_state.num_vertex_buffers = ARRAY_LEN(vertex_buffer_descriptions);
+    createinfo.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
 
     SDL_GPUVertexAttribute vertex_attributes[] = {
         // vertex
@@ -42,7 +40,7 @@ void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat sh
         {3, 1, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Instance, uv)},
         {4, 1, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4_NORM, offsetof(Instance, color)}};
     createinfo.vertex_input_state.vertex_attributes = vertex_attributes;
-    createinfo.vertex_input_state.num_vertex_attributes = ARRAY_LEN(vertex_attributes);
+    createinfo.vertex_input_state.num_vertex_attributes = SDL_arraysize(vertex_attributes);
 
     createinfo.depth_stencil_state = {
         .enable_depth_test = false,
@@ -69,6 +67,9 @@ void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat sh
 
     pipeline = SDL_CreateGPUGraphicsPipeline(device, &createinfo);
     SDL_assert(pipeline);
+    // defer
+    SDL_ReleaseGPUShader(device, createinfo.fragment_shader);
+    SDL_ReleaseGPUShader(device, createinfo.vertex_shader);
 }
 
 void UI::uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
@@ -86,20 +87,21 @@ void UI::uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) 
     SDL_assert(buffer);
 
     auto *transfer_buffer = createGPUTransferBuffer(device, sizeof(vertices) + sizeof(indices));
-    defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
+
     SDL_assert(transfer_buffer);
 
     {
         uint8_t *memory = (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
-        defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
         SDL_assert(memory);
-
         SDL_memcpy(memory, vertices, sizeof(vertices));
         SDL_memcpy(memory + sizeof(vertices), indices, sizeof(indices));
+        SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
     }
     uploadToGPUBuffer(copy_pass, transfer_buffer, 0, 0, vertex_buffer, sizeof(vertices));
     uploadToGPUBuffer(copy_pass, transfer_buffer, sizeof(vertices), 0, index_buffer,
                       sizeof(indices));
+    // defer
+    SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
 }
 
 void UI::release(SDL_GPUDevice *device) {

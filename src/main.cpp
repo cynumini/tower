@@ -3,9 +3,6 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#include <algorithm>
-#include <cstddef>
-
 #include "skn_sdl.cpp"
 
 #include "game.hpp"
@@ -95,11 +92,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     world.setup(window, device, shader_format);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
-    defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
 
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-    defer(SDL_EndGPUCopyPass(copy_pass));
 
     ui.uploadStaticBuffers(device, copy_pass);
     world.uploadStaticBuffers(device, copy_pass);
@@ -107,7 +102,6 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
     {
         int mods_len = 0;
         char **mods = SDL_GlobDirectory("mods/", "*", SDL_GLOB_CASEINSENSITIVE, &mods_len);
-        defer(SDL_free((void *)mods));
         SDL_CHECK(mods);
 
         engine.mods.reserve(mods_len);
@@ -123,7 +117,6 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
             char **items =
                 SDL_GlobDirectory(path.c_str(), "*.png", SDL_GLOB_CASEINSENSITIVE, &items_len);
-            defer(SDL_free((void *)items));
             SDL_CHECK(items);
 
             mod.items.reserve(items_len);
@@ -131,7 +124,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             for (char *const *it = items; *it; it++) {
                 mod.items.emplace_back(*it);
             }
+            SDL_free((void *)items);
         }
+        SDL_free((void *)mods);
     }
 
     {
@@ -139,7 +134,6 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         int files_len = 0;
         char **files =
             SDL_GlobDirectory("resources/", "*.png", SDL_GLOB_CASEINSENSITIVE, &files_len);
-        defer(SDL_free((void *)files));
         SDL_CHECK(files);
 
         int mods_files_len = 0;
@@ -153,7 +147,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         atlas_items.reserve(files_len + mods_files_len);
 
         for (char *const *it = files; *it; it++) {
-            auto file = getStem(*it);
+            // auto file = getStem(*it);
+            auto file = std::filesystem::path(*it).stem();
             const auto path = std::format("resources/{}", *it);
             auto *surface = SDL_LoadPNG(path.c_str());
             SDL_CHECK(surface);
@@ -169,7 +164,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         }
 
         for (char *const *it = mods_files; *it; it++) {
-            auto file = getStem(*it);
+            // auto file = getStem(*it);
+            auto file = std::filesystem::path(*it).stem();
             auto path = std::format("mods/{}", *it);
             auto *surface = SDL_LoadPNG(path.c_str());
             SDL_CHECK(surface);
@@ -195,13 +191,11 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
                 createGPUTransferBuffer(device, sizeof(Color) * surface->w * surface->h);
-            defer(SDL_ReleaseGPUTransferBuffer(device, transfer_buffer));
             SDL_CHECK(transfer_buffer);
 
             {
                 uint8_t *memory =
                     (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
-                defer(SDL_UnmapGPUTransferBuffer(device, transfer_buffer));
                 SDL_CHECK(memory);
 
                 const auto *src = (uint8_t *)surface->pixels;
@@ -214,6 +208,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                                    row_bytes);
                     }
                 }
+                SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
             }
             if ((x_offset + surface->w) > uint(atlas.w)) {
                 x_offset = 0;
@@ -232,7 +227,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                               surface->h);
 
             x_offset += surface->w;
+            SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
         }
+        SDL_free((void *)files);
     }
 
     instance_transfer_buffer =
@@ -260,6 +257,9 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         SDL_srand(ticks);
     }
 
+    SDL_EndGPUCopyPass(copy_pass);
+    SDL_SubmitGPUCommandBuffer(command_buffer);
+    
     return SDL_APP_CONTINUE;
 }
 
@@ -308,33 +308,32 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     if (engine.running) return SDL_APP_SUCCESS;
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
-    defer(SDL_SubmitGPUCommandBuffer(command_buffer));
     SDL_CHECK(command_buffer);
 
     {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
-        defer(SDL_EndGPUCopyPass(copy_pass));
 
         {
             auto instances = world.beginUpload(device, instance_transfer_buffer);
-            defer(world.endUpload(device, copy_pass, instance_transfer_buffer, &instances));
-
             updateGame(game, &instances, world.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
             for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
+
+            world.endUpload(device, copy_pass, instance_transfer_buffer, &instances);
         }
 
         {
             auto upload = ui.beginUpload(device, instance_transfer_buffer);
-            defer(
-                ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size));
 
             updateGameUI(game, upload.instances, toVector2(ui.logical));
             updateEngineUI(upload.instances);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
+
+            ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size);
         }
+        SDL_EndGPUCopyPass(copy_pass);
     }
 
     SDL_GPUTexture *swapchain_texture = 0;
@@ -365,10 +364,11 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1,
                                                    &depth_stencil_target_info);
-        defer(SDL_EndGPURenderPass(render_pass));
 
         world.draw(command_buffer, render_pass, atlas, sampler, &engine.camera);
         ui.draw(command_buffer, render_pass, atlas, sampler);
+
+        SDL_EndGPURenderPass(render_pass);
     }
 
     engine.key_state = {};
@@ -386,6 +386,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         engine.times.frames = 0;
         engine.times.seconds = 0;
     }
+    SDL_SubmitGPUCommandBuffer(command_buffer);
     return SDL_APP_CONTINUE;
 }
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "map.hpp"
+#include "cell.hpp"
 #include "math.hpp"
 
 struct Structure {
@@ -10,4 +10,4 @@ struct Structure {
     std::vector<Object> objects;
 };
 
-void structureInit(std::vector<Structure> &structures);
+void structureInit(std::vector<Structure> &structures, MaterialMap map);

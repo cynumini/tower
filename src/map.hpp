@@ -1,174 +1,112 @@
 #pragma once
 
 #include "math.hpp"
-#include "skn.cpp"
+
 #include "world_pipeline.hpp"
 
-// Material
-enum struct Material : uint8_t {
-    air,
-    deep,
-    stone,
-    dirt,
-    grass,
-    wood,
-    wall,
-    water,
-    door,
-    window,
-    iron_ore,
-    furnace
-};
+#include "cell.hpp"
 
-constexpr OldArray<const char *, 12> initBlockKey() {
-    OldArray<const char *, 12> r;
-    r[int(Material::air)] = "", r[int(Material::deep)] = "deep",
-    r[int(Material::stone)] = "stone", r[int(Material::dirt)] = "dirt",
-    r[int(Material::grass)] = "grass", r[int(Material::wood)] = "wood",
-    r[int(Material::wall)] = "wall", r[int(Material::water)] = "water",
-    r[int(Material::door)] = "door", r[int(Material::window)] = "window",
-    r[int(Material::iron_ore)] = "iron_ore", r[int(Material::furnace)] = "furnace";
-    return r;
-}
 
-static constexpr auto BlockKey = initBlockKey();
 
-static FRect MaterialSprite[ARRAY_LEN(BlockKey)] = {};
+//     air,
+//     deep,
+//     stone,
+//     dirt,
+//     grass,
+//     wood,
+//     wall,
+//     water,
+//     door,
+//     window,
+//     iron_ore,
+//     furnace
+// }
+
+// constexpr std::array<std::string_view, 12> initBlockKey() {
+//     std::array<std::string_view, 12> r;
+//     r[int(Material::air)] = "", r[int(Material::deep)] = "deep",
+//     r[int(Material::stone)] = "stone", r[int(Material::dirt)] = "dirt",
+//     r[int(Material::grass)] = "grass", r[int(Material::wood)] = "wood",
+//     r[int(Material::wall)] = "wall", r[int(Material::water)] = "water",
+//     r[int(Material::door)] = "door", r[int(Material::window)] = "window",
+//     r[int(Material::iron_ore)] = "iron_ore", r[int(Material::furnace)] = "furnace";
+//     return r;
+// }
+
+// static FRect MaterialSprite[SDL_arraysize(block_key)] = {};
 
 // Cell
-enum class Rotation : uint8_t { sn, we, ns, ew };
 
-extern const std::unordered_map<std::string_view, Rotation> rotations;
 
-struct Cell {
-    enum class Type : uint8_t { block, slope, surface, frame };
-    static const std::unordered_map<std::string_view, Type> types;
-    Material a : 8 {};        // block, floor, slope
-    Material b : 8 {};        // ceiling
-    Type type : 2 {};         // 4
-    Rotation rotation : 2 {}; // 4
 
-    static constexpr Cell air() { return {.a = Material::air, .type = Type::block}; }
 
-    static constexpr Cell block(Material material) {
-        return {.a = material, .type = Type::block};
-    }
 
-    static constexpr Cell slope(Material material, Rotation rotation) {
-        return {.a = material, .type = Type::slope, .rotation = rotation};
-    }
-
-    static constexpr Cell surface(Material floor, Material ceiling = Material::air) {
-        return {.a = floor, .b = ceiling, .type = Type::surface};
-    }
-
-    static constexpr Cell frame(Material floor, Rotation rotation) {
-        return {.a = floor, .type = Type::frame, .rotation = rotation};
-    }
-
-    inline bool obscuresFace(Face face) const {
-        switch (type) {
-        case Type::block:
-        case Type::slope:
-            return a != Material::air;
-        case Type::surface:
-            if (face == Face::z_pos) return a != Material::air;
-            return false;
-        case Type::frame:
-            if (a == Material::air) return false;
-            switch (rotation) {
-            case Rotation::sn:
-            case Rotation::ns:
-                if (face == Face::y_pos or face == Face::y_neg) return false;
-            case Rotation::we:
-            case Rotation::ew:
-                if (face == Face::x_pos or face == Face::x_neg) return false;
-            }
-            return true;
-        }
-    }
-
-    inline bool isEmpty(bool floor_ok = false) const {
-        switch (type) {
-        case Type::block:
-        case Type::slope:
-        case Type::frame:
-            return a == Material::air;
-        case Type::surface:
-            if (!floor_ok) {
-                return a == Material::air and b == Material::air;
-            } else {
-                return b == Material::air;
-            }
-        }
-    }
-
-    inline bool isSolid() const {
-        return (type == Type::block or type == Type::frame or type == Type::slope) and
-               a != Material::air;
-    }
-
-    inline bool hasFloor() const { return a != Material::air; }
-    inline bool hasCeiling() const { return b != Material::air; }
-
-    inline FRect getBlockSprite() const {
-        SDL_assert(type == Type::block);
-        return MaterialSprite[int(a)];
-    }
-
-    inline FRect getFrameSprite() const {
-        SDL_assert(type == Type::frame);
-        return MaterialSprite[int(a)];
-    }
-
-    inline FRect getSlopeSprite() const {
-        SDL_assert(type == Type::slope);
-        return MaterialSprite[int(a)];
-    }
-
-    inline FRect getFloorSprite() const {
-        SDL_assert(type == Type::surface);
-        return MaterialSprite[int(a)];
-    }
-
-    inline FRect getCeilingSprite() const {
-        SDL_assert(type == Type::surface);
-        return MaterialSprite[int(b)];
-    }
-
-    inline void setFloor(Material material = Material::air) {
-        SDL_assert(type == Type::surface);
-        a = material;
-    }
-
-    inline Material getFloor() {
-        SDL_assert(type == Type::surface);
-        return a;
-    }
-};
-
-struct Object {
-    enum class Type { door, wall, ore, furnace };
-    static const std::unordered_map<std::string_view, Type> types;
-    Type type;
-    Vector3 pos;
-    Material material;
-    Rotation rotation;
-
-    static Object door(Vector3 pos, Rotation rotation) {
-        return {Type::door, pos, Material::door, rotation};
-    }
-    static Object wall(Vector3 pos, Material material, Rotation rotation) {
-        return {Type::wall, pos, material, rotation};
-    }
-
-    static Object ore(Vector3 pos) { return {Type::ore, pos, Material::iron_ore, Rotation::sn}; }
-
-    static Object furnace(Vector3 pos) {
-        return {Type::furnace, pos, Material::furnace, Rotation::sn};
-    }
-
-    inline FRect getSprite() const { return MaterialSprite[int(material)]; }
-};
 
 constexpr int OBJECT_LEN = 32;
+
+static constexpr int MAP_Z_LEN = 3;
+static constexpr int SEA_LEVEL = 1;
+static constexpr int PIXELS_PER_UNIT = 32;
+static constexpr float PIXEL = 1.0F / float(PIXELS_PER_UNIT);
+
+// Chunk
+struct Chunk {
+    static constexpr Vector2 SIZE = {16, 16};
+    Vector2 index;
+    Cell data[SIZE.x][SIZE.y][MAP_Z_LEN] = {};
+    std::vector<Object> objects;
+
+    void init(MaterialMap map, Vector2 index) {
+        objects.reserve(256);
+        this->index = index;
+        for (int z = 0; z < MAP_Z_LEN; z++) {
+            for (int y = 0; y < SIZE.y; y++) {
+                for (int x = 0; x < SIZE.x; x++) {
+                    if (z < SEA_LEVEL - 4)
+                        data[x][y][z] = Cell::block(map.at("stone"));
+                    else if (z < SEA_LEVEL)
+                        data[x][y][z] = Cell::block(map.at("dirt"));
+                    else if (z == SEA_LEVEL)
+                        data[x][y][z] = Cell::surface(map.at("grass"));
+                }
+            }
+        }
+    }
+};
+
+#include "structure.hpp"
+
+struct Map {
+    std::vector<Chunk> chunks;
+    std::vector<MaterialInfo> materials;
+    MaterialMap material_ids;
+    bool hide_above_level = false;
+    Vector2 center;
+    int range = 1;
+
+    FRect selection_sprite;
+    FVector3 selection_pos;
+    bool selection = true;
+
+    std::vector<Structure> structures;
+
+    static Vector2 indexFromPos(FVector3 pos);
+    static Vector2 indexFromPos(Vector3 pos);
+    static Vector3 posFromIndex(Vector2 index);
+    Cell *getCellRelative(Vector3 v, Vector2 chunk_index);
+    Cell *getCell(FVector3 pos);
+    bool isVisible(Vector3 v, Vector2 chunk_index, Face face);
+    void updateChunksAndApplyStructures(Vector2 new_center);
+    struct Ray {
+        FVector3 origin;
+        FVector3 direction;
+    };
+    Ray screenToRay(FVector2 logical);
+    void update(WorldInstances *instances, FVector3 player_pos, FVector2 logical);
+    std::vector<FRect> getCollision(FVector3 pos);
+    Cell *getSelected();
+    Object *getObject(Vector3 pos);
+    Object *getSelectedObject();
+    void deleteObject(FVector3 pos);
+    void deleteFloor();
+};

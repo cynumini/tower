@@ -1,7 +1,5 @@
 #pragma once
 
-#include "skn.cpp"
-
 #include <SDL3/SDL.h>
 #include <SDL3_image/SDL_image.h>
 #include <span>
@@ -76,7 +74,6 @@ struct Texture {
             .height = uint(h),
             .layer_count_or_depth = 1,
             .num_levels = 1,
-
         };
         auto *ptr = SDL_CreateGPUTexture(device, &createinfo);
         SDL_assert(ptr);
@@ -91,9 +88,9 @@ struct Texture {
     }
 
     static Texture load(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass,
-                        OldSlice<uint8_t> data) {
+                        std::span<uint8_t> data) {
         int w, h;
-        auto *src = SDL_IOFromConstMem(data.ptr, data.len);
+        auto *src = SDL_IOFromConstMem(data.data(), data.size());
         auto *ptr = IMG_LoadGPUTexture_IO(device, copy_pass, src, true, &w, &h);
         SDL_assert(ptr);
         return {w, h, ptr};
@@ -101,9 +98,20 @@ struct Texture {
 
     void uploadToGPU(SDL_GPUCopyPass *copy_pass, SDL_GPUTransferBuffer *transfer_buffer, uint x,
                      uint y, uint w, uint h) const {
-        const SDL_GPUTextureTransferInfo source = {.transfer_buffer = transfer_buffer};
+        const SDL_GPUTextureTransferInfo source = {
+            .transfer_buffer = transfer_buffer,
+            .offset = 0,
+            .pixels_per_row = 0,
+            .rows_per_layer = 0,
+        };
         const SDL_GPUTextureRegion destination = {
-            .texture = ptr, .x = x, .y = y, .w = w, .h = h, .d = 1};
+            .texture = ptr,
+            .x = x,
+            .y = y,
+            .w = w,
+            .h = h,
+            .d = 1,
+        };
         SDL_UploadToGPUTexture(copy_pass, &source, &destination, false);
     }
 };

@@ -1,1 +1,2 @@
-sakana/.clangd
+Completion:
+    HeaderInsertion: Never

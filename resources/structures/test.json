@@ -4,6 +4,24 @@
     "y": 6,
     "z": 1
   },
+  "palette": {
+    "A": {
+      "type": "block",
+      "a": "air"
+    },
+    "B": {
+      "type": "frame",
+      "a": "grass",
+      "rotation": "sn"
+    }
+  },
+  "data": [
+    [
+      [
+        "B"
+      ]
+    ]
+  ],
   "objects": [
     {
       "type": "door",

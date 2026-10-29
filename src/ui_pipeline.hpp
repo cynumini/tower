@@ -12,8 +12,6 @@ struct UIInstance {
     Color color;
 };
 
-#include "matrix.hpp"
-
 struct UI {
     using Instance = UIInstance;
 
