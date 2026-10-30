@@ -74,7 +74,7 @@ struct Cell {
         }
     }
 
-    bool isEmpty(bool floor_ok = false) const {
+    [[nodiscard]] bool isEmpty(bool floor_ok = false) const {
         switch (type) {
         case Type::block:
         case Type::slope:
@@ -89,14 +89,14 @@ struct Cell {
         }
     }
 
-    inline bool isSolid() const {
+    [[nodiscard]] bool isSolid() const {
         return (type == Type::block or type == Type::frame or type == Type::slope) and a != AIR;
     }
 
-    inline bool hasFloor() const { return a != AIR; }
-    inline bool hasCeiling() const { return b != AIR; }
+    [[nodiscard]] bool hasFloor() const { return a != AIR; }
+    [[nodiscard]] bool hasCeiling() const { return b != AIR; }
 
-    inline SDL_FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
+    [[nodiscard]] SDL_FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::block);
         return materials[a].sprite;
     }

@@ -1,4 +1,9 @@
 * Tower
+** [0.5.0] - 2026-10-30
+*** Added
+- Alice character portrait.
+*** Changed
+- Changed camera to first-person view.
 ** [0.4.0] - 2026-10-20
 *** Added
 - 3D world rendering with depth, billboards, and camera controls.

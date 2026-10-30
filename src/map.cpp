@@ -23,7 +23,6 @@ const std::unordered_map<std::string_view, Object::Type> Object::types = {
 static struct Location {
     const char *name;
     std::vector<glm::ivec2> chunk_ids;
-
     void init(const char *name) { this->name = name; }
 } locations[2] = {};
 
@@ -326,8 +325,7 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                             f = int(Face::z_neg);
                             append(instances->squares,
                                    pos - glm::vec3(face_offsets[f]) * (14 * PIXEL),
-                                   glm::vec2{1.F, 1.F}, sprite, tint[f],
-                                   Face(f), 0);
+                                   glm::vec2{1.F, 1.F}, sprite, tint[f], Face(f), 0);
                         }
                     } break;
                     }
