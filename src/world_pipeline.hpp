@@ -1,9 +1,12 @@
 #pragma once
 
+#include "color.hpp"
 #include "fixed_vector.hpp"
 #include "math.hpp"
 #include "skn_sdl.cpp"
-#include "color.hpp"
+
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
 
 enum class Face : uint32_t { y_pos, x_pos, y_neg, x_neg, z_pos, z_neg, billboard, slope };
 
@@ -47,8 +50,8 @@ struct World {
     FVector2 logical;
 
     struct UBO {
-        Mat4 view;
-        Mat4 projection;
+        glm::mat4 view;
+        glm::mat4 projection;
         FVector2 atlas_size;
         float yaw;
     } ubo;

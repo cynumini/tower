@@ -57,6 +57,11 @@ add_executable(tower
   src/world_pipeline.cpp
 )
 
+target_compile_definitions(tower PRIVATE
+    GLM_FORCE_RIGHT_HANDED
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+)
+
 target_precompile_headers(tower PRIVATE
   <array>
   <string>

@@ -250,12 +250,11 @@ void SceneGame::init() {
 void SceneGame::update(WorldInstances *instances, FVector2 logical) {
     player_action = false;
 
-    float yaw = bool(isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6));
+    float yaw = isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6);
     float pitch = isKeyJustReleased(Scancode::kp_2) - isKeyJustReleased(Scancode::kp_8);
     float roll = isKeyJustReleased(Scancode::kp_7) - isKeyJustReleased(Scancode::kp_9);
 
-    engine.camera.yaw += yaw * 45;
-    engine.camera.yaw = int(engine.camera.yaw) % 360;
+    engine.camera.yaw += yaw * 5;
     engine.camera.pitch += pitch * 5;
     engine.camera.roll += roll * 5;
 
@@ -537,6 +536,12 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
     }
 
     map.update(instances, player->pos, logical);
+
+    auto a = WorldInstance{};
+    //append(instances->triangles, FVector3{0, 5, 0}, FVector2{1, 1}, engine.sprites.at("solid"),
+      //     RED, Face::z_pos, 0);
+    append(instances->triangles, FVector3{0, -5, 0}, FVector2{1, 1}, engine.sprites.at("solid"),
+               RED, Face::z_pos, 0);
 
     // debug (show collision)
     if (engine.debug_mode) {

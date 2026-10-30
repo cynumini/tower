@@ -11,8 +11,7 @@ void World::resize(FVector2 size) {
     } else {
         logical.x = size.x * logical.y / size.y;
     }
-    ubo.projection = Mat4::ortho(-logical.x / 2.0F, logical.x / 2.0F, -logical.y / 2.0F,
-                                 logical.y / 2.0F, 100.0F, -100.0F);
+    ubo.projection = glm::perspective(glm::radians(60.0F), size.x / size.y, 0.1F, 1000.F);
 }
 
 void World::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
@@ -32,6 +31,8 @@ void World::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat
         {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
     createinfo.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
+
+    createinfo.rasterizer_state.enable_depth_clip = true;
 
     SDL_GPUVertexAttribute vertex_attributes[] = {
         // vertex
@@ -174,8 +175,12 @@ void World::draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render
                                                                   .sampler = sampler};
     SDL_BindGPUFragmentSamplers(render_pass, 0, &texture_sampler_binding, 1);
 
-    ubo.view = Mat4::iso45() * Mat4::rotationZ(deg2rad(camera->yaw)) *
-               Mat4::rotationY(deg2rad(camera->roll)) * Mat4::translation(-camera->pos);
+
+    ubo.view = glm::rotate(glm::mat4(1.F), glm::radians(-camera->pitch), glm::vec3(1, 0, 0));
+    ubo.view = glm::rotate(ubo.view, glm::radians(-camera->roll), glm::vec3(0, 1, 0));
+    ubo.view = glm::rotate(ubo.view, glm::radians(-camera->yaw), glm::vec3(0, 0, 1));
+    ubo.view = glm::translate(ubo.view, {-camera->pos.x, -camera->pos.y, -camera->pos.z - 1});
+
     ubo.yaw = deg2rad(camera->yaw);
     ubo.atlas_size = {float(atlas.w), float(atlas.h)};
 

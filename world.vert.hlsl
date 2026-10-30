@@ -55,9 +55,8 @@ Output main(Input input) {
     position.xy = rotate(position.xy, input.angle);
 
     output.position = mul(
-        mul(float4(position + input.instance_position, 1), view),
-        projection
-    );
+                          projection,
+                          mul(view, float4(position + input.instance_position, 1)));
 
     float2 uv = input.vertex_position + float2(0.5F, 0.5F);
     float2 padding = 0.001F / atlas_size;
