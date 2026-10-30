@@ -34,6 +34,7 @@ void updateGameUI(Game &self, FixedVector<UIInstance> &instances, glm::ivec2 ren
 
         if (isKeyJustPressed(Scancode::enter)) {
             self.current_scene = Scene::game;
+            toggleRelativeMouseMode();
         }
     } break;
     case Scene::game:

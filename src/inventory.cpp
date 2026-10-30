@@ -23,8 +23,8 @@ Inventory createInventory() {
     return inventory;
 }
 
-static void drawSlot(Inventory &self, FixedVector<UIInstance> &instances,
-                     glm::vec2 position, size_t index) {
+static void drawSlot(Inventory &self, FixedVector<UIInstance> &instances, glm::vec2 position,
+                     size_t index) {
     SDL_assert(index < self.slots.size());
     Slot &slot = self.slots[index];
     append(instances, position, fRectSize(self.slot_sprite), self.slot_sprite, WHITE);
@@ -45,7 +45,7 @@ void updateInventoryUI(Inventory &self, FixedVector<UIInstance> &instances,
     // hud
     constexpr int hud_len = 3;
     glm::vec2 hud_offset = {(float(render_size.x) - self.slot_sprite.w * hud_len) / 2,
-                           float(render_size.y) - self.slot_sprite.h};
+                            float(render_size.y) - self.slot_sprite.h};
     constexpr auto sc_1 = size_t(Scancode::sc_1);
     for (size_t i = 0; i < hud_len; i++) {
         if (isKeyPressed(Scancode(sc_1 + i))) self.select = i;
@@ -57,7 +57,11 @@ void updateInventoryUI(Inventory &self, FixedVector<UIInstance> &instances,
     }
 
     // inventory
-    if (isKeyJustPressed(Scancode::e)) self.visible = !self.visible;
+    if (isKeyJustPressed(Scancode::e)) {
+        self.visible = !self.visible;
+        toggleRelativeMouseMode();
+        SDL_WarpMouseInWindow(engine.window, engine.screen.x / 2.0, engine.screen.y / 2.0);
+    }
     if (self.visible) {
         const auto inventory_size = slot_size * glm::vec2(INVENTORY_SIZE);
         const auto inventory_offset = glm::vec2(render_size) - inventory_size;

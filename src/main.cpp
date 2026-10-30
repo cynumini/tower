@@ -3,15 +3,14 @@
 #define SDL_MAIN_USE_CALLBACKS 1
 #include <SDL3/SDL_main.h>
 
-#include "skn_sdl.cpp"
 #include "rect.hpp"
+#include "skn_sdl.cpp"
 
 #include "game.hpp"
 
 static Game game;
 
 static SDL_GPUDevice *device;
-static SDL_Window *window;
 static SDL_GPUSampler *sampler;
 static SDL_GPUTexture *depth;
 static SDL_GPUTransferBuffer *instance_transfer_buffer;
@@ -60,9 +59,11 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
+
+
     engine.screen = {640, 360};
-    window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
-    SDL_CHECK(window);
+    engine.window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
+    SDL_CHECK(engine.window);
 
     device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, 0);
     SDL_CHECK(device);
@@ -73,7 +74,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                                             ? SDL_GPU_SHADERFORMAT_SPIRV
                                             : SDL_GPU_SHADERFORMAT_DXIL;
 
-    SDL_CHECK(SDL_ClaimWindowForGPUDevice(device, window));
+    SDL_CHECK(SDL_ClaimWindowForGPUDevice(device, engine.window));
 
     {
         SDL_GPUSamplerCreateInfo createinfo = {};
@@ -89,8 +90,8 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     atlas = Texture::create(device, 4096, 4096);
 
-    ui.setup(window, device, shader_format);
-    world.setup(window, device, shader_format);
+    ui.setup(engine.window, device, shader_format);
+    world.setup(engine.window, device, shader_format);
 
     auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
     SDL_CHECK(command_buffer);
@@ -260,7 +261,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_EndGPUCopyPass(copy_pass);
     SDL_SubmitGPUCommandBuffer(command_buffer);
-    
+
     return SDL_APP_CONTINUE;
 }
 
@@ -284,8 +285,8 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         break;
     case SDL_EVENT_MOUSE_MOTION: {
         engine.mouse = {int(event->motion.x), int(event->motion.y)};
-        break;
-    }
+        engine.mouse_rel = {int(event->motion.xrel), int(event->motion.yrel)};
+    } break;
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         if (event->button.button == SDL_BUTTON_LEFT) {
             engine.mouse_button_state[int(MouseButton::left)] = ButtonState::pressed;
@@ -302,6 +303,8 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
         break;
     }
     }
+
+
     return SDL_APP_CONTINUE;
 }
 
@@ -340,7 +343,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     SDL_GPUTexture *swapchain_texture = 0;
 
     uint width = 0, height = 0;
-    SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, window, &swapchain_texture,
+    SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, engine.window, &swapchain_texture,
                                                     &width, &height));
     resize({int(width), int(height)});
 
@@ -388,6 +391,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         engine.times.seconds = 0;
     }
     SDL_SubmitGPUCommandBuffer(command_buffer);
+
+    engine.mouse_rel = {};
     return SDL_APP_CONTINUE;
 }
 
@@ -403,8 +408,8 @@ void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult
     ui.release(device);
 
     SDL_ReleaseGPUSampler(device, sampler);
-    SDL_ReleaseWindowFromGPUDevice(device, window);
+    SDL_ReleaseWindowFromGPUDevice(device, engine.window);
 
     SDL_DestroyGPUDevice(device);
-    SDL_DestroyWindow(window);
+    SDL_DestroyWindow(engine.window);
 }

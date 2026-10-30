@@ -78,3 +78,8 @@ void updateEngineUI(FixedVector<UIInstance> &instances) {
                                       World::MAX_INSTANCES / 2));
     }
 }
+
+void toggleRelativeMouseMode() {
+    engine.relative_mouse_mode = !engine.relative_mouse_mode;
+    SDL_SetWindowRelativeMouseMode(engine.window, engine.relative_mouse_mode);
+}

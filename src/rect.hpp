@@ -80,6 +80,7 @@ constexpr bool checkCollisionSAT(SDL_FRect a, float a_angle, SDL_FRect b, float 
 constexpr SDL_FRect toFRect(glm::vec2 pos, glm::vec2 size) {
     return {.x = pos.x, .y = pos.y, .w = size.x, .h = size.y};
 }
+
 constexpr SDL_FRect &operator/=(SDL_FRect &a, float b) {
     a.x /= b;
     a.y /= b;

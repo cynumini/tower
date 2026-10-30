@@ -141,10 +141,13 @@ void Map::updateChunksAndApplyStructures(glm::ivec2 new_center) {
 }
 
 Map::Ray Map::screenToRay(glm::vec2 logical) {
-    glm::vec2 ndc = {
-        float(engine.mouse.x) / float(engine.screen.x) * 2.F - 1.F,
-        1.F - float(engine.mouse.y) / float(engine.screen.y) * 2.F,
-    };
+    glm::vec2 ndc;
+    if (!engine.relative_mouse_mode) {
+        ndc = {float(engine.mouse.x) / float(engine.screen.x) * 2.F - 1.F,
+               1.F - float(engine.mouse.y) / float(engine.screen.y) * 2.F};
+    } else {
+        ndc = {0, 0};
+    }
 
     glm::mat4 inv_view_projection = glm::inverse(world.ubo.projection * world.ubo.view);
 
@@ -174,7 +177,7 @@ Map::Ray Map::screenToRay(glm::vec2 logical) {
 
 void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logical) {
     static constexpr Color tint[] = {toColor(0xDFDFDFFF), WHITE, toColor(0xDFDFDFFF),
-                                     toColor(0xBFBFBFFF), WHITE};
+                                     toColor(0xBFBFBFFF), WHITE, GRAY};
     static constexpr glm::ivec3 face_offsets[] = {
         {0, 1, 0},  // Y+
         {1, 0, 0},  // X+
@@ -192,7 +195,6 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
             for (int y = 0; y < Chunk::SIZE.y; y++) {
                 for (int x = 0; x < Chunk::SIZE.x; x++) {
                     bool is_current_level = z == int(player_pos.z);
-                    if (hide_above_level and z > player_pos.z) continue;
                     Cell cell = chunk.data[x][y][z];
                     if (cell.isEmpty()) continue;
                     glm::ivec3 cell_pos = {x, y, z};
@@ -205,10 +207,7 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                         constexpr size_t BLOCK_FACE_COUNT = 5;
                         for (size_t i = 0; i < BLOCK_FACE_COUNT; i++) {
                             const Face face = Face(i);
-                            const bool force_visible =
-                                hide_above_level and face == Face::z_pos and is_current_level;
-                            if (force_visible or
-                                isVisible(cell_pos + face_offsets[i], chunk.index, face)) {
+                            if (isVisible(cell_pos + face_offsets[i], chunk.index, face)) {
                                 append(instances->squares,
                                        pos + glm::vec3(face_offsets[i]) * 0.5F, size, sprite,
                                        tint[i], face, 0);
@@ -221,6 +220,12 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                         if (isVisible(cell_pos + face_offsets[r], chunk.index, Face(r)))
                             append(instances->squares, pos + glm::vec3(face_offsets[r]) * 0.5F,
                                    size, sprite, tint[r], Face(r), 0);
+                        auto z_neg = int(Face::z_neg);
+                        if (isVisible(cell_pos + face_offsets[z_neg], chunk.index, Face::z_neg)) {
+                            append(instances->squares,
+                                   pos + glm::vec3(face_offsets[z_neg]) * 0.5F, size, sprite,
+                                   tint[z_neg], Face::z_neg, 0);
+                        }
                         append(instances->squares, pos, size, sprite, tint[(r + 2) % 4],
                                Face::slope, -r * M_PI_2f);
                         for (int i = 0; i < 2; i++) {
@@ -235,7 +240,7 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                     } break;
                     case Cell::Type::surface: {
                         bool should_render_ceiling =
-                            cell.hasCeiling() and !(hide_above_level and is_current_level);
+                            cell.hasCeiling() and !(false and is_current_level);
                         if (should_render_ceiling and
                             isVisible({x, y, z + 1}, chunk.index, Face::z_pos)) {
                             append(instances->squares,
@@ -247,7 +252,7 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                             // floor look upward
                             append(instances->squares,
                                    pos + glm::vec3(face_offsets[int(Face::z_neg)]) * 0.5F, size,
-                                   cell.getFloorSprite(materials), WHITE, Face::z_pos, 0);
+                                   cell.getFloorSprite(materials), WHITE, Face::z_neg, 0);
                     } break;
                     case Cell::Type::frame: {
                         const auto sprite = cell.getFrameSprite(materials);
@@ -318,6 +323,11 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                                    pos - glm::vec3(face_offsets[f]) * (14 * PIXEL),
                                    glm::vec2{1.F, 1.F}, sprite, face & 1 ? WHITE : tint[3],
                                    Face(f), 0);
+                            f = int(Face::z_neg);
+                            append(instances->squares,
+                                   pos - glm::vec3(face_offsets[f]) * (14 * PIXEL),
+                                   glm::vec2{1.F, 1.F}, sprite, tint[f],
+                                   Face(f), 0);
                         }
                     } break;
                     }
@@ -343,7 +353,7 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
                 append(instances->squares, pos + glm::vec3(face_offsets[r]) * (0.5 - 4 * PIXEL),
                        size, face_sprite, tint[r_b], Face(r_b), 0);
                 // top
-                const bool force_visible = hide_above_level and object.pos.z == int(player_pos.z);
+                const bool force_visible = false and object.pos.z == int(player_pos.z);
                 auto top_sprite = toFRect(glm::vec2(sprite.x, sprite.y), {32, 4});
                 if (force_visible or
                     isVisible(glm::ivec3(pos + glm::vec3(face_offsets[int(Face::z_pos)])),
@@ -402,15 +412,15 @@ void Map::update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logi
 
             bool floor_check =
                 from_top and above != nullptr and above->type == Cell::Type::surface and
-                (!above->hasCeiling() or (hide_above_level and (voxel.z + 1) == player_pos.z)) and
+                (!above->hasCeiling() or (false and (voxel.z + 1) == player_pos.z)) and
                 above->hasFloor();
 
-            bool skip_ceiling = cell != nullptr and hide_above_level and
+            bool skip_ceiling = cell != nullptr and false and
                                 cell->type == Cell::Type::surface and voxel.z == player_pos.z;
 
             if (cell != nullptr and (!cell->isEmpty() or floor_check) and
                 (cell->type != Cell::Type::surface or cell->hasCeiling()) and
-                !(hide_above_level and goal.z > player_pos.z) and !skip_ceiling) {
+                !(false and goal.z > player_pos.z) and !skip_ceiling) {
                 if (floor_check) floor = true;
                 found = true;
                 break;

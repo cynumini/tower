@@ -144,6 +144,8 @@ struct Engine {
     std::array<ButtonState, 8> mouse_button_state;
     Font default_font;
     glm::ivec2 mouse;
+    glm::ivec2 mouse_rel;
+    bool relative_mouse_mode = false;
     glm::ivec2 screen;
     bool running;
     float dt;
@@ -151,6 +153,7 @@ struct Engine {
     Color clear_color;
     Camera camera;
     Times times;
+    SDL_Window *window;
 };
 
 extern Engine engine; // NOLINT
@@ -172,8 +175,8 @@ inline float measureText(std::string_view text, float size = 10.0F) {
 void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ivec2 position,
               float size, Color color, Font font);
 
-inline void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ivec2 position,
-                     float size = 10.0F, Color color = WHITE) {
+inline void drawText(FixedVector<UIInstance> &renderer, std::string_view text,
+                     glm::ivec2 position, float size = 10.0F, Color color = WHITE) {
     drawText(renderer, text, position, size, color, engine.default_font);
 }
 
@@ -181,3 +184,5 @@ void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, glm:
                      float size, Color color, Font font);
 
 void updateEngineUI(FixedVector<UIInstance> &instances);
+
+void toggleRelativeMouseMode();

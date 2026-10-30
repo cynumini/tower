@@ -80,7 +80,6 @@ struct Map {
     std::vector<Chunk> chunks;
     std::vector<MaterialInfo> materials;
     MaterialMap material_ids;
-    bool hide_above_level = false;
     glm::ivec2 center;
     int range = 1;
 

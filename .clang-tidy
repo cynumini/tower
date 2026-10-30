@@ -1,6 +1,7 @@
 Checks: >
   *,
   -altera-struct-pack-align,
+  -readability-implicit-bool-conversion,
   -cppcoreguidelines-pro-type-union-access,
   -readability-function-cognitive-complexity,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,

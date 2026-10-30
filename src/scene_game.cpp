@@ -145,7 +145,8 @@ static struct Animation {
 
     SDL_FRect get(uint8_t index) const {
         SDL_assert(index < frames);
-        SDL_FRect result = toFRect({origin.x + (origin.w * index), origin.y}, {origin.w, origin.h});
+        SDL_FRect result =
+            toFRect({origin.x + (origin.w * index), origin.y}, {origin.w, origin.h});
         if (flip_x) result.x += result.w, result.w *= -1;
         return result;
     }
@@ -258,6 +259,14 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
     engine.camera.pitch += pitch * 5;
     engine.camera.roll += roll * 5;
 
+    constexpr float mouse_sensitivity = 0.15F;
+    if (engine.relative_mouse_mode) {
+        engine.camera.yaw -= engine.mouse_rel.x * mouse_sensitivity;
+        engine.camera.pitch -= engine.mouse_rel.y * mouse_sensitivity;
+    }
+
+    // engine.camera.pitch = glm::clamp(pitch, glm::radians(-89.F), glm::radians(89.F));
+
     // TODO: way to exit house
     // TODO: move NPC to house
     // TODO: don't spawn zombie into house
@@ -277,11 +286,6 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
             switch (entity.kind) {
             case Entity::Kind::player: {
                 auto cell = map.getCell(entity.pos + glm::vec3(0.5, 0.5, 0));
-                if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
-                    map.hide_above_level = true;
-                } else {
-                    map.hide_above_level = false;
-                }
 
                 if (isKeyJustPressed(Scancode::f)) {
                     spell->alive = true;
@@ -331,10 +335,6 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
                     isKeyJustReleased(Scancode::pageup) - isKeyJustReleased(Scancode::pagedown);
                 player->pos.z =
                     std::clamp(player->pos.z + level_diff, 1.0F, float(MAP_Z_LEN - 1));
-
-                if (isKeyJustReleased(Scancode::kp_5)) {
-                    map.hide_above_level = !map.hide_above_level;
-                }
 
                 uint8_t frame = 0;
                 if (length(velocity) > 0.0F) {
@@ -538,10 +538,11 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
     map.update(instances, player->pos, logical);
 
     auto a = WorldInstance{};
-    //append(instances->triangles, glm::vec3{0, 5, 0}, glm::vec2{1, 1}, engine.sprites.at("solid"),
-      //     RED, Face::z_pos, 0);
+    // append(instances->triangles, glm::vec3{0, 5, 0}, glm::vec2{1, 1},
+    // engine.sprites.at("solid"),
+    //      RED, Face::z_pos, 0);
     append(instances->triangles, glm::vec3{0, -5, 0}, glm::vec2{1, 1}, engine.sprites.at("solid"),
-               RED, Face::z_pos, 0);
+           RED, Face::z_pos, 0);
 
     // debug (show collision)
     if (engine.debug_mode) {

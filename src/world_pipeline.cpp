@@ -181,7 +181,7 @@ void World::draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render
     ubo.view = glm::rotate(glm::mat4(1.F), glm::radians(-camera->pitch), glm::vec3(1, 0, 0));
     ubo.view = glm::rotate(ubo.view, glm::radians(-camera->roll), glm::vec3(0, 1, 0));
     ubo.view = glm::rotate(ubo.view, glm::radians(-camera->yaw), glm::vec3(0, 0, 1));
-    ubo.view = glm::translate(ubo.view, {-camera->pos.x, -camera->pos.y, -camera->pos.z - 1});
+    ubo.view = glm::translate(ubo.view, {-camera->pos.x, -camera->pos.y, -camera->pos.z - 0.8});
 
     ubo.yaw = glm::radians(camera->yaw);
     ubo.atlas_size = {float(atlas.w), float(atlas.h)};
