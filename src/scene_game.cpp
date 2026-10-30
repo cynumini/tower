@@ -11,7 +11,7 @@
 
 static struct Quest {
     enum : uint8_t { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
-    FVector3 pos;
+    glm::vec3 pos;
     const char *line[Quest::REWARDED];
     uint counter;
 } quest = {
@@ -52,13 +52,13 @@ struct Entity {
     float speed{};
     float angle{};
     int hp{};
-    FVector2 direction{};
+    glm::vec2 direction{};
     Timer timer{};
-    FVector3 pos{};
-    FVector2 size{};
-    FRect sprite{};
-    FRect interaction_rel{};
-    FRect collision_rel{};
+    glm::vec3 pos{};
+    glm::vec2 size{};
+    SDL_FRect sprite{};
+    SDL_FRect interaction_rel{};
+    SDL_FRect collision_rel{};
     enum class Kind : uint8_t { player, enemy, attack, spell, npc, building } kind{};
     enum class Body : uint8_t { none, movable, immovable } body{};
     uint8_t frame{};
@@ -66,35 +66,35 @@ struct Entity {
     bool invincible{};
     Color tint{};
 
-    static Entity create(Kind kind, FRect sprite, bool alive = false, FVector3 pos = {}) {
+    static Entity create(Kind kind, SDL_FRect sprite, bool alive = false, glm::vec3 pos = {}) {
         return {.pos = pos,
-                .size = FVector2(sprite.w, sprite.h) / 64,
+                .size = glm::vec2(sprite.w, sprite.h) / 64,
                 .sprite = sprite,
                 .kind = kind,
                 .alive = alive,
                 .tint = WHITE};
     }
 
-    void addCollision(Body body, FRect rect) {
+    void addCollision(Body body, SDL_FRect rect) {
         this->body = body;
         collision_rel = rect;
     }
 
     bool isInteractable() const { return interaction_rel.w != 0 and interaction_rel.h != 0; }
 
-    FRect getInteraction() const {
+    SDL_FRect getInteraction() const {
         return toFRect({pos.x + interaction_rel.x, pos.y + interaction_rel.y},
                        {interaction_rel.w, interaction_rel.h});
     }
 
     bool isSolid() const { return collision_rel.w != 0 and collision_rel.h != 0; }
 
-    FRect getCollision() {
+    SDL_FRect getCollision() {
         return toFRect({pos.x + collision_rel.x, pos.y + collision_rel.y},
                        {collision_rel.w, collision_rel.h});
     }
 
-    void takeDamage(FVector2 direction) {
+    void takeDamage(glm::vec2 direction) {
         this->direction = direction;
         const float KNOCKBACK_SPEED = 10;
         speed = KNOCKBACK_SPEED;
@@ -111,13 +111,13 @@ struct Entity {
         }
     }
 
-    FRect rect() { return toFRect(toFVector2(pos), {size.x, size.y}); }
+    SDL_FRect rect() { return toFRect(glm::vec2(pos), {size.x, size.y}); }
 };
 
 static Inventory inventory;
 
 // Init
-static FRect solid;
+static SDL_FRect solid;
 static bool pause = false;
 static bool interaction_frame = false;
 
@@ -129,10 +129,10 @@ static uint curr_line = 0;
 // Animation
 static struct Animation {
     uint8_t frames;
-    FRect origin;
+    SDL_FRect origin;
     bool flip_x;
 
-    void init(FRect texture, uint8_t frames, bool flip_x = false) {
+    void init(SDL_FRect texture, uint8_t frames, bool flip_x = false) {
         this->flip_x = flip_x;
         this->frames = frames;
         this->origin = toFRect(
@@ -143,9 +143,9 @@ static struct Animation {
             {texture.w / frames, texture.h});
     }
 
-    FRect get(uint8_t index) const {
+    SDL_FRect get(uint8_t index) const {
         SDL_assert(index < frames);
-        FRect result = toFRect({origin.x + (origin.w * index), origin.y}, {origin.w, origin.h});
+        SDL_FRect result = toFRect({origin.x + (origin.w * index), origin.y}, {origin.w, origin.h});
         if (flip_x) result.x += result.w, result.w *= -1;
         return result;
     }
@@ -219,7 +219,7 @@ void SceneGame::init() {
         auto &entity = entities.emplace_back(Entity::create(
             Kind::npc, engine.sprites.at("character"), true, {25.5, 9.5, SEA_LEVEL}));
         entity.addCollision(Body::immovable, toFRect({0.0F, 0.0F}, {0.5F, 0.5F}));
-        entity.interaction_rel = FRect(0, 0, 1, 1);
+        entity.interaction_rel = SDL_FRect(0, 0, 1, 1);
     }
 
     // {
@@ -247,7 +247,7 @@ void SceneGame::init() {
     initMap(map, player->pos);
 }
 
-void SceneGame::update(WorldInstances *instances, FVector2 logical) {
+void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
     player_action = false;
 
     float yaw = isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6);
@@ -276,7 +276,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
         if (!pause) {
             switch (entity.kind) {
             case Entity::Kind::player: {
-                auto cell = map.getCell(entity.pos + FVector3(0.5, 0.5, 0));
+                auto cell = map.getCell(entity.pos + glm::vec3(0.5, 0.5, 0));
                 if (cell->type == Cell::Type::surface and cell->hasCeiling()) {
                     map.hide_above_level = true;
                 } else {
@@ -321,11 +321,11 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                         }
                     }
                 }
-                const FVector2 velocity = rotate(
-                    normalize(FVector2{
+                const glm::vec2 velocity = rotate(
+                    normalize(glm::vec2{
                         float(isKeyPressed(Scancode::d)) - float(isKeyPressed(Scancode::a)),
                         float(isKeyPressed(Scancode::w)) - float(isKeyPressed(Scancode::s))}),
-                    deg2rad(engine.camera.yaw));
+                    glm::radians(engine.camera.yaw));
 
                 int level_diff =
                     isKeyJustReleased(Scancode::pageup) - isKeyJustReleased(Scancode::pagedown);
@@ -357,7 +357,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                     entity.timer.reset();
                 }
 
-                auto d = rotate(entity.direction, deg2rad(-engine.camera.yaw));
+                auto d = rotate(entity.direction, glm::radians(-engine.camera.yaw));
                 if (d.y > 0) {
                     entity.sprite = player_up.get(frame);
                 } else if (d.y < 0) {
@@ -402,7 +402,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             case Entity::Kind::attack: {
                 entity.direction = player->direction;
                 entity.angle = atan2f(player->direction.y, player->direction.x);
-                entity.pos = player->pos + entity.direction * 0.5F;
+                entity.pos = player->pos + glm::vec3(entity.direction * 0.5F, 0.F);
                 if (entity.timer.advanceAndCheck(engine.dt)) entity.alive = false;
                 break;
             }
@@ -430,7 +430,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                 auto q = entities | std::views::filter([](Entity &other) {
                              return other.isSolid() and other.alive;
                          });
-                FVector2 velocity = entity.direction * engine.dt * entity.speed;
+                glm::vec2 velocity = entity.direction * engine.dt * entity.speed;
                 entity.pos.x += velocity.x;
 
                 for (Entity &other : q) {
@@ -464,12 +464,12 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
                     }
                 }
             } else {
-                entity.pos += entity.direction * engine.dt * entity.speed;
+                entity.pos += glm::vec3(entity.direction * engine.dt * entity.speed, 0);
             }
         }
     }
 
-    FVector3 pos_offset = {0.5, 0.5, 0.5};
+    glm::vec3 pos_offset = {0.5, 0.5, 0.5};
     for (auto &entity : entities) {
         if (!entity.alive) continue;
         bool use_default = true;
@@ -494,7 +494,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
         }
     }
 
-    engine.camera.pos = player->pos + FVector3(0.5, 0.5, 0.0);
+    engine.camera.pos = player->pos + glm::vec3(0.5, 0.5, 0.0);
 
     // current location
     {
@@ -531,23 +531,23 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
             sign = '?';
             if (quest.status == Quest::ACTIVE) color = WHITE;
         }
-        drawWorldSymbol(instances->squares, sign, quest.pos + FVector3{0.5, 0.5, 1.25F}, SIZE,
+        drawWorldSymbol(instances->squares, sign, quest.pos + glm::vec3{0.5, 0.5, 1.25F}, SIZE,
                         color, engine.default_font);
     }
 
     map.update(instances, player->pos, logical);
 
     auto a = WorldInstance{};
-    //append(instances->triangles, FVector3{0, 5, 0}, FVector2{1, 1}, engine.sprites.at("solid"),
+    //append(instances->triangles, glm::vec3{0, 5, 0}, glm::vec2{1, 1}, engine.sprites.at("solid"),
       //     RED, Face::z_pos, 0);
-    append(instances->triangles, FVector3{0, -5, 0}, FVector2{1, 1}, engine.sprites.at("solid"),
+    append(instances->triangles, glm::vec3{0, -5, 0}, glm::vec2{1, 1}, engine.sprites.at("solid"),
                RED, Face::z_pos, 0);
 
     // debug (show collision)
     if (engine.debug_mode) {
         // auto home = locations->rect;
         // instances->append({
-        //     .position = FVector3(home.position(), 0),
+        //     .position = glm::vec3(home.position(), 0),
         //     .size = home.size(),
         //     .uv = solid,
         //     .color = 0xff00FF7f,
@@ -556,7 +556,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
         // });
 
         for (auto &entity : entities) {
-            auto pos = entity.pos + FVector3(0.5, 0.5, 0.5);
+            auto pos = entity.pos + glm::vec3(0.5, 0.5, 0.5);
             if (!entity.alive) continue;
 
             if (entity.kind == Entity::Kind::attack) {
@@ -566,7 +566,7 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
 
             if (entity.isInteractable()) {
                 auto collision = entity.getInteraction();
-                append(instances->squares, pos, FVector2{collision.w, collision.h}, solid,
+                append(instances->squares, pos, glm::vec2{collision.w, collision.h}, solid,
                        toColor(0xff00007f), Face::z_pos, entity.angle
 
                 );
@@ -574,14 +574,14 @@ void SceneGame::update(WorldInstances *instances, FVector2 logical) {
 
             if (entity.isSolid()) {
                 auto collision = entity.getCollision();
-                append(instances->squares, pos, FVector2{collision.w, collision.h}, solid,
+                append(instances->squares, pos, glm::vec2{collision.w, collision.h}, solid,
                        toColor(0x0000ff7f), Face::z_pos, entity.angle);
             }
         }
     };
 }
 
-void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, Vector2 render_size) {
+void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, glm::ivec2 render_size) {
 
     while (dialog) {
         std::string_view text = {};
@@ -606,15 +606,15 @@ void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, Vector2
                 break;
             }
         }
-        FVector2 pos = {0.0F, render_size.y - 128.F};
+        glm::vec2 pos = {0.0F, render_size.y - 128.F};
         append(instances, UIInstance{
                               .position = pos,
                               .size = {float(render_size.x), 128.0F},
                               .uv = solid,
                               .color = BLACK,
                           });
-        append(instances, pos, FVector2{128, 128}, engine.sprites.at("alice_portrait"), WHITE);
-        drawText(instances, text, toVector2(pos + FVector2(128 + 4, 4)));
+        append(instances, pos, glm::vec2{128, 128}, engine.sprites.at("alice_portrait"), WHITE);
+        drawText(instances, text, glm::ivec2(pos + glm::vec2(128 + 4, 4)));
         break;
     }
     if (show_location.active) {

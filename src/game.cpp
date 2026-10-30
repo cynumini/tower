@@ -5,7 +5,7 @@
 
 void initGame(Game &self) { self.scene_game.init(); }
 
-void updateGame(Game &self, WorldInstances *instances, FVector2 logical) {
+void updateGame(Game &self, WorldInstances *instances, glm::vec2 logical) {
     switch (self.current_scene) {
     case Scene::menu:
         break;
@@ -15,7 +15,7 @@ void updateGame(Game &self, WorldInstances *instances, FVector2 logical) {
     }
 }
 
-void updateGameUI(Game &self, FixedVector<UIInstance> &instances, Vector2 render_size) {
+void updateGameUI(Game &self, FixedVector<UIInstance> &instances, glm::ivec2 render_size) {
     switch (self.current_scene) {
     case Scene::menu: {
         std::string_view text_play = "Play (ENTER)";
@@ -26,11 +26,11 @@ void updateGameUI(Game &self, FixedVector<UIInstance> &instances, Vector2 render
         const int height = 26;
         drawText(
             instances, text_play,
-            {.x = render_size.x / 2 - text_play_w / 2, .y = render_size.y / 2 - height / 2 + y});
+            {render_size.x / 2 - text_play_w / 2,  render_size.y / 2 - height / 2 + y});
         y += 12;
         drawText(
             instances, text_exit,
-            {.x = render_size.x / 2 - text_exit_w / 2, .y = render_size.y / 2 - height / 2 + y});
+            {render_size.x / 2 - text_exit_w / 2,  render_size.y / 2 - height / 2 + y});
 
         if (isKeyJustPressed(Scancode::enter)) {
             self.current_scene = Scene::game;

@@ -1,5 +1,5 @@
 #include "engine.hpp"
-#include "math.hpp"
+#include "rect.hpp"
 
 bool isKeyPressed(Scancode key) { return engine.keyboard_state[int(key)]; }
 
@@ -21,24 +21,24 @@ float measureText(std::string_view text, float size, Font font) {
     return x - char_size;
 }
 
-void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vector2 pos, float size,
+void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ivec2 pos, float size,
               Color color, Font font) {
-    auto char_pos = toFVector2(pos);
+    glm::vec2 char_pos = pos;
     for (uint8_t c : text) {
         const int i = c - ' ';
-        FVector2 texture_offset = Vector2(i % 16, i / 16) * font.size;
-        append(renderer, char_pos, FVector2(size, size),
-               toFRect(fRectPos(font.texture) + texture_offset, {.x = font.size, .y = font.size}),
+        glm::vec2 texture_offset = glm::vec2(i % 16, i / 16) * font.size;
+        append(renderer, char_pos, glm::vec2(size, size),
+               toFRect(fRectPos(font.texture) + texture_offset, {font.size, font.size}),
                color);
         char_pos.x += (float(font.widths[c]) + 1) * (size / font.size);
     }
 }
 
-void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, FVector3 pos,
+void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, glm::vec3 pos,
                      float size, Color color, Font font) {
     const int i = character - ' ';
-    FVector2 texture_offset = Vector2{.x = i % 16, .y = i / 16} * font.size;
-    FVector2 char_size = {.x = float(font.widths[uint8_t(character)]), .y = font.size};
+    glm::vec2 texture_offset = glm::vec2{i % 16, i / 16} * font.size;
+    glm::vec2 char_size = {float(font.widths[uint8_t(character)]), font.size};
     append(instances, pos, (char_size * size) / (font.size * font.size),
            toFRect(fRectPos(font.texture) + texture_offset, char_size), color, Face::billboard,
            0);
@@ -47,7 +47,7 @@ void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, FVec
 // updateEngineUI
 struct DebugDraw {
     FixedVector<UIInstance> &instances;
-    Vector2 offset;
+    glm::ivec2 offset;
 };
 
 static void debugDrawLine(DebugDraw &dd, std::string_view text) {
@@ -59,7 +59,7 @@ void updateEngineUI(FixedVector<UIInstance> &instances) {
     if (isKeyJustPressed(Scancode::escape)) engine.running = true;
     if (isKeyJustPressed(Scancode::f3)) engine.debug_mode = !engine.debug_mode;
     if (engine.debug_mode) {
-        DebugDraw dd = {.instances = instances, .offset = {.x = 2, .y = 2}};
+        DebugDraw dd = {.instances = instances, .offset = {2,2}};
         debugDrawLine(dd, std::format("FPS: {}", engine.times.fps));
         debugDrawLine(dd, std::format("{:.2f}ms", engine.times.ms));
         debugDrawLine(dd, std::format("Screen: {}x{}", engine.screen.x, engine.screen.y));

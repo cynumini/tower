@@ -2,13 +2,15 @@
 
 #include "color.hpp"
 #include "fixed_vector.hpp"
-#include "math.hpp"
 #include "skn_sdl.cpp"
 
+#include <glm/ext.hpp>
+#include <glm/glm.hpp>
+
 struct UIInstance {
-    FVector2 position;
-    FVector2 size;
-    FRect uv;
+    glm::vec2 position;
+    glm::vec2 size;
+    SDL_FRect uv;
     Color color;
 };
 
@@ -25,14 +27,14 @@ struct UI {
     uint instances_len;
     uint prev_instances_len;
 
-    FVector2 logical;
+    glm::vec2 logical;
 
     struct UBO {
-        Mat4 projection;
-        FVector2 atlas_size;
+        glm::mat4 projection;
+        glm::vec2 atlas_size;
     } ubo;
 
-    void resize(FVector2 size);
+    void resize(glm::vec2 size);
 
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format);
 

@@ -4,14 +4,14 @@
 
 
 
-void UI::resize(FVector2 size) {
+void UI::resize(glm::vec2 size) {
     logical.x = 640, logical.y = 360;
     if (size.x / size.y < 16.0F / 9.0F) {
         logical.y = size.y * logical.x / size.x;
     } else {
         logical.x = size.x * logical.y / size.y;
     }
-    ubo.projection = Mat4::ortho(0, logical.x, logical.y, 0, 0, 1);
+    ubo.projection = glm::ortho(0.F, logical.x, logical.y, 0.F, 0.F, 1.F);
 }
 
 void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
@@ -26,7 +26,7 @@ void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat sh
     SDL_assert(createinfo.fragment_shader);
 
     const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-        {0, sizeof(FVector2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
+        {0, sizeof(glm::vec2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
         {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
     createinfo.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
@@ -73,7 +73,7 @@ void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat sh
 }
 
 void UI::uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
-    FVector2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+    glm::vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     int16_t indices[6]{0, 1, 2, 0, 2, 3};
 
     vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));

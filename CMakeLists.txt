@@ -60,6 +60,7 @@ add_executable(tower
 target_compile_definitions(tower PRIVATE
     GLM_FORCE_RIGHT_HANDED
     GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_ENABLE_EXPERIMENTAL
 )
 
 target_precompile_headers(tower PRIVATE

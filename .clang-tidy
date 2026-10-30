@@ -1,6 +1,7 @@
 Checks: >
   *,
   -altera-struct-pack-align,
+  -cppcoreguidelines-pro-type-union-access,
   -readability-function-cognitive-complexity,
   -cppcoreguidelines-pro-bounds-pointer-arithmetic,
   -cppcoreguidelines-avoid-const-or-ref-data-members,

@@ -7,8 +7,8 @@ struct Game;
 
 struct SceneGame {
     void init();
-    void update(WorldInstances *instances, FVector2 logical);
-    void updateUI(Game *game, FixedVector<UIInstance> &instances, Vector2 render_size);
+    void update(WorldInstances *instances, glm::vec2 logical);
+    void updateUI(Game *game, FixedVector<UIInstance> &instances, glm::ivec2 render_size);
     void deinit();
 };
 
@@ -20,6 +20,6 @@ struct Game {
 };
 
 void initGame(Game &self);
-void updateGame(Game &self, WorldInstances *instances, FVector2 logical);
-void updateGameUI(Game &self, FixedVector<UIInstance> &instances, Vector2 render_size);
+void updateGame(Game &self, WorldInstances *instances, glm::vec2 logical);
+void updateGameUI(Game &self, FixedVector<UIInstance> &instances, glm::ivec2 render_size);
 void deinitGame(Game &self);

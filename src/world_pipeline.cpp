@@ -1,8 +1,10 @@
 #include "world_pipeline.hpp"
 
+
+
 #include "../build/shaders.hpp"
 
-void World::resize(FVector2 size) {
+void World::resize(glm::vec2 size) {
     constexpr float blocks = 15;
     logical.y = blocks;
     logical.x = logical.y * 16.0F / 9.0F;
@@ -27,7 +29,7 @@ void World::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat
     SDL_assert(createinfo.fragment_shader);
 
     const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
-        {0, sizeof(FVector2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
+        {0, sizeof(glm::vec2), SDL_GPU_VERTEXINPUTRATE_VERTEX, 0},
         {1, sizeof(Instance), SDL_GPU_VERTEXINPUTRATE_INSTANCE, 0}};
     createinfo.vertex_input_state.vertex_buffer_descriptions = vertex_buffer_descriptions;
     createinfo.vertex_input_state.num_vertex_buffers = SDL_arraysize(vertex_buffer_descriptions);
@@ -79,8 +81,8 @@ void World::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat
 }
 
 void World::uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) {
-    FVector2 vertices_squre[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
-    FVector2 vertices_triangle[3] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}};
+    glm::vec2 vertices_squre[4] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}, {-0.5f, 0.5f}};
+    glm::vec2 vertices_triangle[3] = {{-0.5f, -0.5f}, {0.5f, -0.5f}, {0.5f, 0.5f}};
     int16_t indices[6]{0, 1, 2, 0, 2, 3};
 
     vertex_buffer_squre =
@@ -181,7 +183,7 @@ void World::draw(SDL_GPUCommandBuffer *command_buffer, SDL_GPURenderPass *render
     ubo.view = glm::rotate(ubo.view, glm::radians(-camera->yaw), glm::vec3(0, 0, 1));
     ubo.view = glm::translate(ubo.view, {-camera->pos.x, -camera->pos.y, -camera->pos.z - 1});
 
-    ubo.yaw = deg2rad(camera->yaw);
+    ubo.yaw = glm::radians(camera->yaw);
     ubo.atlas_size = {float(atlas.w), float(atlas.h)};
 
     SDL_PushGPUVertexUniformData(command_buffer, 0, &ubo, sizeof(UBO));

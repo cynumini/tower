@@ -3,7 +3,6 @@
 #include "color.hpp"
 #include "fixed_vector.hpp"
 #include "font.hpp"
-#include "math.hpp"
 #include "ui_pipeline.hpp"
 #include "world_pipeline.hpp"
 
@@ -139,13 +138,13 @@ struct Times {
 
 struct Engine {
     std::vector<Mod> mods;
-    std::unordered_map<std::string, FRect> sprites;
+    std::unordered_map<std::string, SDL_FRect> sprites;
     const bool *keyboard_state;
     std::array<ButtonState, 512> key_state;
     std::array<ButtonState, 8> mouse_button_state;
     Font default_font;
-    Vector2 mouse;
-    Vector2 screen;
+    glm::ivec2 mouse;
+    glm::ivec2 screen;
     bool running;
     float dt;
     bool debug_mode;
@@ -170,15 +169,15 @@ inline float measureText(std::string_view text, float size = 10.0F) {
     return measureText(text, size, engine.default_font);
 }
 
-void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vector2 position,
+void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ivec2 position,
               float size, Color color, Font font);
 
-inline void drawText(FixedVector<UIInstance> &renderer, std::string_view text, Vector2 position,
+inline void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ivec2 position,
                      float size = 10.0F, Color color = WHITE) {
     drawText(renderer, text, position, size, color, engine.default_font);
 }
 
-void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, FVector3 pos,
+void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, glm::vec3 pos,
                      float size, Color color, Font font);
 
 void updateEngineUI(FixedVector<UIInstance> &instances);

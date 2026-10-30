@@ -20,6 +20,6 @@ constexpr auto DefaultFontWidths = [] {
 }();
 
 
-Font createDefaultFont(FRect texture) {
+Font createDefaultFont(SDL_FRect texture) {
     return {.widths = DefaultFontWidths, .size = 10.F, .texture = texture};
 }

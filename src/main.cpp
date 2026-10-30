@@ -4,6 +4,7 @@
 #include <SDL3/SDL_main.h>
 
 #include "skn_sdl.cpp"
+#include "rect.hpp"
 
 #include "game.hpp"
 
@@ -26,12 +27,12 @@ struct AtlasItem {
     SDL_Surface *surface;
 };
 
-static Vector2 last_size;
+static glm::ivec2 last_size;
 
-void resize(Vector2 size) {
+void resize(glm::ivec2 size) {
     if (size == last_size) return;
-    world.resize(toFVector2(size));
-    ui.resize(toFVector2(size));
+    world.resize(glm::vec2(size));
+    ui.resize(glm::vec2(size));
 
     if (depth) SDL_ReleaseGPUTexture(device, depth);
     SDL_GPUTextureCreateInfo depth_info = {
@@ -326,7 +327,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         {
             auto upload = ui.beginUpload(device, instance_transfer_buffer);
 
-            updateGameUI(game, upload.instances, toVector2(ui.logical));
+            updateGameUI(game, upload.instances, glm::ivec2(ui.logical));
             updateEngineUI(upload.instances);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;

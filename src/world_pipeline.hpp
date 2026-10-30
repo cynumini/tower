@@ -2,7 +2,6 @@
 
 #include "color.hpp"
 #include "fixed_vector.hpp"
-#include "math.hpp"
 #include "skn_sdl.cpp"
 
 #include <glm/ext.hpp>
@@ -14,13 +13,13 @@ struct Camera {
     float pitch = 60;
     float yaw = 45;
     float roll = 0;
-    FVector3 pos;
+    glm::vec3 pos;
 };
 
 struct WorldInstance {
-    FVector3 position;
-    FVector2 size;
-    FRect uv;
+    glm::vec3 position;
+    glm::vec2 size;
+    SDL_FRect uv;
     Color color;
     Face face;
     float rotation;
@@ -47,16 +46,16 @@ struct World {
     uint prev_squares_len;
     uint prev_triangles_len;
 
-    FVector2 logical;
+    glm::vec2 logical;
 
     struct UBO {
         glm::mat4 view;
         glm::mat4 projection;
-        FVector2 atlas_size;
+        glm::vec2 atlas_size;
         float yaw;
     } ubo;
 
-    void resize(FVector2 size);
+    void resize(glm::vec2 size);
     void setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format);
     void uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass);
     void release(SDL_GPUDevice *device);

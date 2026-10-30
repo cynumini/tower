@@ -22,9 +22,8 @@ Output main(Input input) {
     Output output;
 
     output.position = mul(
-        float4(input.vertex_position * input.size + input.instance_position, 0, 1),
-        projection
-    );
+        projection,
+        float4(input.vertex_position * input.size + input.instance_position, 0, 1));
 
     float2 uv = input.vertex_position;
     // float2 padding = 0.5F / atlas_size;

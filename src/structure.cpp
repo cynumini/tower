@@ -32,7 +32,7 @@ void structureInit(std::vector<Structure> &structures, MaterialMap map) {
         while (true) {
             int x = SDL_rand(16);
             int y = SDL_rand(16);
-            Vector3 pos = {x, y, 0};
+            glm::ivec3 pos = {x, y, 0};
 
             if (!road.data[x][y][0].isEmpty(true)) continue;
             bool ok = true;
@@ -64,9 +64,9 @@ void structureInit(std::vector<Structure> &structures, MaterialMap map) {
             }
         }
     }
-    house.data[3][0][0] = Cell::frame  (map.at("wall"), Rotation::sn);
+    house.data[3][0][0] = Cell::frame(map.at("wall"), Rotation::sn);
     house.data[5][0][0] = Cell::surface(map.at("wood"), map.at("wood"));
-    house.data[7][0][0] = Cell::frame  (map.at("wall"), Rotation::sn);
+    house.data[7][0][0] = Cell::frame(map.at("wall"), Rotation::sn);
     house.objects.emplace_back(Object::door(map, {5, 0, 0}, Rotation::ns));
     house.objects.emplace_back(Object::wall({3, 0, 0}, map.at("window"), Rotation::ns));
     house.objects.emplace_back(Object::wall({7, 0, 0}, map.at("window"), Rotation::ns));
@@ -95,15 +95,15 @@ void structureInit(std::vector<Structure> &structures, MaterialMap map) {
 
         for (const auto &object : data["objects"]) {
             auto type = Object::types.at(std::string(object["type"]));
-            Vector3 pos = {
-                .x = object["pos"]["x"],
-                .y = object["pos"]["y"],
-                .z = object["pos"]["z"],
+            glm::ivec3 pos = {
+                object["pos"]["x"],
+                object["pos"]["y"],
+                object["pos"]["z"],
             };
             switch (type) {
             case Object::Type::door:
-                structure.objects.emplace_back(Object::door(map, 
-                    {pos.x, pos.y, pos.z}, rotations.at(std::string(object["rotation"]))));
+                structure.objects.emplace_back(Object::door(
+                    map, {pos.x, pos.y, pos.z}, rotations.at(std::string(object["rotation"]))));
                 break;
             case Object::Type::wall:
             case Object::Type::ore:

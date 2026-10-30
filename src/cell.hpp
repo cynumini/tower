@@ -1,6 +1,5 @@
 #pragma once
 
-#include "math.hpp"
 #include "world_pipeline.hpp"
 
 // Material
@@ -10,7 +9,7 @@ constexpr uint8_t AIR = 0;
 
 struct MaterialInfo {
     std::string key;
-    FRect sprite;
+    SDL_FRect sprite;
 };
 
 using MaterialMap = std::unordered_map<std::string, MaterialId>;
@@ -97,27 +96,27 @@ struct Cell {
     inline bool hasFloor() const { return a != AIR; }
     inline bool hasCeiling() const { return b != AIR; }
 
-    inline FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::block);
         return materials[a].sprite;
     }
 
-    inline FRect getFrameSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getFrameSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::frame);
         return materials[a].sprite;
     }
 
-    inline FRect getSlopeSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getSlopeSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::slope);
         return materials[a].sprite;
     }
 
-    inline FRect getFloorSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getFloorSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::surface);
         return materials[a].sprite;
     }
 
-    inline FRect getCeilingSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getCeilingSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::surface);
         return materials[b].sprite;
     }
@@ -137,26 +136,26 @@ struct Object {
     enum class Type { door, wall, ore, furnace };
     static const std::unordered_map<std::string_view, Type> types;
     Type type;
-    Vector3 pos;
+    glm::ivec3 pos;
     MaterialId material;
     Rotation rotation;
 
-    static Object door(const MaterialMap &map, Vector3 pos, Rotation rotation) {
+    static Object door(const MaterialMap &map, glm::ivec3 pos, Rotation rotation) {
         return {Type::door, pos, map.at("door"), rotation};
     }
-    static Object wall(Vector3 pos, MaterialId material, Rotation rotation) {
+    static Object wall(glm::ivec3 pos, MaterialId material, Rotation rotation) {
         return {Type::wall, pos, material, rotation};
     }
 
-    static Object ore(const MaterialMap &map, Vector3 pos) {
+    static Object ore(const MaterialMap &map, glm::ivec3 pos) {
         return {Type::ore, pos, map.at("iron_ore"), Rotation::sn};
     }
 
-    static Object furnace(const MaterialMap &map, Vector3 pos) {
+    static Object furnace(const MaterialMap &map, glm::ivec3 pos) {
         return {Type::furnace, pos, map.at("furnace"), Rotation::sn};
     }
 
-    inline FRect getSprite(const std::vector<MaterialInfo> &materials) const {
+    inline SDL_FRect getSprite(const std::vector<MaterialInfo> &materials) const {
         return materials[material].sprite;
     }
 };

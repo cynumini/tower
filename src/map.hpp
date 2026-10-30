@@ -1,6 +1,6 @@
 #pragma once
 
-#include "math.hpp"
+#include "rect.hpp"
 
 #include "world_pipeline.hpp"
 
@@ -51,12 +51,12 @@ static constexpr float PIXEL = 1.0F / float(PIXELS_PER_UNIT);
 
 // Chunk
 struct Chunk {
-    static constexpr Vector2 SIZE = {16, 16};
-    Vector2 index;
+    static constexpr glm::ivec2 SIZE = {16, 16};
+    glm::ivec2 index;
     Cell data[SIZE.x][SIZE.y][MAP_Z_LEN] = {};
     std::vector<Object> objects;
 
-    void init(MaterialMap map, Vector2 index) {
+    void init(MaterialMap map, glm::ivec2 index) {
         objects.reserve(256);
         this->index = index;
         for (int z = 0; z < MAP_Z_LEN; z++) {
@@ -81,32 +81,32 @@ struct Map {
     std::vector<MaterialInfo> materials;
     MaterialMap material_ids;
     bool hide_above_level = false;
-    Vector2 center;
+    glm::ivec2 center;
     int range = 1;
 
-    FRect selection_sprite;
-    FVector3 selection_pos;
+    SDL_FRect selection_sprite;
+    glm::vec3 selection_pos;
     bool selection = true;
 
     std::vector<Structure> structures;
 
-    static Vector2 indexFromPos(FVector3 pos);
-    static Vector2 indexFromPos(Vector3 pos);
-    static Vector3 posFromIndex(Vector2 index);
-    Cell *getCellRelative(Vector3 v, Vector2 chunk_index);
-    Cell *getCell(FVector3 pos);
-    bool isVisible(Vector3 v, Vector2 chunk_index, Face face);
-    void updateChunksAndApplyStructures(Vector2 new_center);
+    static glm::ivec2 indexFromPos(glm::vec3 pos);
+    static glm::ivec2 indexFromPos(glm::ivec3 pos);
+    static glm::ivec3 posFromIndex(glm::ivec2 index);
+    Cell *getCellRelative(glm::ivec3 v, glm::ivec2 chunk_index);
+    Cell *getCell(glm::vec3 pos);
+    bool isVisible(glm::ivec3 v, glm::ivec2 chunk_index, Face face);
+    void updateChunksAndApplyStructures(glm::ivec2 new_center);
     struct Ray {
-        FVector3 origin;
-        FVector3 direction;
+        glm::vec3 origin;
+        glm::vec3 direction;
     };
-    Ray screenToRay(FVector2 logical);
-    void update(WorldInstances *instances, FVector3 player_pos, FVector2 logical);
-    std::vector<FRect> getCollision(FVector3 pos);
+    Ray screenToRay(glm::vec2 logical);
+    void update(WorldInstances *instances, glm::vec3 player_pos, glm::vec2 logical);
+    std::vector<SDL_FRect> getCollision(glm::vec3 pos);
     Cell *getSelected();
-    Object *getObject(Vector3 pos);
+    Object *getObject(glm::ivec3 pos);
     Object *getSelectedObject();
-    void deleteObject(FVector3 pos);
+    void deleteObject(glm::vec3 pos);
     void deleteFloor();
 };
