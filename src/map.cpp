@@ -148,7 +148,7 @@ Map::Ray Map::screenToRay(glm::vec2 logical) {
         ndc = {0, 0};
     }
 
-    glm::mat4 inv_view_projection = glm::inverse(world.ubo.projection * world.ubo.view);
+    glm::mat4 inv_view_projection = glm::inverse(voxel.ubo.projection * voxel.ubo.view);
 
     glm::vec4 near_clip = {ndc.x, ndc.y, 0.F, 1.F};
     glm::vec4 far_clip = {ndc.x, ndc.y, 1.F, 1.F};

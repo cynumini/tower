@@ -34,7 +34,7 @@ void drawText(FixedVector<UIInstance> &renderer, std::string_view text, glm::ive
     }
 }
 
-void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, glm::vec3 pos,
+void drawWorldSymbol(FixedVector<VoxelInstance> &instances, char character, glm::vec3 pos,
                      float size, Color color, Font font) {
     const int i = character - ' ';
     glm::vec2 texture_offset = glm::vec2{i % 16, i / 16} * font.size;
@@ -72,10 +72,10 @@ void updateEngineUI(FixedVector<UIInstance> &instances) {
                                   engine.camera.pos.x, engine.camera.pos.y, engine.camera.pos.z));
         debugDrawLine(
             dd, std::format("UI instances: {}/{}", ui.prev_instances_len, UI::MAX_INSTANCES));
-        debugDrawLine(dd, std::format("World square instances: {}/{}", world.prev_squares_len,
-                                      World::MAX_INSTANCES / 2));
-        debugDrawLine(dd, std::format("World triangle instances: {}/{}", world.prev_triangles_len,
-                                      World::MAX_INSTANCES / 2));
+        debugDrawLine(dd, std::format("World square instances: {}/{}", voxel.prev_squares_len,
+                                      Voxel::MAX_INSTANCES / 2));
+        debugDrawLine(dd, std::format("World triangle instances: {}/{}", voxel.prev_triangles_len,
+                                      Voxel::MAX_INSTANCES / 2));
     }
 }
 

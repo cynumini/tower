@@ -15,9 +15,9 @@ int main(int argc, char *argv[]) {
     for (auto &input : inputs) {
         auto path = std::filesystem::path(input);
         std::ifstream file(path, std::ios::binary);
-        auto filename = path.filename().string();
+        auto filename = path.stem().string();
         std::ranges::replace(filename, '.', '_');
-        output_file << "\ninline constexpr std::array<std::uint8_t, "
+        output_file << "\ninline constexpr std::array<uint8_t, "
                     << std::filesystem::file_size(path) << "> " << filename << " = {\n   ";
         char c = 0;
         size_t i = 0;

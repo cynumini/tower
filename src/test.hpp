@@ -1,13 +1,15 @@
 #pragma once
 
-#include "game.hpp"
+#include "app.hpp"
+
+#include <ranges>
+#include <print>
 
 #include "inventory.hpp"
 #include "map.cpp"
+#include "player.hpp"
 
-#include <ranges>
 
-#include <print>
 
 static struct Quest {
     enum : uint8_t { AVAILABLE, ACTIVE, COMPLETED, REWARDED } status;
@@ -171,7 +173,7 @@ static struct ShowLocation {
     Timer timer;
 } show_location = {false, -1, -1, Timer::init(2)};
 
-void SceneGame::init() {
+void Test::init() {
     // globals
     inventory = createInventory();
     solid = engine.sprites.at("solid");
@@ -248,7 +250,7 @@ void SceneGame::init() {
     initMap(map, player->pos);
 }
 
-void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
+void Test::update(WorldInstances *instances, glm::vec2 logical) {
     player_action = false;
 
     float yaw = isKeyJustReleased(Scancode::kp_4) - isKeyJustReleased(Scancode::kp_6);
@@ -259,11 +261,7 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
     engine.camera.pitch += pitch * 5;
     engine.camera.roll += roll * 5;
 
-    constexpr float mouse_sensitivity = 0.15F;
-    if (engine.relative_mouse_mode) {
-        engine.camera.yaw -= engine.mouse_rel.x * mouse_sensitivity;
-        engine.camera.pitch -= engine.mouse_rel.y * mouse_sensitivity;
-    }
+    updatePlayer(aplayer);
 
     // engine.camera.pitch = glm::clamp(pitch, glm::radians(-89.F), glm::radians(89.F));
 
@@ -537,7 +535,7 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
 
     map.update(instances, player->pos, logical);
 
-    auto a = WorldInstance{};
+    auto a = VoxelInstance{};
     // append(instances->triangles, glm::vec3{0, 5, 0}, glm::vec2{1, 1},
     // engine.sprites.at("solid"),
     //      RED, Face::z_pos, 0);
@@ -582,7 +580,7 @@ void SceneGame::update(WorldInstances *instances, glm::vec2 logical) {
     };
 }
 
-void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, glm::ivec2 render_size) {
+void Test::updateUI(App *game, FixedVector<UIInstance> &instances, glm::ivec2 render_size) {
 
     while (dialog) {
         std::string_view text = {};
@@ -652,4 +650,4 @@ void SceneGame::updateUI(Game *game, FixedVector<UIInstance> &instances, glm::iv
     }
 };
 
-void SceneGame::deinit() {}
+void Test::deinit() {}

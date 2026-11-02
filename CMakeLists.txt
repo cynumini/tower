@@ -1,9 +1,17 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(tower CXX)
-set(CMAKE_CXX_STANDARD 26)
+set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+set(RENDER_BACKEND "VULKAN" CACHE STRING "Rendering backend")
+
+if(NOT RENDER_BACKEND STREQUAL "VULKAN")
+    message(FATAL_ERROR "Unsupported rendering backend: ${RENDER_BACKEND}")
+endif()
+
+add_compile_definitions(RENDER_BACKEND_VULKAN)
 
 # compile options
 set(COMPILE_OPTIONS
@@ -11,28 +19,30 @@ set(COMPILE_OPTIONS
   -Wextra
   -Wpedantic
   -fno-exceptions
-  # ignore
-  -Wno-missing-designated-field-initializers
 )
+
+# clang only
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  list(APPEND COMPILE_OPTIONS
+    -Wno-missing-designated-field-initializers
+  )
+endif()
 
 # shader_header_gen
 add_executable(shader_header_gen tools/shader_header_gen.cpp)
 target_compile_options(shader_header_gen PRIVATE ${COMPILE_OPTIONS})
 
 # shaders.hpp
-set(SHADERS ui.vert ui.frag world.vert world.frag)
+set(SHADERS ui.vert ui.frag voxel.vert voxel.frag world.vert world.frag)
 set(SHADER_OUTPUTS)
 set(SHADER_HEADER "${CMAKE_CURRENT_BINARY_DIR}/shaders.hpp")
 
 foreach(SHADER IN LISTS SHADERS)
   set(INPUT "${CMAKE_SOURCE_DIR}/${SHADER}.hlsl")
   set(SPV "${CMAKE_CURRENT_BINARY_DIR}/${SHADER}.spv")
-  set(DXIL "${CMAKE_CURRENT_BINARY_DIR}/${SHADER}.dxil")
   add_custom_command(OUTPUT ${SPV}
     COMMAND shadercross "${INPUT}" -o "${SPV}" DEPENDS "${INPUT}" VERBATIM)
-  add_custom_command(OUTPUT ${DXIL}
-    COMMAND shadercross "${INPUT}" -o "${DXIL}" DEPENDS "${INPUT}" VERBATIM)
-  list(APPEND SHADER_OUTPUTS "${SPV}" "${DXIL}")
+  list(APPEND SHADER_OUTPUTS "${SPV}")
 endforeach()
 
 add_custom_command(OUTPUT "${SHADER_HEADER}"
@@ -47,13 +57,19 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(glm CONFIG REQUIRED)
 
 add_executable(tower
-  src/font.cpp
+  src/app.cpp
   src/engine.cpp
+  src/font.cpp
+  src/game.cpp
   src/game.cpp
   src/inventory.cpp
   src/main.cpp
+  src/player.cpp
+  src/sdl.cpp
   src/structure.cpp
+  src/test.cpp
   src/ui_pipeline.cpp
+  src/voxel_pipeline.cpp
   src/world_pipeline.cpp
 )
 

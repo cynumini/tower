@@ -4,13 +4,12 @@
 #include <SDL3/SDL_main.h>
 
 #include "rect.hpp"
-#include "skn_sdl.cpp"
+#include "sdl.hpp"
 
-#include "game.hpp"
+#include "app.hpp"
 
-static Game game;
+static App app;
 
-static SDL_GPUDevice *device;
 static SDL_GPUSampler *sampler;
 static SDL_GPUTexture *depth;
 static SDL_GPUTransferBuffer *instance_transfer_buffer;
@@ -18,7 +17,7 @@ static SDL_GPUTransferBuffer *instance_transfer_buffer;
 static Texture atlas;
 
 UI ui;
-World world;
+Voxel voxel;
 Engine engine; // NOLINT
 
 struct AtlasItem {
@@ -30,10 +29,11 @@ static glm::ivec2 last_size;
 
 void resize(glm::ivec2 size) {
     if (size == last_size) return;
-    world.resize(glm::vec2(size));
+    voxel.resize(glm::vec2(size));
     ui.resize(glm::vec2(size));
+    worldResize();
 
-    if (depth) SDL_ReleaseGPUTexture(device, depth);
+    if (depth) SDL_ReleaseGPUTexture(engine.device, depth);
     SDL_GPUTextureCreateInfo depth_info = {
         .type = SDL_GPU_TEXTURETYPE_2D,
         .format = SDL_GPU_TEXTUREFORMAT_D16_UNORM,
@@ -44,7 +44,7 @@ void resize(glm::ivec2 size) {
         .num_levels = 1,
         .sample_count = SDL_GPU_SAMPLECOUNT_1,
     };
-    depth = SDL_CreateGPUTexture(device, &depth_info);
+    depth = SDL_CreateGPUTexture(engine.device, &depth_info);
     SDL_assert(depth);
 
     last_size = size;
@@ -59,22 +59,22 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
     SDL_CHECK(SDL_Init(SDL_INIT_VIDEO));
 
-
-
     engine.screen = {640, 360};
-    engine.window = SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
+    engine.window =
+        SDL_CreateWindow(name, engine.screen.x, engine.screen.y, SDL_WINDOW_RESIZABLE);
     SDL_CHECK(engine.window);
 
-    device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, 0);
-    SDL_CHECK(device);
+    engine.device =
+        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_DXIL, true, 0);
+    SDL_CHECK(engine.device);
 
-    const char *driver = SDL_GetGPUDeviceDriver(device);
+    const char *driver = SDL_GetGPUDeviceDriver(engine.device);
 
     SDL_GPUShaderFormat shader_format = SDL_strcmp(driver, "vulkan") == 0
                                             ? SDL_GPU_SHADERFORMAT_SPIRV
                                             : SDL_GPU_SHADERFORMAT_DXIL;
 
-    SDL_CHECK(SDL_ClaimWindowForGPUDevice(device, engine.window));
+    SDL_CHECK(SDL_ClaimWindowForGPUDevice(engine.device, engine.window));
 
     {
         SDL_GPUSamplerCreateInfo createinfo = {};
@@ -84,22 +84,23 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
         createinfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
         createinfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
 
-        sampler = SDL_CreateGPUSampler(device, &createinfo);
+        sampler = SDL_CreateGPUSampler(engine.device, &createinfo);
     }
     SDL_CHECK(sampler);
 
-    atlas = Texture::create(device, 4096, 4096);
+    atlas = Texture::create(engine.device, 4096, 4096);
 
-    ui.setup(engine.window, device, shader_format);
-    world.setup(engine.window, device, shader_format);
+    ui.setup(engine.window, engine.device, shader_format);
+    voxelSetup(voxel, shader_format);
+    worldSetup();
 
-    auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
+    auto *command_buffer = SDL_AcquireGPUCommandBuffer(engine.device);
     SDL_CHECK(command_buffer);
 
     auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
-    ui.uploadStaticBuffers(device, copy_pass);
-    world.uploadStaticBuffers(device, copy_pass);
+    ui.uploadStaticBuffers(engine.device, copy_pass);
+    voxel.uploadStaticBuffers(engine.device, copy_pass);
 
     {
         int mods_len = 0;
@@ -192,12 +193,12 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
 
         for (auto &[name, surface] : atlas_items) {
             auto *transfer_buffer =
-                createGPUTransferBuffer(device, sizeof(Color) * surface->w * surface->h);
+                createGPUTransferBuffer(sizeof(Color) * surface->w * surface->h);
             SDL_CHECK(transfer_buffer);
 
             {
                 uint8_t *memory =
-                    (uint8_t *)SDL_MapGPUTransferBuffer(device, transfer_buffer, false);
+                    (uint8_t *)SDL_MapGPUTransferBuffer(engine.device, transfer_buffer, false);
                 SDL_CHECK(memory);
 
                 const auto *src = (uint8_t *)surface->pixels;
@@ -210,7 +211,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                                    row_bytes);
                     }
                 }
-                SDL_UnmapGPUTransferBuffer(device, transfer_buffer);
+                SDL_UnmapGPUTransferBuffer(engine.device, transfer_buffer);
             }
             if ((x_offset + surface->w) > uint(atlas.w)) {
                 x_offset = 0;
@@ -229,14 +230,13 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
                               surface->h);
 
             x_offset += surface->w;
-            SDL_ReleaseGPUTransferBuffer(device, transfer_buffer);
+            SDL_ReleaseGPUTransferBuffer(engine.device, transfer_buffer);
         }
         SDL_free((void *)files);
     }
 
-    instance_transfer_buffer =
-        createGPUTransferBuffer(device, std::max(sizeof(UIInstance) * ui.MAX_INSTANCES,
-                                                 sizeof(WorldInstance) * world.MAX_INSTANCES));
+    instance_transfer_buffer = createGPUTransferBuffer(std::max(
+        sizeof(UIInstance) * ui.MAX_INSTANCES, sizeof(VoxelInstance) * voxel.MAX_INSTANCES));
     SDL_CHECK(instance_transfer_buffer);
 
     resize(engine.screen);
@@ -248,7 +248,7 @@ SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int
             createDefaultFont({.x = texture.x, .y = texture.y, .w = texture.w, .h = texture.h});
     }
 
-    initGame(game);
+    initApp(app);
 
     engine.times.frequency = float(SDL_GetPerformanceFrequency());
     engine.times.counter = SDL_GetPerformanceCounter();
@@ -304,38 +304,42 @@ SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     }
     }
 
-
     return SDL_APP_CONTINUE;
 }
 
 SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     if (engine.running) return SDL_APP_SUCCESS;
 
-    auto *command_buffer = SDL_AcquireGPUCommandBuffer(device);
+    auto *command_buffer = SDL_AcquireGPUCommandBuffer(engine.device);
     SDL_CHECK(command_buffer);
 
     {
         auto *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
         {
-            auto instances = world.beginUpload(device, instance_transfer_buffer);
-            updateGame(game, &instances, world.logical);
+            worldBeginUpload(copy_pass);
+
+            auto instances = voxel.beginUpload(engine.device, instance_transfer_buffer);
+
+            updateApp(app, &instances, voxel.logical);
 
             for (auto &instance : instances.squares) instance.uv /= 4096.0F;
             for (auto &instance : instances.triangles) instance.uv /= 4096.0F;
 
-            world.endUpload(device, copy_pass, instance_transfer_buffer, &instances);
+            voxel.endUpload(engine.device, copy_pass, instance_transfer_buffer, &instances);
+            worldEndUpload(copy_pass);
         }
 
         {
-            auto upload = ui.beginUpload(device, instance_transfer_buffer);
+            auto upload = ui.beginUpload(engine.device, instance_transfer_buffer);
 
-            updateGameUI(game, upload.instances, glm::ivec2(ui.logical));
+            updateAppUI(app, upload.instances, glm::ivec2(ui.logical));
             updateEngineUI(upload.instances);
 
             for (auto &instance : upload.instances) instance.uv /= 4096.0F;
 
-            ui.endUpload(device, copy_pass, instance_transfer_buffer, upload.instances.size);
+            ui.endUpload(engine.device, copy_pass, instance_transfer_buffer,
+                         upload.instances.size);
         }
         SDL_EndGPUCopyPass(copy_pass);
     }
@@ -343,8 +347,8 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     SDL_GPUTexture *swapchain_texture = 0;
 
     uint width = 0, height = 0;
-    SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, engine.window, &swapchain_texture,
-                                                    &width, &height));
+    SDL_CHECK(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, engine.window,
+                                                    &swapchain_texture, &width, &height));
     resize({int(width), int(height)});
 
     if (swapchain_texture) {
@@ -369,8 +373,10 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
         auto *render_pass = SDL_BeginGPURenderPass(command_buffer, &color_target_info, 1,
                                                    &depth_stencil_target_info);
 
-        world.draw(command_buffer, render_pass, atlas, sampler, &engine.camera);
+        worldDraw(command_buffer, render_pass);
+        voxel.draw(command_buffer, render_pass, atlas, sampler, &engine.camera);
         ui.draw(command_buffer, render_pass, atlas, sampler);
+
 
         SDL_EndGPURenderPass(render_pass);
     }
@@ -397,19 +403,20 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
 }
 
 void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
-    deinitGame(game);
+    deinitApp(app);
 
-    SDL_ReleaseGPUTransferBuffer(device, instance_transfer_buffer);
+    SDL_ReleaseGPUTransferBuffer(engine.device, instance_transfer_buffer);
 
-    SDL_ReleaseGPUTexture(device, atlas.ptr);
-    SDL_ReleaseGPUTexture(device, depth);
+    SDL_ReleaseGPUTexture(engine.device, atlas.ptr);
+    SDL_ReleaseGPUTexture(engine.device, depth);
 
-    world.release(device);
-    ui.release(device);
+    voxel.release(engine.device);
+    ui.release(engine.device);
+    worldRelease();
 
-    SDL_ReleaseGPUSampler(device, sampler);
-    SDL_ReleaseWindowFromGPUDevice(device, engine.window);
+    SDL_ReleaseGPUSampler(engine.device, sampler);
+    SDL_ReleaseWindowFromGPUDevice(engine.device, engine.window);
 
-    SDL_DestroyGPUDevice(device);
+    SDL_DestroyGPUDevice(engine.device);
     SDL_DestroyWindow(engine.window);
 }

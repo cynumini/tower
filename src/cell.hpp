@@ -1,6 +1,6 @@
 #pragma once
 
-#include "world_pipeline.hpp"
+#include "voxel_pipeline.hpp"
 
 // Material
 using MaterialId = uint8_t;
@@ -33,23 +33,23 @@ struct Cell {
     Rotation rotation : 2 {}; // 4
 
     static constexpr Cell air(const MaterialMap &map) {
-        return {.a = map.at("air"), .type = Type::block};
+        return Cell{.a = map.at("air"), .type = Type::block};
     }
 
     static constexpr Cell block(MaterialId material) {
-        return {.a = material, .type = Type::block};
+        return Cell{.a = material, .type = Type::block};
     }
 
     static constexpr Cell slope(MaterialId material, Rotation rotation) {
-        return {.a = material, .type = Type::slope, .rotation = rotation};
+        return Cell{.a = material, .type = Type::slope, .rotation = rotation};
     }
 
     static constexpr Cell surface(MaterialId floor, MaterialId ceiling = AIR) {
-        return {.a = floor, .b = ceiling, .type = Type::surface};
+        return Cell{.a = floor, .b = ceiling, .type = Type::surface};
     }
 
     static constexpr Cell frame(MaterialId floor, Rotation rotation) {
-        return {.a = floor, .type = Type::frame, .rotation = rotation};
+        return Cell{.a = floor, .type = Type::frame, .rotation = rotation};
     }
 
     [[nodiscard]] bool obscuresFace(Face face) const {
@@ -89,39 +89,39 @@ struct Cell {
         }
     }
 
-    [[nodiscard]] bool isSolid() const {
+    bool isSolid() const {
         return (type == Type::block or type == Type::frame or type == Type::slope) and a != AIR;
     }
 
-    [[nodiscard]] bool hasFloor() const { return a != AIR; }
-    [[nodiscard]] bool hasCeiling() const { return b != AIR; }
+    bool hasFloor() const { return a != AIR; }
+    bool hasCeiling() const { return b != AIR; }
 
-    [[nodiscard]] SDL_FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
+    SDL_FRect getBlockSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::block);
         return materials[a].sprite;
     }
 
-    inline SDL_FRect getFrameSprite(const std::vector<MaterialInfo> &materials) const {
+    SDL_FRect getFrameSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::frame);
         return materials[a].sprite;
     }
 
-    inline SDL_FRect getSlopeSprite(const std::vector<MaterialInfo> &materials) const {
+    SDL_FRect getSlopeSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::slope);
         return materials[a].sprite;
     }
 
-    inline SDL_FRect getFloorSprite(const std::vector<MaterialInfo> &materials) const {
+    SDL_FRect getFloorSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::surface);
         return materials[a].sprite;
     }
 
-    inline SDL_FRect getCeilingSprite(const std::vector<MaterialInfo> &materials) const {
+    SDL_FRect getCeilingSprite(const std::vector<MaterialInfo> &materials) const {
         SDL_assert(type == Type::surface);
         return materials[b].sprite;
     }
 
-    inline void setFloor(MaterialId material = AIR) {
+    void setFloor(MaterialId material = AIR) {
         SDL_assert(type == Type::surface);
         a = material;
     }

@@ -2,45 +2,9 @@
 
 #include "rect.hpp"
 
-#include "world_pipeline.hpp"
+#include "voxel_pipeline.hpp"
 
 #include "cell.hpp"
-
-
-
-//     air,
-//     deep,
-//     stone,
-//     dirt,
-//     grass,
-//     wood,
-//     wall,
-//     water,
-//     door,
-//     window,
-//     iron_ore,
-//     furnace
-// }
-
-// constexpr std::array<std::string_view, 12> initBlockKey() {
-//     std::array<std::string_view, 12> r;
-//     r[int(Material::air)] = "", r[int(Material::deep)] = "deep",
-//     r[int(Material::stone)] = "stone", r[int(Material::dirt)] = "dirt",
-//     r[int(Material::grass)] = "grass", r[int(Material::wood)] = "wood",
-//     r[int(Material::wall)] = "wall", r[int(Material::water)] = "water",
-//     r[int(Material::door)] = "door", r[int(Material::window)] = "window",
-//     r[int(Material::iron_ore)] = "iron_ore", r[int(Material::furnace)] = "furnace";
-//     return r;
-// }
-
-// static FRect MaterialSprite[SDL_arraysize(block_key)] = {};
-
-// Cell
-
-
-
-
-
 
 constexpr int OBJECT_LEN = 32;
 

@@ -1,9 +1,16 @@
 #pragma once
 
+#ifdef RENDER_BACKEND_VULKAN
+#define SHADER_FORMAT SDL_GPU_SHADERFORMAT_SPIRV
+#else
+#error "Unsupported rendering backend"
+#endif
+
 #include "color.hpp"
 #include "fixed_vector.hpp"
 #include "font.hpp"
 #include "ui_pipeline.hpp"
+#include "voxel_pipeline.hpp"
 #include "world_pipeline.hpp"
 
 enum class Scancode : uint8_t {
@@ -110,6 +117,15 @@ enum class Scancode : uint8_t {
     kp_9 = SDL_SCANCODE_KP_9,
     kp_0 = SDL_SCANCODE_KP_0,
     kp_period = SDL_SCANCODE_KP_PERIOD,
+
+    lctrl = SDL_SCANCODE_LCTRL,
+    lshift = SDL_SCANCODE_LSHIFT,
+    lalt = SDL_SCANCODE_LALT,
+    lgui = SDL_SCANCODE_LGUI,
+    rctrl = SDL_SCANCODE_RCTRL,
+    rshift = SDL_SCANCODE_RSHIFT,
+    ralt = SDL_SCANCODE_RALT,
+    rgui = SDL_SCANCODE_RGUI,
 };
 
 enum class MouseButton : uint8_t {
@@ -153,7 +169,13 @@ struct Engine {
     Color clear_color;
     Camera camera;
     Times times;
+
+    // SDL
     SDL_Window *window;
+    SDL_GPUDevice *device;
+
+    // Pipelines
+    World world;
 };
 
 extern Engine engine; // NOLINT
@@ -180,7 +202,7 @@ inline void drawText(FixedVector<UIInstance> &renderer, std::string_view text,
     drawText(renderer, text, position, size, color, engine.default_font);
 }
 
-void drawWorldSymbol(FixedVector<WorldInstance> &instances, char character, glm::vec3 pos,
+void drawWorldSymbol(FixedVector<VoxelInstance> &instances, char character, glm::vec3 pos,
                      float size, Color color, Font font);
 
 void updateEngineUI(FixedVector<UIInstance> &instances);

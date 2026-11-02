@@ -2,8 +2,6 @@
 
 #include "../build/shaders.hpp"
 
-
-
 void UI::resize(glm::vec2 size) {
     logical.x = 640, logical.y = 360;
     if (size.x / size.y < 16.0F / 9.0F) {
@@ -16,13 +14,12 @@ void UI::resize(glm::vec2 size) {
 
 void UI::setup(SDL_Window *window, SDL_GPUDevice *device, SDL_GPUShaderFormat shader_format) {
     SDL_GPUGraphicsPipelineCreateInfo createinfo = {};
-    createinfo.vertex_shader = createGPUShader(device, ShaderCode(ui_vert_spv, ui_vert_dxil),
-                                               SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
+    createinfo.vertex_shader =
+        createGPUShader(device, ui_vert, SDL_GPU_SHADERSTAGE_VERTEX, shader_format, 0, 1);
     SDL_assert(createinfo.vertex_shader);
 
     createinfo.fragment_shader =
-        createGPUShader(device, ShaderCode(ui_frag_spv, ui_frag_dxil),
-                        SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
+        createGPUShader(device, ui_frag, SDL_GPU_SHADERSTAGE_FRAGMENT, shader_format, 1, 0);
     SDL_assert(createinfo.fragment_shader);
 
     const SDL_GPUVertexBufferDescription vertex_buffer_descriptions[] = {
@@ -76,17 +73,16 @@ void UI::uploadStaticBuffers(SDL_GPUDevice *device, SDL_GPUCopyPass *copy_pass) 
     glm::vec2 vertices[4] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
     int16_t indices[6]{0, 1, 2, 0, 2, 3};
 
-    vertex_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
+    vertex_buffer = createGPUBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(vertices));
     SDL_assert(vertex_buffer);
 
-    index_buffer = createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
+    index_buffer = createGPUBuffer(SDL_GPU_BUFFERUSAGE_INDEX, sizeof(indices));
     SDL_assert(index_buffer);
 
-    buffer =
-        createGPUBuffer(device, SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(Instance) * MAX_INSTANCES);
+    buffer = createGPUBuffer(SDL_GPU_BUFFERUSAGE_VERTEX, sizeof(Instance) * MAX_INSTANCES);
     SDL_assert(buffer);
 
-    auto *transfer_buffer = createGPUTransferBuffer(device, sizeof(vertices) + sizeof(indices));
+    auto *transfer_buffer = createGPUTransferBuffer(sizeof(vertices) + sizeof(indices));
 
     SDL_assert(transfer_buffer);
 

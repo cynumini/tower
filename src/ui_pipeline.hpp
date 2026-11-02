@@ -1,8 +1,9 @@
 #pragma once
 
+
 #include "color.hpp"
 #include "fixed_vector.hpp"
-#include "skn_sdl.cpp"
+#include "sdl.hpp"
 
 #include <glm/ext.hpp>
 #include <glm/glm.hpp>
