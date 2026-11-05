@@ -1,11 +1,18 @@
 Checks: >
   *,
-  -llvmlibc-*,
-  -readability-magic-numbers,
-  -cppcoreguidelines-avoid-magic-numbers,
+  -altera-id-dependent-backward-branch,
   -altera-struct-pack-align,
-  -readability-function-cognitive-complexity,
-  -readability-braces-around-statements,
+  -altera-unroll-loops,
+  -android-cloexec-fopen,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-macro-to-enum,
   -hicpp-braces-around-statements,
-  -android-cloexec-fopen
+  -llvmlibc-*,
+  -misc-include-cleaner,
+  -modernize-macro-to-enum,
+  -readability-braces-around-statements,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses
 ExcludeHeaderFilterRegex: '/usr/include/gentoo'

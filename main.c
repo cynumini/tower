@@ -7,6 +7,12 @@
 #include <SDL3/SDL_main.h>
 
 #include <cglm/cglm.h>
+#define FNL_IMPL
+#include "FastNoiseLite.h"
+
+#define X 0
+#define Y 1
+#define Z 2
 
 #define WHITE (SDL_Color){255, 255, 255, 255}
 #define GRAY (SDL_Color){128, 128, 128, 255}
@@ -56,10 +62,13 @@ typedef struct World {
     WorldVertex *vertices;
     uint32_t vertices_len;
 
+    // map
+    float data[128 * 128];
+
     WorldUBO ubo;
 } World;
 
-#define WORLD_VERTEX_LEN 8
+#define WORLD_VERTEX_LEN (128 * 128 * 6)
 
 typedef struct Engine {
     int width;
@@ -72,6 +81,10 @@ typedef struct Engine {
     // input
     const bool *keyboard_state;
     float mouse_sensitivity;
+
+    // time
+    uint64_t counter;
+    uint64_t frequency;
 
     World world;
 } Engine;
@@ -86,9 +99,10 @@ static SDL_GPUShader *loadShader(const char *path, SDL_GPUShaderStage stage,
     long size = ftell(file);
     SDL_assert(size != -1);
     SDL_assert(fseek(file, 0, SEEK_SET) == 0);
-    uint8_t *data = (uint8_t *)malloc(size * sizeof(char));
+    uint8_t *data = (uint8_t *)malloc(size * sizeof(uint8_t));
     SDL_assert(data);
     SDL_assert(fread(data, sizeof(char), size, file) == size);
+    SDL_assert(fclose(file) == 0);
     SDL_GPUShaderCreateInfo createinfo = {.code_size = size,
                                           .code = data,
                                           .entrypoint = "main",
@@ -120,14 +134,28 @@ static void resize() {
 
 static void worldColor(SDL_Color color) { engine.world.color = color; }
 
-void worldVertex(vec3 pos) {
+static void worldVertex3fv(vec3 pos) {
     SDL_assert(engine.world.vertices_len < WORLD_VERTEX_LEN);
     WorldVertex *vertex = &engine.world.vertices[engine.world.vertices_len++];
     glm_vec3_copy(pos, vertex->pos);
     vertex->color = engine.world.color;
 }
 
-SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
+static void worldTriangle3fv(vec3 a, vec3 b, vec3 c) {
+    worldVertex3fv(a);
+    worldVertex3fv(b);
+    worldVertex3fv(c);
+}
+
+static void worldRectangle3fv(vec3 a, vec3 b, vec3 c, vec3 d) {
+    worldTriangle3fv(a, b, c);
+    worldTriangle3fv(a, c, d);
+}
+
+static void worldVertex3f(float x, float y, float z) { worldVertex3fv((vec3){x, y, z}); }
+
+SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
+                          [[maybe_unused]] char *argv[]) {
     const char *name = "tower";
 
     SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
@@ -146,23 +174,6 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
     SDL_assert(engine.device);
 
     SDL_assert(SDL_ClaimWindowForGPUDevice(engine.device, engine.window));
-
-    {
-        SDL_GPUSamplerCreateInfo createinfo = {};
-        SDL_GPUSampler *sampler = SDL_CreateGPUSampler(engine.device, &createinfo);
-        SDL_assert(sampler);
-    }
-
-    {
-        SDL_GPUTextureCreateInfo createinfo = {.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
-                                               .usage = SDL_GPU_TEXTUREUSAGE_SAMPLER,
-                                               .width = 4096,
-                                               .height = 4096,
-                                               .layer_count_or_depth = 1,
-                                               .num_levels = 1};
-        SDL_GPUTexture *atlas = SDL_CreateGPUTexture(engine.device, &createinfo);
-        SDL_assert(atlas);
-    }
 
     {
         SDL_GPUShader *vertex_shader =
@@ -236,12 +247,28 @@ SDL_AppResult SDL_AppInit(void **appstate, int argc, char *argv[]) {
 
     resize();
 
+    // map
+    fnl_state noise = fnlCreateState();
+    noise.frequency = 0.025F;
+    noise.noise_type = FNL_NOISE_CELLULAR;
+    int index = 0;
+    for (int y = 0; y < 128; y++) {
+        for (int x = 0; x < 128; x++) {
+            engine.world.data[index++] = fnlGetNoise2D(&noise, (float)x, (float)y) * 16 - 16;
+        }
+    }
+
+    // input
     engine.keyboard_state = SDL_GetKeyboardState(NULL);
+
+    // time
+    engine.frequency = SDL_GetPerformanceFrequency();
+    engine.counter = SDL_GetPerformanceCounter();
 
     return SDL_APP_CONTINUE;
 }
 
-SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
+SDL_AppResult SDL_AppEvent([[maybe_unused]] void *appstate, SDL_Event *event) {
     switch (event->type) {
     case SDL_EVENT_WINDOW_RESIZED: {
         engine.width = event->window.data1;
@@ -253,7 +280,7 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
         SDL_SetWindowRelativeMouseMode(engine.window,
-                                       !SDL_GetWindowRelativeMouseMode(engine.window));
+                                       (!SDL_GetWindowRelativeMouseMode(engine.window)) != 0);
     } break;
     case SDL_EVENT_MOUSE_MOTION: {
         engine.world.yaw -= event->motion.xrel * engine.mouse_sensitivity;
@@ -266,9 +293,35 @@ SDL_AppResult SDL_AppEvent(void *appstate, SDL_Event *event) {
     return SDL_APP_CONTINUE;
 }
 
-SDL_AppResult SDL_AppIterate(void *appstate) {
+SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     SDL_GPUCommandBuffer *command_buffer = SDL_AcquireGPUCommandBuffer(engine.device);
     SDL_assert(command_buffer);
+
+    // begin time
+    uint64_t prev = engine.counter;
+    engine.counter = SDL_GetPerformanceCounter();
+    float dt = (float)(engine.counter - prev) / engine.frequency; // seconds
+    // end time
+
+    // begin update
+    vec2 velocity = {0, 0};
+    velocity[X] = (float)engine.keyboard_state[SDL_SCANCODE_D] -
+                  (float)engine.keyboard_state[SDL_SCANCODE_A];
+    velocity[Y] = (float)engine.keyboard_state[SDL_SCANCODE_W] -
+                  (float)engine.keyboard_state[SDL_SCANCODE_S];
+    glm_vec2_normalize(velocity);
+    glm_vec2_rotate(velocity, glm_rad(engine.world.yaw), velocity);
+    // velocity *= dt
+    float speed = 16;
+    glm_vec2_scale(velocity, dt * speed, velocity);
+    // engine.world.pos += velocity
+    glm_vec2_add(engine.world.pos, velocity, engine.world.pos);
+    if (engine.keyboard_state[SDL_SCANCODE_LSHIFT]) {
+        engine.world.pos[Z] = 0.5F;
+    } else {
+        engine.world.pos[Z] = 2;
+    }
+    // end update
 
     SDL_GPUCopyPass *copy_pass = SDL_BeginGPUCopyPass(command_buffer);
 
@@ -277,16 +330,36 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     SDL_assert(engine.world.vertices);
     engine.world.vertices_len = 0;
     // begin draw
-    worldColor(RED);
-    worldVertex((vec3){-1.5F, -1.5F, -5});
-    worldVertex((vec3){1.5F, -1.5F, -5});
-    worldVertex((vec3){0.0F, 1.5F, -5});
-
-    worldColor(GREEN);
-    worldVertex((vec3){-1.5F, -1.5F, -4});
-    worldVertex((vec3){1.5F, -1.5F, -4});
-    worldVertex((vec3){0.0F, 1.5F, -4});
-
+    // worldTriangle3fv()
+    for (int y = 0; y < 128 - 1; y++) {
+        for (int x = 0; x < 128 - 1; x++) {
+            int index = y * 128 + x;
+            if (index % 2 == 0) {
+                worldColor(GREEN);
+            } else {
+                worldColor(BLUE);
+            }
+            int y_i = y;
+            int x_i = x;
+            float z0 = engine.world.data[y_i * 128 + x_i];
+            x_i += 1;
+            float z1 = engine.world.data[y_i * 128 + x_i];
+            y_i += 1;
+            float z2 = engine.world.data[y_i * 128 + x_i];
+            x_i -= 1;
+            float z3 = engine.world.data[y_i * 128 + x_i];
+            worldRectangle3fv(
+                (vec3){(float)x, (float)y, z0}, (vec3){(float)(x + 1), (float)y, z1},
+                (vec3){(float)(x + 1), (float)(y + 1), z2}, (vec3){(float)x, (float)(y + 1), z3});
+            // worldVertex3f(0, 0, engine.world.data.z)
+            // engine.world.data[index++];
+        }
+    }
+    //
+    // worldColor(GREEN);
+    // worldVertex3fv((vec3){-1.5F, -1.5F, 1});
+    // worldVertex3fv((vec3){1.5F, -1.5F, 1});
+    // worldVertex3fv((vec3){0.0F, 1.5F, 1});
     // end draw
     SDL_UnmapGPUTransferBuffer(engine.device, engine.world.transfer_buffer);
     engine.world.vertices = NULL;
@@ -305,24 +378,20 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     SDL_GPUTexture *swapchain_texture = NULL;
     uint width = 0;
     uint height = 0;
-    bool result = SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, engine.window,
-                                                        &swapchain_texture, &width, &height);
-    if (!result) {
-        SDL_Log("error: %s\n", SDL_GetError());
-        return SDL_APP_FAILURE;
-    }
+    SDL_assert(SDL_WaitAndAcquireGPUSwapchainTexture(command_buffer, engine.window,
+                                                     &swapchain_texture, &width, &height));
 
     if (engine.width != width || engine.height != height) {
+        engine.width = (int)width;
+        engine.height = (int)height;
         resize();
-        engine.width = width;
-        engine.height = height;
     }
 
     if (swapchain_texture) {
-        SDL_GPUColorTargetInfo color_target_info = {
-            .texture = swapchain_texture,
-            .clear_color = toFColor(WHITE),
-        };
+        SDL_GPUColorTargetInfo color_target_info = {.texture = swapchain_texture,
+                                                    .clear_color = toFColor(WHITE),
+                                                    .load_op = SDL_GPU_LOADOP_CLEAR,
+                                                    .store_op = SDL_GPU_STOREOP_STORE};
         SDL_GPUDepthStencilTargetInfo depth_stencil_target_info = {
             .texture = engine.depth,
             .clear_depth = 1.0F,
@@ -360,8 +429,13 @@ SDL_AppResult SDL_AppIterate(void *appstate) {
     return SDL_APP_CONTINUE;
 }
 
-void SDL_AppQuit(void *appstate, SDL_AppResult result) {
+void SDL_AppQuit([[maybe_unused]] void *appstate, [[maybe_unused]] SDL_AppResult result) {
+    // engine.world
+    SDL_ReleaseGPUTransferBuffer(engine.device, engine.world.transfer_buffer);
+    SDL_ReleaseGPUBuffer(engine.device, engine.world.buffer);
+    SDL_ReleaseGPUGraphicsPipeline(engine.device, engine.world.pipeline);
+    // engine
+    SDL_ReleaseGPUTexture(engine.device, engine.depth);
     SDL_DestroyGPUDevice(engine.device);
     SDL_DestroyWindow(engine.window);
-    SDL_Quit();
 }
