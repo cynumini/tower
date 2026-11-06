@@ -4,6 +4,7 @@ Checks: >
   -altera-struct-pack-align,
   -altera-unroll-loops,
   -android-cloexec-fopen,
+  -bugprone-easily-swappable-parameters,
   -cppcoreguidelines-avoid-magic-numbers,
   -cppcoreguidelines-macro-to-enum,
   -hicpp-braces-around-statements,
@@ -13,6 +14,7 @@ Checks: >
   -readability-braces-around-statements,
   -readability-function-cognitive-complexity,
   -readability-identifier-length,
+  -readability-isolate-declaration,
   -readability-magic-numbers,
   -readability-math-missing-parentheses
-ExcludeHeaderFilterRegex: '/usr/include/gentoo'
+ExcludeHeaderFilterRegex: '/usr/include/gentoo|FastNoiseLite.h'

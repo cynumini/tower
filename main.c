@@ -47,6 +47,80 @@ typedef struct WorldUBO {
     mat4 projection;
 } WorldUBO;
 
+#define MAP_SIZE (uint32_t)(128 * 128)
+
+typedef struct Capsule {
+    vec3 a;
+    vec3 b;
+    float r;
+} Capsule;
+
+typedef struct Triangle {
+    vec3 a;
+    vec3 b;
+    vec3 c;
+} Triangle;
+
+static float distance_squared_segment_segment(vec3 a, vec3 b, vec3 c, vec3 d) {
+    vec3 u, v, w;
+    glm_vec3_sub(b, a, u);
+    glm_vec3_sub(d, c, v);
+    glm_vec3_sub(a, c, w);
+    float aa = glm_vec3_dot(u, u);
+    float bb = glm_vec3_dot(u, v);
+    float cc = glm_vec3_dot(v, v);
+    float dd = glm_vec3_dot(u, w);
+    float ee = glm_vec3_dot(v, w);
+    float t = 0.F, s = 0.F;
+    const float epsilon = 1e-12F;
+    if (aa <= epsilon && cc <= epsilon) {
+        // t = 0 and s = 0
+    } else if (aa <= epsilon) {
+        t = glm_clamp(ee / cc, 0.F, 1.F);
+    } else if (cc <= epsilon) {
+        s = glm_clamp(-dd / aa, 0.F, 1.F);
+    } else {
+        float denominator = aa * cc - bb * bb;
+        if (denominator > 1e-6F * aa * cc) {
+            s = glm_clamp((bb * ee - cc * dd) / denominator, 0.F, 1.F);
+        }
+        t = (bb * s + ee) / cc;
+        if (t < 0.F) {
+            t = 0.F;
+            s = glm_clamp(-dd / aa, 0.F, 1.F);
+        } else if (t > 1.F) {
+            t = 1.F;
+            s = glm_clamp((bb - dd) / aa, 0.F, 1.F);
+        }
+    }
+    vec3 su, tv, p, q, pq;
+    glm_vec3_scale(u, s, su);
+    glm_vec3_scale(v, t, tv);
+    glm_vec3_add(a, su, p);
+    glm_vec3_add(c, tv, q);
+    glm_vec3_sub(p, q, pq);
+    return glm_vec3_dot(pq, pq);
+}
+
+static bool check_collision_capsule_triangle(Capsule capsule, Triangle triangle) {
+    float min_distance = FLT_MAX;
+    // 1. Capsule segment vs triangle edge AB
+    float distance_ab =
+        distance_squared_segment_segment(capsule.a, capsule.b, triangle.a, triangle.b);
+    min_distance = glm_min(min_distance, distance_ab);
+    // 2. Capsule segment vs triangle edge BC
+    float distance_bc =
+        distance_squared_segment_segment(capsule.a, capsule.b, triangle.b, triangle.c);
+    min_distance = glm_min(min_distance, distance_bc);
+    // 3. Capsule segment vs triangle edge CA
+    float distance_ca =
+        distance_squared_segment_segment(capsule.a, capsule.b, triangle.c, triangle.a);
+    min_distance = glm_min(min_distance, distance_ca);
+    // 4. Capsule segment vs triangle face
+    // 5. Compare minimum distance with capsule radius
+    return min_distance < capsule.r * capsule.r;
+}
+
 typedef struct World {
     SDL_GPUGraphicsPipeline *pipeline;
     SDL_GPUBuffer *buffer;
@@ -63,12 +137,12 @@ typedef struct World {
     uint32_t vertices_len;
 
     // map
-    float data[128 * 128];
+    float data[MAP_SIZE];
 
     WorldUBO ubo;
 } World;
 
-#define WORLD_VERTEX_LEN (128 * 128 * 6)
+#define WORLD_VERTEX_LEN (uint32_t)(MAP_SIZE * 6)
 
 typedef struct Engine {
     int width;
@@ -152,7 +226,7 @@ static void worldRectangle3fv(vec3 a, vec3 b, vec3 c, vec3 d) {
     worldTriangle3fv(a, c, d);
 }
 
-static void worldVertex3f(float x, float y, float z) { worldVertex3fv((vec3){x, y, z}); }
+// static void worldVertex3f(float x, float y, float z) { worldVertex3fv((vec3){x, y, z}); }
 
 SDL_AppResult SDL_AppInit([[maybe_unused]] void **appstate, [[maybe_unused]] int argc,
                           [[maybe_unused]] char *argv[]) {
@@ -300,7 +374,7 @@ SDL_AppResult SDL_AppIterate([[maybe_unused]] void *appstate) {
     // begin time
     uint64_t prev = engine.counter;
     engine.counter = SDL_GetPerformanceCounter();
-    float dt = (float)(engine.counter - prev) / engine.frequency; // seconds
+    float dt = (float)(engine.counter - prev) / (float)engine.frequency; // seconds
     // end time
 
     // begin update
